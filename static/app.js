@@ -8,13 +8,11 @@
   const store = { get(k) { try { return sessionStorage.getItem(k); } catch { return null; } }, set(k, v) { try { sessionStorage.setItem(k, v); } catch { /* private mode */ } } };
 
   const PALETTE = ['#2563eb', '#db2777', '#059669', '#7c3aed', '#ea580c', '#0891b2', '#65a30d', '#be123c'];
+  // Short starters; the demo cases cover the longer stories.
   const EXAMPLES = [
-    ['Public health (MPH student)', 'Which standing water sites in New Haven are most likely to breed Culex mosquitoes this summer, to guide larval control?'],
-    ['Environment (forest ecology)', 'How has tree canopy changed in New Haven neighborhoods since 2012, and is canopy loss linked to summer heat?'],
-    ['Environmental health', 'Estimate daily PM2.5 exposure by census tract in Connecticut during the June 2023 wildfire smoke, for an asthma study.'],
-    ['Economics (housing)', 'Did Connecticut towns that eased multifamily zoning after 2021 see more new housing permits?'],
-    ['History (digital humanities)', "Find historical maps of New Haven's waterfront from 1850 to 1950 to trace how the shoreline changed."],
-    ['Global health', 'Map land cover change and malaria risk around villages in western Kenya from 2015 to 2025.'],
+    ['Tree canopy and heat', 'How has tree canopy changed in New Haven neighborhoods since 2012, and is canopy loss linked to summer heat?'],
+    ['Polling place access', 'How long do people travel to their polling places in Connecticut, and does it differ by income?'],
+    ['Rooftop solar', 'Which Yale campus buildings in New Haven have the best rooftop solar potential?'],
   ];
 
   const state = {
@@ -122,7 +120,7 @@
           map.addLayer({ id: 'S-' + d.id, type: 'line', source: src, paint: { 'line-color': color, 'line-width': 2, 'line-dasharray': [2, 1.5] } }, before);
           entry.ids.push('F-' + d.id, 'S-' + d.id);
         } else {
-          const fillOp = d.style === 'boundary' ? 0.02 : d.style === 'footprint' ? 0.05 : 0.33;
+          const fillOp = d.style === 'boundary' ? 0.02 : d.style === 'footprint' ? 0 : 0.33;  // footprints: outline only
           map.addLayer({ id: 'F-' + d.id, type: 'fill', source: src, filter: IS_POLY, paint: { 'fill-color': color, 'fill-opacity': fillOp } }, before);
           map.addLayer({ id: 'S-' + d.id, type: 'line', source: src, filter: ['any', IS_POLY, IS_LINE],
             paint: { 'line-color': color, 'line-width': ['case', IS_LINE, 2.2, d.style === 'boundary' ? 1.2 : 1.1], 'line-opacity': 0.9 } }, before);
@@ -202,42 +200,46 @@
     $('#welcome').hidden = true;
     const d = document.createElement('div'); d.className = 'msg user'; d.textContent = text; msgs.appendChild(d); scrollChat();
   }
+  // A bot message is: one collapsible status line, a row of result pills, the answer text, quick replies, sources.
   function botMsg() {
     const el = document.createElement('div'); el.className = 'msg bot'; msgs.appendChild(el);
-    const m = { el, last: null, chips: {}, text: null, raw: '', tools: 0, start: Date.now() };
-    m.thinking = document.createElement('div'); m.thinking.className = 'thinking'; m.thinking.innerHTML = '<i></i><i></i><i></i>'; el.appendChild(m.thinking);
-    m.seg = (cls) => { const s = document.createElement('div'); s.className = cls; el.insertBefore(s, m.thinking); m.last = s; return s; };
+    const m = { el, chips: {}, raw: '', tools: 0, pills: {}, start: Date.now() };
+    el.innerHTML = `<details class="act"><summary><span class="st run"></span><span class="lbl">Thinking</span><span class="cnt"></span></summary><div class="steps"></div></details>
+      <div class="strip" hidden></div><div class="md"></div><div class="tail"></div>`;
+    m.act = $('.act', el); m.steps = $('.steps', el); m.strip = $('.strip', el); m.text = $('.md', el); m.tail = $('.tail', el);
+    m.thinking = { remove() {} };
+    m.seg = (cls) => { const s = document.createElement('div'); s.className = cls; m.tail.appendChild(s); return s; };
     m.addText = (delta) => {
-      if (!m.last || !m.last.classList.contains('md')) { m.text = m.seg('md'); m.raw = ''; }
-      m.raw += delta; const target = m.text; const raw = m.raw;
-      cancelAnimationFrame(m._raf); m._raf = requestAnimationFrame(() => { target.innerHTML = md(raw); scrollChat(); });
+      m.raw += delta; const raw = m.raw;
+      cancelAnimationFrame(m._raf); m._raf = requestAnimationFrame(() => { m.text.innerHTML = md(raw); scrollChat(); });
     };
     m.chip = (ev) => {
       let c = m.chips[ev.id];
-      if (!c) {
-        let act = m.last && m.last.classList.contains('activity') ? m.last : null;
-        if (!act) { act = m.seg('activity'); }
-        c = document.createElement('div'); c.className = 'chip'; act.appendChild(c); m.chips[ev.id] = c; m.tools++;
-      }
-      c.className = 'chip ' + ev.state;
-      c.innerHTML = `<span class="st"></span><span class="tx">${esc(ev.label)}${ev.summary ? ` <span class="sum">· ${esc(ev.summary)}</span>` : ''}</span>`;
-      m.lastChip = c; scrollChat();
+      if (!c) { c = document.createElement('div'); c.className = 'stp'; m.steps.appendChild(c); m.chips[ev.id] = c; m.tools++; }
+      c.className = 'stp ' + ev.state;
+      c.innerHTML = `<span class="tx">${esc(ev.label)}${ev.summary ? ` <span class="sum">· ${esc(ev.summary)}</span>` : ''}</span>`;
+      m.lastChip = c;
+      if (ev.state === 'start') $('.lbl', m.act).textContent = ev.label;
+      $('.cnt', m.act).textContent = ` · step ${m.tools}`;
+      scrollChat();
     };
-    m.card = (html) => { const s = m.seg('inline'); s.innerHTML = html; scrollChat(); return s; };
+    // result pills: one per kind, updated in place (graph, scope, map, data, handbook)
+    m.pill = (key, html, onClick) => {
+      let b = m.pills[key];
+      if (!b) { b = document.createElement('button'); b.className = 'rpill'; m.strip.appendChild(b); m.pills[key] = b; m.strip.hidden = false; }
+      b.innerHTML = html; b.onclick = onClick; scrollChat(); return b;
+    };
+    m.card = (html) => { const s = document.createElement('div'); s.innerHTML = html; return s; }; // legacy no-op for replays
+    m.layers = 0;
     return m;
   }
 
-  // ------------------------------------------------------------------ progress stepper (tri-projection)
+  // ------------------------------------------------------------------ progress: the Frame and Data tabs get a check mark
   const STEPS = ['frame', 'scope', 'data', 'map'];
   function step(name, status) {
-    const li = $(`#stepper li[data-step="${name}"]`); if (!li) return;
-    li.classList.remove('active', 'done'); if (status) li.classList.add(status);
-    if (status === 'done') { const nxt = STEPS[STEPS.indexOf(name) + 1]; const n = nxt && $(`#stepper li[data-step="${nxt}"]`); if (n && !n.classList.contains('done')) n.classList.add('active'); }
+    const tab = { frame: 'frame', scope: 'frame', data: 'data' }[name]; if (!tab) return;
+    $(`.tabs button[data-tab="${tab}"]`).classList.toggle('done', status === 'done');
   }
-  $$('#stepper li').forEach((li) => { li.onclick = () => {
-    if (li.dataset.tab === 'map') { document.body.classList.add('collapsed'); return; }
-    switchTab(li.dataset.tab); if (li.dataset.step === 'scope') setTimeout(() => $('#scopeCard').scrollIntoView({ behavior: 'smooth' }), 50);
-  }; });
 
   async function send(text) {
     text = (text || '').trim(); if (!text || state.busy) return;
@@ -275,56 +277,45 @@
       case 'text': m.addText(ev.delta); break;
       case 'tool': m.chip(ev); break;
       case 'results': if (m.lastChip && ev.items && ev.items.length) {
-        const det = document.createElement('details');
-        det.innerHTML = `<summary>${ev.items.length} found</summary><ul>${ev.items.slice(0, 10).map((x) => `<li>${safeUrl(x.url) ? `<a href="${esc(safeUrl(x.url))}" target="_blank" rel="noopener">${esc(x.title)}</a>` : esc(x.title)} <span class="muted">${esc(x.meta || '')}</span></li>`).join('')}</ul>`;
-        m.lastChip.querySelector('.tx').appendChild(det);
+        const ul = document.createElement('ul');
+        ul.innerHTML = ev.items.slice(0, 8).map((x) => `<li>${safeUrl(x.url) ? `<a href="${esc(safeUrl(x.url))}" target="_blank" rel="noopener">${esc(x.title)}</a>` : esc(x.title)}</li>`).join('');
+        m.lastChip.appendChild(ul);
       } break;
       case 'choices': m.choices = ev; break;
-      case 'graph': state.graph = ev.graph; renderGraph(); step('frame', 'done'); if (!m.graphCard) {
-        const core = ev.graph.nodes.filter((n) => n.core).length;
-        m.graphCard = m.card(`<div class="inline-card"><div class="ic-body"><div class="ic-title">Influence graph · ${ev.graph.nodes.length} factors (${core} core)</div>
-          <div class="ic-sub">${esc(ev.graph.question || '')}</div></div><button data-go="frame">Open</button></div>`);
-        m.graphCard.querySelector('[data-go]').onclick = () => switchTab('frame');
-      } break;
-      case 'scope': state.scope = ev.scope; renderScope(); step('scope', 'done'); {
-        const s = ev.scope; const a = new Set(s.assumed || []);
-        const tag = (k) => a.has(k) ? '<span class="assumed">default</span>' : '';
-        const c = m.card(`<div class="inline-card"><div class="ic-body"><div class="ic-title">Scope · ${esc(s.extent_name || 'Study area')}</div>
-          <div class="ic-sub">${esc(s.time_start)} to ${esc(s.time_end)}${tag('time')} · ${s.spatial_resolution_m ? esc(s.spatial_resolution_m) + ' m detail' : 'reporting units'}${tag('resolution')} · ${esc(s.unit_of_analysis || '')}${tag('unit')}</div></div><button data-go="frame">Edit</button></div>`);
-        c.querySelector('[data-go]').onclick = () => { switchTab('frame'); $('#scopeCard').scrollIntoView({ behavior: 'smooth' }); };
+      case 'graph': state.graph = ev.graph; renderGraph(); step('frame', 'done');
+        if (m.pill) m.pill('graph', `<b>Graph</b> ${ev.graph.nodes.length} factors`, () => switchTab('frame')); break;
+      case 'scope': state.scope = ev.scope; renderScope(); step('scope', 'done'); if (m.pill) {
+        const s = ev.scope; const t0 = String(s.time_start || '').slice(0, 7), t1 = String(s.time_end || '').slice(0, 7);
+        m.pill('scope', `<b>Scope</b> ${esc((s.extent_name || 'Study area').split(',')[0])} · ${esc(t0)}${t1 && t1 !== t0 ? '–' + esc(t1) : ''}${s.spatial_resolution_m ? ' · ' + esc(s.spatial_resolution_m) + ' m' : ''}`,
+          () => { switchTab('frame'); setTimeout(() => $('#scopeCard').scrollIntoView({ behavior: 'smooth' }), 60); });
       } break;
       case 'layer': addLayer(ev.layer).then((e) => {
-        if (!e || ev.layer.style === 'scope') return;
-        if (state.picks.length || ev.layer.style !== 'boundary') step('map', 'done');
-        const c = m.card(`<div class="inline-card">${e.fc ? thumbSVG(e.fc, e.color) : ''}<div class="ic-body"><div class="ic-title">On the map: ${esc(ev.layer.title)}</div>
-          <div class="ic-sub">${ev.layer.n ? esc(ev.layer.n) + ' features · ' : ''}${esc(ev.layer.source || '')}${ev.layer.date ? ' · ' + esc(ev.layer.date) : ''}</div></div><button>Zoom</button></div>`);
-        c.querySelector('button').onclick = () => fit(ev.layer.bbox);
+        if (!e || ev.layer.style === 'scope' || !m.pill) return;
+        m.layers++;
+        m.pill('map', `${e.fc ? thumbSVG(e.fc, e.color) : ''}<b>Map</b> ${m.layers} layer${m.layers > 1 ? 's' : ''}`, () => { fit(ev.layer.bbox); $('#layerPanel').hidden = false; });
       }); break;
       case 'zoom': fit(ev.bbox); break;
-      case 'recommendations': state.picks = ev.picks || []; state.methods = ev.methods || []; state.nextSteps = ev.next_steps || []; renderData(); step('data', 'done'); {
-        const top = state.picks.slice(-8);
-        const c = m.card(`<div class="inline-card"><div class="ic-body"><div class="ic-title">${top.length} datasets checked against your scope</div>
-          <ul class="mini-picks">${top.map((p) => `<li><span class="fitdot ${esc(p.fit.overall)}"></span>${esc(p.title)} <span class="muted">· ${esc(fitLabel[p.fit.overall])}</span></li>`).join('')}</ul></div><button data-go="data">Details</button></div>`);
-        c.querySelector('[data-go]').onclick = () => switchTab('data');
+      case 'recommendations': state.picks = ev.picks || []; state.methods = ev.methods || []; state.nextSteps = ev.next_steps || []; renderData(); step('data', 'done'); if (m.pill) {
+        const good = state.picks.filter((p) => p.fit.overall === 'good').length;
+        m.pill('data', `<b>Data</b> ${good} of ${state.picks.length} fit`, () => switchTab('data'));
       } break;
-      case 'handbook': { const c = m.card(`<div class="inline-card"><div class="ic-body"><div class="ic-title">Access handbook</div><div class="ic-sub">${esc(ev.title)}</div></div><button>Open</button></div>`); c.querySelector('button').onclick = () => openHandbook(ev.ref, ev.title); } break;
+      case 'handbook': if (m.pill) m.pill('hb', '<b>Handbook</b> open', () => openHandbook(ev.ref, ev.title)); break;
       case 'citations': {
-        const s = m.seg('cites'); s.innerHTML = 'Sources: ' + ev.items.slice(0, 8).map((c) => safeUrl(c.url) ? `<a href="${esc(safeUrl(c.url))}" target="_blank" rel="noopener">${esc((c.title || c.url).slice(0, 60))}</a>` : '').join('');
+        m.cites = (m.cites || []).concat(ev.items);
+        let s = $('.cites', m.tail); if (!s) s = m.seg('cites');
+        s.innerHTML = `<details><summary>Sources (${m.cites.length})</summary>${m.cites.slice(0, 10).map((c) => safeUrl(c.url) ? `<a href="${esc(safeUrl(c.url))}" target="_blank" rel="noopener">${esc((c.title || c.url).slice(0, 70))}</a>` : '').join('')}</details>`;
       } break;
-      case 'error': m.seg('md').innerHTML = `<p style="color:var(--poor)">${esc(ev.message)}</p>`; break;
+      case 'error': m.seg('err').innerHTML = `<p style="color:var(--poor)">${esc(ev.message)}</p>`; break;
       case 'done': {
-        $$('.activity', m.el).forEach((a) => {
-          const n = a.children.length; if (n < 3) return;
-          const det = document.createElement('details'); det.innerHTML = `<summary class="muted small">${n} steps</summary>`;
-          a.parentNode.insertBefore(det, a); det.appendChild(a);
-        });
+        if (m.act) {
+          const st = $('.st', m.act); st.className = 'st ok';
+          $('.lbl', m.act).textContent = `${m.tools} step${m.tools === 1 ? '' : 's'}`;
+          $('.cnt', m.act).textContent = ` · ${ev.elapsed}s${String(ev.model || '').startsWith('recorded') ? ' · recorded' : ''}`;
+        }
         if (m.choices && m.choices.options && m.choices.options.length) {
           const box = m.seg('choices');
           m.choices.options.forEach((o) => { const b = document.createElement('button'); b.textContent = o; b.onclick = () => { box.classList.add('used'); send(o); }; box.appendChild(b); });
-          const other = document.createElement('button'); other.textContent = 'Something else...'; other.onclick = () => { $('#q').focus(); }; box.appendChild(other);
         }
-        const u = ev.usage || {}; const s = m.seg('meta-line');
-        s.textContent = `${ev.model} · ${ev.elapsed}s · ${u.tools || 0} tool calls`;
       } break;
       default: break;
     }
@@ -421,7 +412,7 @@
     if (!ps.length) { $('#matrix').innerHTML = ''; return; }
     const cell = (x) => `<td title="${esc(x?.reason || '')}"><span class="fitdot ${esc(x?.label || 'unknown')}"></span></td>`;
     $('#matrix').innerHTML = `<table class="matrix"><thead><tr><th>Dataset</th><th>Area</th><th>Time</th><th>Detail</th><th>Overall</th><th>Access</th></tr></thead><tbody>${
-      ps.map((p) => `<tr><td data-ref="${esc(p.ref)}" title="${esc(p.title)}">${esc(p.title)}</td>${cell(p.fit.extent)}${cell(p.fit.time)}${cell(p.fit.resolution)}${cell({ label: p.fit.overall, reason: fitLabel[p.fit.overall] })}<td>${badge(p.fit.access?.label || 'unknown', accessLabel[p.fit.access?.label] || '', p.fit.access?.reason)}</td></tr>`).join('')}</tbody></table>`;
+      ps.map((p) => `<tr><td data-ref="${esc(p.ref)}" title="${esc(p.title)}">${esc(p.title)}</td>${cell(p.fit.extent)}${cell(p.fit.time)}${cell(p.fit.resolution)}${cell({ label: p.fit.overall, reason: fitLabel[p.fit.overall] })}<td>${badge(p.fit.access?.label || 'unknown', { open: 'Open', yale: 'Yale', request: 'Reg.', paid: 'Paid' }[p.fit.access?.label] || '?', p.fit.access?.reason)}</td></tr>`).join('')}</tbody></table>`;
     $$('#matrix td[data-ref]').forEach((td) => { td.onclick = () => {
       const c = $$('.dcard').find((x) => x.dataset.ref === td.dataset.ref);
       if (c) { c.scrollIntoView({ behavior: 'smooth', block: 'center' }); c.animate([{ boxShadow: '0 0 0 3px #286dc0' }, { boxShadow: 'none' }], { duration: 1400 }); }
@@ -440,37 +431,46 @@
       const g = ps.filter((p) => (p.role || 'supporting') === role && !(hide && p.fit.overall === 'poor')); if (!g.length) return;
       html += `<div class="group-h">${esc(name)}</div>`;
       g.forEach((p) => {
+        // one line that matters most: the first dimension that does not fit, else "fits"
+        const worst = ['resolution', 'extent', 'time'].map((k) => p.fit[k]).find((x) => x && (x.label === 'poor' || x.label === 'partial'));
+        const dimName = { extent: 'area', time: 'time', resolution: 'detail' };
+        const goods = Object.keys(dimName).filter((k) => p.fit[k]?.label === 'good').map((k) => dimName[k]);
+        const unknown = Object.keys(dimName).filter((k) => p.fit[k]?.label === 'unknown').map((k) => dimName[k]);
+        const list = (xs) => xs.length > 1 ? xs.slice(0, -1).join(', ') + ' and ' + xs[xs.length - 1] : xs[0];
+        const one = worst ? worst.reason : !unknown.length ? 'Fits your area, time and detail'
+          : goods.length ? `Fits your ${list(goods)}; ${list(unknown)} not listed` : 'Details not listed; check the source';
         const reasons = ['extent', 'time', 'resolution'].map((k) => p.fit[k]).filter((x) => x && x.label !== 'unknown').map((x) => `<li>${esc(x.reason)}</li>`).join('');
-        const url = safeUrl(p.url);
+        const url = safeUrl(p.url); const acc = p.fit.access?.label || 'unknown';
         html += `<div class="dcard ${p.fit.overall === 'poor' ? 'poorfit' : ''}" data-ref="${esc(p.ref)}">
-          <div class="t"><span class="fitdot ${esc(p.fit.overall)}"></span>${url ? `<a href="${esc(url)}" target="_blank" rel="noopener">${esc(p.title)}</a>` : esc(p.title)}</div>
-          <div class="src">${esc([p.source, p.provider].filter(Boolean).join(' · '))}${p.resolution ? ' · ' + esc(p.resolution) : ''}${p.time ? ' · ' + esc(p.time) : ''}</div>
-          <div class="badges">${fitBadges(p.fit)}</div>
-          ${timeBar(p)}
-          ${reasons ? `<ul class="reasons">${reasons}</ul>` : ''}
-          ${p.why ? `<div class="why">${esc(p.why)}</div>` : ''}
-          ${p.limitations ? `<div class="lim"><b>Limits:</b> ${esc(p.limitations)}</div>` : ''}
-          ${p.yale_note ? `<div class="yale-note">${esc(p.yale_note)}</div>` : ''}
-          ${p.factors && p.factors.length ? `<div class="factors">${p.factors.map((f) => `<span>${esc(nodeLabel(f))}</span>`).join('')}</div>` : ''}
-          <div class="row"><button class="btn" data-act="hb">How to access</button><button class="btn" data-act="cov">Coverage</button>${p.stac_collection ? '<button class="btn" data-act="preview">Preview imagery</button>' : ''}<button class="btn" data-act="ask">Ask</button>
-            <span class="verified ${p.verified === 'unverified' ? 'warn' : ''}">${esc(verifiedText[p.verified] || '')}${p.metadata_from_model ? ' · some details from the model' : ''}</span></div></div>`;
+          <div class="t"><span class="fitdot ${esc(p.fit.overall)}"></span><span class="tt">${esc(p.title)}</span>${acc !== 'open' && acc !== 'unknown' ? badge(acc, accessLabel[acc], p.fit.access?.reason) : ''}${p.verified === 'unverified' ? badge('poor', 'Not verified', verifiedText.unverified) : ''}<span class="chev">›</span></div>
+          <div class="src">${esc([p.source, p.resolution, p.time].filter(Boolean).join(' · '))}</div>
+          <div class="one ${esc(worst ? worst.label : unknown.length ? 'unknown' : p.fit.overall)}">${esc(one)}</div>
+          <div class="more" hidden>
+            ${timeBar(p)}
+            ${reasons ? `<ul class="reasons">${reasons}</ul>` : ''}
+            ${p.why ? `<div class="why">${esc(p.why)}</div>` : ''}
+            ${p.limitations ? `<div class="lim"><b>Limits:</b> ${esc(p.limitations)}</div>` : ''}
+            ${p.yale_note ? `<div class="yale-note">${esc(p.yale_note)}</div>` : ''}
+            ${p.factors && p.factors.length ? `<div class="factors">${p.factors.map((f) => `<span>${esc(nodeLabel(f))}</span>`).join('')}</div>` : ''}
+            <div class="row">${url ? `<a class="btn" href="${esc(url)}" target="_blank" rel="noopener">Source</a>` : ''}<button class="btn" data-act="hb">How to access</button><button class="btn" data-act="cov">Coverage</button>${p.stac_collection ? '<button class="btn" data-act="preview">Preview</button>' : ''}<button class="btn" data-act="ask">Ask</button>
+              <span class="verified">${esc(verifiedText[p.verified] || '')}</span></div>
+          </div></div>`;
       });
     });
     $('#picks').innerHTML = html;
     $$('.dcard').forEach((c) => {
       const p = ps.find((x) => x.ref === c.dataset.ref); if (!p) return;
+      c.onclick = (e) => { if (e.target.closest('button, a')) return; const mo = $('.more', c); mo.hidden = !mo.hidden; c.classList.toggle('open', !mo.hidden); };
       c.querySelector('[data-act=hb]').onclick = () => openHandbook(p.ref, p.title);
       c.querySelector('[data-act=cov]').onclick = () => showCoverage(p);
       const pv = c.querySelector('[data-act=preview]'); if (pv) pv.onclick = () => send(`Show a recent preview of ${p.title} (${p.stac_collection}) for my study area on the map.`);
       c.querySelector('[data-act=ask]').onclick = () => { $('#q').value = `About ${p.title}: `; switchTab('chat'); $('#q').focus(); autosize(); };
     });
     const ms = state.methods || [];
-    $('#methods').innerHTML = (ms.length ? '<div class="group-h">Methods and tools</div>' + ms.map((x) => `<div class="mcard"><b>${esc(x.name)}</b>${esc(x.why)}<div class="tools">${esc(x.tools)}</div></div>`).join('') : '') +
-      ((state.nextSteps || []).length ? '<div class="group-h">Next steps</div><ol class="small">' + state.nextSteps.map((s) => `<li>${esc(s)}</li>`).join('') + '</ol>' : '') +
-      (ps.length ? `<div class="mcard" style="border-left-color:var(--good)"><b>Keep looking for me</b>Y-finder can search again on a schedule for new or better-fitting sources and post short updates to a private link.
-        <div style="margin-top:6px"><button class="btn primary" id="btnWatch">Set up follow-up searches</button></div></div>
-        <div class="mcard" style="border-left-color:#d4a017"><b>Talk to a YCGS consultant</b>Hand this conversation to a person: Y-finder writes a one-page summary of the question, scope, data found and open issues.
-        <div style="margin-top:6px"><button class="btn" id="btnConsult">Prepare consultation summary</button></div></div>` : '');
+    $('#methods').innerHTML = (ms.length ? '<div class="group-h">Methods</div><ul class="mlist">' + ms.map((x) => `<li title="${esc(x.why)}"><b>${esc(x.name)}</b> <span class="muted">${esc(x.tools)}</span></li>`).join('') + '</ul>' : '') +
+      ((state.nextSteps || []).length ? '<div class="group-h">Next steps</div><ol class="mlist small">' + state.nextSteps.slice(0, 3).map((s) => `<li>${esc(s)}</li>`).join('') + '</ol>' : '') +
+      (ps.length ? `<div class="data-foot"><button class="btn" id="btnWatch" title="Search again on a schedule and post updates to a private link">Keep looking for me</button>
+        <button class="btn" id="btnConsult" title="One-page summary for a YCGS consultant">Ask a YCGS consultant</button></div>` : '');
     const bw = $('#btnWatch'); if (bw) bw.onclick = watchDialog;
     const bc = $('#btnConsult'); if (bc) bc.onclick = consultDialog;
   }
@@ -678,16 +678,17 @@
   async function loadDemos() {
     try {
       const j = await getJSON('static/demos/index.json?v=' + (window.YF_VERSION || '')); if (!j.cases || !j.cases.length) return;
-      $('#demos').innerHTML = j.cases.map((c) => `<button class="demo-card" data-id="${esc(c.id)}"><div class="field">${esc(c.field)}</div>
-        <div class="title">${esc(c.title)}</div><div class="who">${esc(c.who)}</div><div class="shows">${c.shows.map((x) => `<span>${esc(x)}</span>`).join('')}</div></button>`).join('');
+      $('#demos').innerHTML = j.cases.map((c) => `<button class="demo-card" data-id="${esc(c.id)}" title="${esc(c.who + '\nShows: ' + c.shows.join('; '))}">
+        <div class="field">${esc(c.field)}</div><div class="title">${esc(c.title)}</div></button>`).join('');
       $$('.demo-card').forEach((b) => { b.onclick = () => playDemo(b.dataset.id); });
       $('#demoWrap').hidden = false;
     } catch { /* no recorded demos on this server */ }
   }
   function demoNote(text) {
     if (!text) return;
-    const d = document.createElement('div'); d.className = 'demo-note'; d.innerHTML = `<b>Demo note.</b> ${esc(text)}`;
-    msgs.appendChild(d); scrollChat(); toast(text, Math.max(2500, 5200 / state.demo.speed));
+    const d = document.createElement('div'); d.className = 'demo-note'; d.textContent = text;
+    msgs.appendChild(d); scrollChat();
+    if (!$('#tab-chat').classList.contains('on')) toast(text, Math.max(2500, 5200 / state.demo.speed));
   }
   async function pace(ev) {
     const sp = state.demo.speed;
@@ -703,10 +704,8 @@
     state.busy = true; $('#btnSend').disabled = true; $('#welcome').hidden = true;
     state.demo = { stop: false, speed: +(store.get('yf_demo_speed') || 2) };
     const head = document.createElement('div'); head.className = 'demo-head';
-    head.innerHTML = `<div class="field">Demo case · ${esc(demo.field)}</div><h3>${esc(demo.title)}</h3><div class="who">${esc(demo.who)}</div>
-      <ul>${demo.shows.map((x) => `<li>${esc(x)}</li>`).join('')}</ul>
-      <div class="demo-ctl">Recorded ${esc(demo.recorded)} with ${esc(demo.model)} · Speed
-        <span class="seg">${[1, 2, 4, 100].map((v) => `<button data-sp="${v}" class="${v === state.demo.speed ? 'on' : ''}">${v === 100 ? 'Skip' : v + 'x'}</button>`).join('')}</span>
+    head.innerHTML = `<div class="field">Demo · ${esc(demo.field)}</div><h3>${esc(demo.title)}</h3><div class="who">${esc(demo.who)}</div>
+      <div class="demo-ctl" title="Recorded ${esc(demo.recorded)} with ${esc(demo.model)}"><span class="seg">${[1, 2, 4, 100].map((v) => `<button data-sp="${v}" class="${v === state.demo.speed ? 'on' : ''}">${v === 100 ? 'Skip' : v + 'x'}</button>`).join('')}</span>
         <button class="btn" id="demoStop">Stop</button></div>`;
     msgs.appendChild(head);
     $$('[data-sp]', head).forEach((b) => { b.onclick = () => { if (!state.demo) return; state.demo.speed = +b.dataset.sp; store.set('yf_demo_speed', b.dataset.sp); $$('[data-sp]', head).forEach((x) => x.classList.toggle('on', x === b)); }; });
@@ -751,7 +750,7 @@
       }
     } finally {
       const end = document.createElement('div'); end.className = 'demo-end';
-      end.textContent = state.demo.stop ? 'Demo stopped. You can keep asking from here.' : 'Demo finished. This conversation is now live: ask a follow-up, click a quick reply, or edit the scope in the Frame tab.';
+      end.textContent = state.demo.stop ? 'Demo stopped. Keep asking from here.' : 'Demo done. Ask a follow-up; it continues live.';
       msgs.appendChild(end); scrollChat();
       state.demo = null; state.busy = false; $('#btnSend').disabled = false;
     }
@@ -777,7 +776,7 @@
   }
 
   // examples
-  $('#examples').innerHTML = EXAMPLES.map(([who, q], i) => `<button class="example" data-i="${i}"><b>${esc(who)}</b>${esc(q)}</button>`).join('');
+  $('#examples').innerHTML = EXAMPLES.map(([label, q], i) => `<button class="example" data-i="${i}" title="${esc(q)}">${esc(label)}</button>`).join('');
   $$('.example').forEach((b) => { b.onclick = () => send(EXAMPLES[+b.dataset.i][1]); });
 
   // config
@@ -787,7 +786,7 @@
     sel.innerHTML = c.models.map((m) => `<option value="${esc(m.id)}" title="${esc(m.note)}">${esc(m.name)}</option>`).join('');
     const saved = store.get('yf_model'); state.model = c.models.some((m) => m.id === saved) ? saved : c.default_model; sel.value = state.model;
     sel.onchange = () => { state.model = sel.value; store.set('yf_model', sel.value); };
-    $('#catQ').placeholder = `Search ${c.catalog.counts?.total || ''} datasets, tools and methods`;
+    $('#catQ').placeholder = `Search ${c.catalog.counts?.total || ''} datasets and tools`;
     if (c.access_code && !state.code) askCode();
   }).catch(() => toast('Could not reach the Y-finder server.'));
 

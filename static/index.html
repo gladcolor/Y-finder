@@ -14,11 +14,11 @@
 <iframe id="geolibre" title="GeoLibre web GIS" hidden allow="fullscreen; geolocation"></iframe>
 
 <section id="panel" class="panel" aria-label="Y-finder assistant">
-  <div class="interview-banner">Prepared for the Yale Center for Geospatial Solutions · interview prototype by Huan Ning</div>
+  <div class="interview-banner">YCGS interview prototype · Huan Ning</div>
   <header class="brand">
     <img class="brand-logo" src="static/brand/logo.png" alt="" onerror="this.remove()">
     <div class="logo" aria-hidden="true">Y</div>
-    <div class="brand-text"><b>Y-finder</b><span>Geospatial data guide for YCGS · independent prototype</span></div>
+    <div class="brand-text"><b>Y-finder</b><span>Geospatial data guide</span></div>
     <button id="btnWide" class="icon-btn" title="Widen panel" aria-pressed="false">
       <svg viewBox="0 0 24 24" width="18" height="18"><path d="M4 12h16M8 8l-4 4 4 4M16 8l4 4-4 4" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round"/></svg>
     </button>
@@ -46,25 +46,16 @@
     <button data-tab="catalog" role="tab">Catalog</button>
   </nav>
 
-  <ol id="stepper" class="stepper" aria-label="Progress">
-    <li data-step="frame" data-tab="frame"><b>1</b>Frame</li>
-    <li data-step="scope" data-tab="frame"><b>2</b>Scope</li>
-    <li data-step="data" data-tab="data"><b>3</b>Data</li>
-    <li data-step="map" data-tab="map"><b>4</b>Map</li>
-  </ol>
-
   <div class="tabbody">
     <div id="tab-chat" class="tab on">
       <div id="welcome" class="welcome">
-        <h2>Start from your question, not from a dataset.</h2>
-        <p>Y-finder works in three steps. It maps the factors behind your question, agrees a study scope with you
-           (place, time, resolution, unit), then finds data and labels how well each source fits that scope.</p>
-        <div class="tri small"><span>Real world</span><i></i><span>Influence graph</span><i></i><span>Scope</span><i></i><span>Data</span></div>
+        <h2>Find data that fits your question.</h2>
+        <p>Y-finder maps the factors, sets the scope, and checks each dataset against it.</p>
         <div id="demoWrap" hidden>
-          <h3 class="sec-h">Demo cases <span class="muted small">real questions, recorded runs you can continue live</span></h3>
+          <h3 class="sec-h">Watch a demo</h3>
           <div id="demos" class="demos"></div>
         </div>
-        <h3 class="sec-h">Or ask your own question</h3>
+        <h3 class="sec-h">Or try</h3>
         <div id="examples" class="examples"></div>
       </div>
       <div id="msgs" class="msgs" aria-live="polite"></div>
@@ -72,7 +63,7 @@
 
     <div id="tab-frame" class="tab">
       <div class="tri"><span>Real world</span><i></i><span class="on">Influence graph</span><i></i><span class="on">Scope</span><i></i><span>Data</span></div>
-      <div id="graphEmpty" class="empty">Ask a question and Y-finder will draw the factors behind it here.</div>
+      <div id="graphEmpty" class="empty">The factors behind your question appear here.</div>
       <div id="graph" hidden></div>
       <div id="graphLegend" class="legend" hidden>
         <span><b class="dot covered"></b>Data fits</span><span><b class="dot partial"></b>Partly</span><span><b class="dot uncovered"></b>No data yet</span><span><b class="dot outcome"></b>Outcome</span><span><b class="ring"></b>Core factor</span>
@@ -86,7 +77,7 @@
     </div>
 
     <div id="tab-data" class="tab">
-      <div id="dataEmpty" class="empty">Recommended datasets, methods and tools appear here, each labeled against your scope.</div>
+      <div id="dataEmpty" class="empty">Datasets, checked against your scope, appear here.</div>
       <div id="matrix"></div>
       <label id="hidePoorWrap" class="toggle" hidden><input type="checkbox" id="hidePoor"> Hide poor fits</label>
       <div id="picks"></div>
@@ -95,7 +86,7 @@
 
     <div id="tab-catalog" class="tab">
       <div class="cat-search">
-        <input id="catQ" type="search" placeholder="Search 1,100+ datasets, tools and methods" aria-label="Search the catalog">
+        <input id="catQ" type="search" placeholder="Search the catalog" aria-label="Search the catalog">
         <div class="chips" id="catChips">
           <button data-kind="any" data-access="any" class="on">All</button>
           <button data-kind="dataset" data-access="yale">Yale access</button>
@@ -108,12 +99,9 @@
           <button data-q="health disease chronic outcomes">Health</button>
           <button data-q="air quality pm25 pollution">Air quality</button>
           <button data-q="land cover vegetation canopy">Land and trees</button>
-          <button data-q="flood sea level hazard risk">Hazards</button>
           <button data-q="housing zoning parcels">Housing</button>
           <button data-q="demographics census income">People</button>
-          <button data-q="mobility foot traffic commuting">Mobility</button>
           <button data-q="aerial imagery high resolution">Imagery</button>
-          <button data-q="historical maps">History</button>
         </div>
       </div>
       <div id="catMeta" class="muted small"></div>
@@ -123,7 +111,7 @@
 </section>
 
 <div class="topright">
-  <label class="model-pick" title="Language model"><span>Model</span><select id="model"></select></label>
+  <label class="model-pick" title="Language model"><select id="model" aria-label="Model"></select></label>
   <div class="seg" role="group" aria-label="View">
     <button id="modeMap" class="on">Map</button>
     <button id="modeGIS" title="Open the same layers in GeoLibre, a full web GIS">Full GIS</button>

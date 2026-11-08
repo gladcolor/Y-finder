@@ -26,7 +26,7 @@ body.collapsed #geolibre { left: 0; width: 100vw; }
   background: var(--bg); border-radius: var(--r); box-shadow: var(--shadow); overflow: hidden; }
 body.collapsed .panel { bottom: auto; }
 body.collapsed .tabs, body.collapsed .tabbody { display: none; }
-.interview-banner { background: var(--navy); color: #fff; font-size: 11.5px; padding: 5px 14px; letter-spacing: .01em; }
+.interview-banner { background: var(--navy); color: #fff; font-size: 11px; padding: 3px 14px; letter-spacing: .02em; }
 .brand-logo { height: 30px; width: auto; }
 .brand-logo + .logo { display: none; }
 body.wide { --panel-w: 760px; }
@@ -57,13 +57,52 @@ body.collapsed .stepper { display: none; }
 .themes { display: flex; flex-wrap: wrap; gap: 5px; align-items: center; margin: 0 0 8px; }
 .themes button { border: 0; background: var(--soft-2); border-radius: 12px; padding: 2px 9px; font-size: 12px; color: var(--ink-2); }
 .themes button:hover { background: var(--navy-2); color: #fff; }
-.sec-h { font-size: 13px; margin: 14px 0 6px; color: var(--ink); }
-.demos { display: grid; grid-template-columns: 1fr; gap: 8px; }
-body.wide .demos { grid-template-columns: 1fr 1fr; }
-.demo-card { text-align: left; border: 1px solid var(--line); border-left: 4px solid var(--navy); background: #fff; border-radius: 10px; padding: 9px 11px; }
+/* ---------- concise layout (v2) ---------- */
+.sec-h { font-size: 12px; margin: 16px 0 6px; color: var(--muted); font-weight: 600; text-transform: uppercase; letter-spacing: .05em; }
+.demos { display: grid; grid-template-columns: 1fr 1fr; gap: 6px; }
+body.wide .demos { grid-template-columns: 1fr 1fr 1fr; }
+.demo-card { text-align: left; border: 1px solid var(--line); border-left: 3px solid var(--navy); background: #fff; border-radius: 8px; padding: 7px 9px; min-height: 52px; }
 .demo-card:hover { background: var(--soft); border-color: var(--navy-2); }
-.demo-card .field { font-size: 11px; text-transform: uppercase; letter-spacing: .05em; color: var(--navy-2); font-weight: 700; }
-.demo-card .title { font-weight: 700; font-size: 14px; margin: 1px 0 3px; }
+.demo-card .field { font-size: 10.5px; text-transform: uppercase; letter-spacing: .05em; color: var(--navy-2); font-weight: 700; }
+.demo-card .title { font-weight: 600; font-size: 13px; margin-top: 1px; line-height: 1.25; }
+.examples { flex-direction: row !important; flex-wrap: wrap; gap: 6px !important; }
+.example { border-radius: 16px !important; padding: 5px 11px !important; font-size: 12.5px; }
+.tabs button.done::after { content: " \2713"; color: var(--good); font-weight: 700; }
+.act { margin: 0 0 6px; font-size: 12px; color: var(--muted); }
+.act summary { list-style: none; cursor: pointer; display: inline-flex; align-items: center; gap: 6px; padding: 3px 9px 3px 7px; border-radius: 12px; background: var(--soft); }
+.act summary::-webkit-details-marker { display: none; }
+.act .st { width: 11px; height: 11px; border-radius: 50%; flex: none; }
+.act .st.run { border: 2px solid var(--navy-2); border-right-color: transparent; animation: spin .8s linear infinite; }
+.act .st.ok { background: var(--good); mask: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 16 16'%3E%3Cpath d='M3 8.5l3 3 7-7' stroke='black' stroke-width='2.6' fill='none'/%3E%3C/svg%3E") center/contain no-repeat; }
+.act .lbl { color: var(--ink-2); }
+.steps { margin: 6px 0 2px 8px; border-left: 2px solid var(--line); padding-left: 10px; }
+.stp { padding: 2px 0; color: var(--ink-2); }
+.stp.error { color: var(--partial); }
+.stp .sum { color: var(--muted); }
+.stp ul { margin: 2px 0 4px; padding-left: 16px; }
+.strip { display: flex; flex-wrap: wrap; gap: 5px; margin: 2px 0 8px; }
+.rpill { display: inline-flex; align-items: center; gap: 5px; border: 1px solid var(--line); background: #fff; border-radius: 14px; padding: 3px 10px 3px 8px; font-size: 12px; color: var(--ink-2); }
+.rpill:hover { border-color: var(--navy-2); background: var(--soft); }
+.rpill b { color: var(--navy); font-weight: 600; }
+.rpill .thumb-svg { width: 22px; height: 16px; border-radius: 3px; }
+.tail .cites details summary { cursor: pointer; font-size: 11.5px; color: var(--muted); }
+.tail .cites a { display: block; font-size: 11.5px; margin: 2px 0 0 12px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.dcard { padding: 8px 10px; margin-bottom: 6px; cursor: pointer; }
+.dcard .t { font-size: 13.5px; align-items: center; }
+.dcard .t .tt { flex: 1; min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.dcard .chev { color: var(--muted); transition: transform .15s; }
+.dcard.open .chev { transform: rotate(90deg); }
+.dcard .src { margin: 1px 0 2px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.dcard .one { font-size: 12.5px; color: var(--ink-2); }
+.dcard .one.poor { color: var(--poor); } .dcard .one.partial { color: var(--partial); } .dcard .one.good { color: var(--good); }
+.dcard .more { border-top: 1px solid var(--soft-2); margin-top: 6px; padding-top: 4px; cursor: default; }
+.mlist { margin: 0; padding-left: 18px; font-size: 12.5px; line-height: 1.5; }
+.tab { overflow-x: hidden; }
+.matrix { table-layout: fixed; }
+.matrix th:first-child, .matrix td:first-child { width: 44%; }
+.dcard .one.unknown { color: var(--ink-2); }
+.data-foot { display: flex; gap: 6px; flex-wrap: wrap; margin: 14px 0 4px; }
+.demo-note { font-size: 12px; padding: 5px 9px; }
 .demo-card .who { font-size: 12px; color: var(--ink-2); line-height: 1.4; }
 .demo-card .shows { display: flex; flex-wrap: wrap; gap: 4px; margin-top: 6px; }
 .demo-card .shows span { font-size: 11px; background: var(--soft-2); border-radius: 8px; padding: 1px 7px; color: var(--ink-2); }
@@ -105,7 +144,7 @@ body.collapsed #btnCollapse svg { transform: rotate(180deg); }
 .empty { color: var(--muted); padding: 28px 8px; text-align: center; line-height: 1.5; }
 
 /* ---------- welcome ---------- */
-.welcome h2 { font-size: 18px; margin: 6px 0 8px; }
+.welcome h2 { font-size: 17px; margin: 4px 0 4px; }
 .welcome p { line-height: 1.5; color: var(--ink-2); margin: 6px 0; }
 .examples { display: flex; flex-direction: column; gap: 8px; margin-top: 8px; }
 .example { text-align: left; border: 1px solid var(--line); background: #fff; border-radius: 10px; padding: 9px 11px; line-height: 1.4; }

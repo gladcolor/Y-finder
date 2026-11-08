@@ -5,7 +5,7 @@
    "id": "habitat",
    "title": "Where do mosquitoes breed?",
    "field": "Public health",
-   "who": "Maya Chen (fictional), MPH student at the Yale School of Public Health, joining a New Haven larval-control pilot. First GIS project.",
+   "who": "Maya (fictional), MPH student, first GIS project.",
    "shows": [
     "Influence graph from a plain question",
     "10 m satellite flagged too coarse for small pools",
@@ -22,13 +22,13 @@
      "type": "ui",
      "action": "tab",
      "tab": "frame",
-     "note": "Step 1 and 2 of tri-projection: the influence graph puts the outcome in the center and core factors on the inner ring. Below it, the scope: defaults are tagged so Maya can correct them."
+     "note": "Frame: outcome in the center, core factors around it. Defaults are tagged."
     },
     {
      "type": "ui",
      "action": "tab",
      "tab": "data",
-     "note": "Step 3: every dataset is checked against the scope by rules, not by the AI. Satellite imagery at 10 m cannot see small pools, so it is labeled a poor fit."
+     "note": "Rules, not the AI, label fit. 10 m imagery cannot see small pools."
     },
     {
      "type": "turn",
@@ -37,7 +37,7 @@
     {
      "type": "ui",
      "action": "map",
-     "note": "Recent aerial imagery for Fair Haven loads from Microsoft Planetary Computer, inside the new study area."
+     "note": "Recent aerial imagery of Fair Haven."
     }
    ],
    "checks": {
@@ -68,7 +68,7 @@
    "id": "smoke",
    "title": "Wildfire smoke and asthma",
    "field": "Environmental health",
-   "who": "Dr. Lena Ortiz (fictional), environmental health faculty. Her asthma team needs daily PM2.5 for every Connecticut census tract during the June 2023 Canadian wildfire smoke.",
+   "who": "Dr. Ortiz (fictional), environmental health faculty.",
    "shows": [
     "Tract-level scope across a whole state",
     "Monitors, satellite aerosol and smoke plumes combined",
@@ -85,7 +85,7 @@
      "type": "ui",
      "action": "tab",
      "tab": "data",
-     "note": "Monitors alone are too sparse for tracts, so Y-finder pairs EPA monitors with satellite aerosol and NOAA smoke plumes, and suggests how to validate the result."
+     "note": "Monitors plus satellite aerosol and smoke plumes, with validation advice."
     },
     {
      "type": "turn",
@@ -96,7 +96,7 @@
      "action": "handbook",
      "ref": "cur:aqs",
      "title": "EPA Air Quality System (AirData)",
-     "note": "Each source can carry an access handbook written like an Agent Skill: access route, endpoint, a Python example and pitfalls. Coding agents can use it too."
+     "note": "Each source can have an access handbook with Python code."
     }
    ],
    "checks": {
@@ -129,7 +129,7 @@
    "id": "zoning",
    "title": "Zoning reform and new housing",
    "field": "Economics",
-   "who": "Sam Rivera (fictional), economics PhD student. He attaches his one-page proposal instead of typing a question.",
+   "who": "Sam (fictional), economics PhD student, with a proposal.",
    "shows": [
     "Reads an attached proposal",
     "Town-level scope for a policy study",
@@ -153,13 +153,13 @@
      "set": {
       "time_start": "2016"
      },
-     "note": "Sam widens the window to start in 2016 to get five years before the reform. The fit labels update at once, with no new AI call."
+     "note": "Sam starts the window in 2016. Fit labels update instantly."
     },
     {
      "type": "ui",
      "action": "tab",
      "tab": "data",
-     "note": "The fit matrix compares every source on area, time, detail and access at a glance."
+     "note": "The fit matrix compares sources at a glance."
     }
    ],
    "checks": {
@@ -190,7 +190,7 @@
    "id": "waterfront",
    "title": "New Haven's lost shoreline",
    "field": "History",
-   "who": "Ava Brooks (fictional), history PhD student writing about the harbor's industrial past.",
+   "who": "Ava (fictional), history PhD student.",
    "shows": [
     "Live search of Yale Library map holdings",
     "A historical scope (1850 to 1950)",
@@ -206,12 +206,12 @@
      "type": "ui",
      "action": "tab",
      "tab": "data",
-     "note": "Results come from a live search of Yale Library's GeoBlacklight portal, so they are real Yale holdings with record links."
+     "note": "Live results from Yale Library's map collection."
     },
     {
      "type": "ui",
      "action": "gis",
-     "note": "Full GIS opens the same layers in GeoLibre, an open-source web GIS, with its menus collapsed until needed."
+     "note": "Full GIS opens the same layers in GeoLibre."
     }
    ],
    "checks": {
@@ -231,7 +231,7 @@
    "id": "foottraffic",
    "title": "Downtown recovery after COVID",
    "field": "Management",
-   "who": "Priya Nair (fictional), MBA student at the School of Management, studying downtown retail in New Haven.",
+   "who": "Priya (fictional), MBA student.",
    "shows": [
     "Yale-licensed data (Dewey) with the access route",
     "Commercial data limits stated plainly",
@@ -247,12 +247,12 @@
      "type": "ui",
      "action": "tab",
      "tab": "data",
-     "note": "Dewey Data is a Yale subscription; the card says how to get access with a Yale email, and what the data cannot show."
+     "note": "Dewey Data is a Yale subscription; the card shows how to get access."
     },
     {
      "type": "ui",
      "action": "watch",
-     "note": "With her consent, Y-finder can search again on a schedule and post short updates to a private link."
+     "note": "With consent, Y-finder keeps searching and posts updates."
     }
    ],
    "checks": {
@@ -274,7 +274,7 @@
    "id": "kenya",
    "title": "Malaria and land cover in western Kenya",
    "field": "Global health",
-   "who": "Kofi Mensah (fictional), global health MPH student planning field work around Kisumu.",
+   "who": "Kofi (fictional), global health MPH student.",
    "shows": [
     "Global datasets for a study outside the US",
     "US-only sources flagged as outside the area",
@@ -290,7 +290,7 @@
      "type": "ui",
      "action": "tab",
      "tab": "frame",
-     "note": "The scope is set to western Kenya, so US-only datasets such as Census tables or NAIP would be labeled outside the study area."
+     "note": "Scope is western Kenya, so US-only sources are flagged."
     },
     {
      "type": "turn",
@@ -299,7 +299,7 @@
     {
      "type": "ui",
      "action": "map",
-     "note": "A recent Sentinel-2 scene over the study area, streamed from Planetary Computer."
+     "note": "A recent Sentinel-2 scene of the study area."
     }
    ],
    "checks": {
