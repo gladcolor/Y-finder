@@ -401,10 +401,11 @@
     const e1 = (s1 ?? s0) + (String(state.scope.time_end || '').length === 4 ? 0.99 : 0.08);
     const lo = Math.min(d0, s0) - 0.5, hi = Math.max(d1, e1) + 0.5; const X = (v) => (((v - lo) / (hi - lo)) * 96 + 2).toFixed(2);
     const ongoing = p.t1 == null;
-    return `<svg class="timebar" viewBox="0 0 100 22" preserveAspectRatio="none" aria-label="Data years versus your study window">
-      <rect x="${X(d0)}" y="6" width="${Math.max(0.6, X(d1) - X(d0))}" height="6" rx="2" fill="#9db4d6"/>${ongoing ? `<rect x="${X(now)}" y="6" width="${Math.max(0, X(d1) - X(now))}" height="6" fill="#9db4d6" opacity=".35"/>` : ''}
-      <rect x="${X(s0)}" y="2.5" width="${Math.max(0.8, X(e1) - X(s0))}" height="13" rx="2" fill="none" stroke="#00356b" stroke-width="1.2" vector-effect="non-scaling-stroke"/>
-      <text x="${X(d0)}" y="21" font-size="5.5" fill="#6b7486">${Math.floor(d0)}</text><text x="${X(d1)}" y="21" font-size="5.5" fill="#6b7486" text-anchor="end">${ongoing ? 'ongoing' : Math.floor(d1)}</text></svg>`;
+    const win = String(state.scope.time_start).slice(0, 4) + (String(state.scope.time_end).slice(0, 4) !== String(state.scope.time_start).slice(0, 4) ? '-' + String(state.scope.time_end).slice(0, 4) : '');
+    return `<div class="tb"><svg class="timebar" viewBox="0 0 100 16" preserveAspectRatio="none" aria-label="Data years versus your study window">
+      <rect x="${X(d0)}" y="5" width="${Math.max(0.6, X(d1) - X(d0))}" height="6" rx="2" fill="#9db4d6"/>${ongoing ? `<rect x="${X(now)}" y="5" width="${Math.max(0, X(d1) - X(now))}" height="6" fill="#9db4d6" opacity=".35"/>` : ''}
+      <rect x="${X(s0)}" y="1.5" width="${Math.max(0.8, X(e1) - X(s0))}" height="13" rx="2" fill="none" stroke="#00356b" stroke-width="1.2" vector-effect="non-scaling-stroke"/></svg>
+      <div class="tb-l"><span>data ${Math.floor(d0)}</span><span class="tb-w">study ${esc(win)}</span><span>${ongoing ? 'ongoing' : Math.floor(d1 - 0.01)}</span></div></div>`;
   }
   function showCoverage(p) {
     if (!state.mapReady || !p.bbox) { toast('Coverage for this source is not listed.'); return; }
@@ -676,7 +677,7 @@
   const wait = (ms) => new Promise((r) => setTimeout(r, ms));
   async function loadDemos() {
     try {
-      const j = await getJSON('static/demos/index.json'); if (!j.cases || !j.cases.length) return;
+      const j = await getJSON('static/demos/index.json?v=' + (window.YF_VERSION || '')); if (!j.cases || !j.cases.length) return;
       $('#demos').innerHTML = j.cases.map((c) => `<button class="demo-card" data-id="${esc(c.id)}"><div class="field">${esc(c.field)}</div>
         <div class="title">${esc(c.title)}</div><div class="who">${esc(c.who)}</div><div class="shows">${c.shows.map((x) => `<span>${esc(x)}</span>`).join('')}</div></button>`).join('');
       $$('.demo-card').forEach((b) => { b.onclick = () => playDemo(b.dataset.id); });
@@ -697,7 +698,7 @@
   async function playDemo(id) {
     if (state.busy) return;
     let demo;
-    try { demo = await getJSON(`static/demos/${encodeURIComponent(id)}.json`); } catch { toast('Demo not found.'); return; }
+    try { demo = await getJSON(`static/demos/${encodeURIComponent(id)}.json?v=${window.YF_VERSION || ''}`); } catch { toast('Demo not found.'); return; }
     newConversation();
     state.busy = true; $('#btnSend').disabled = true; $('#welcome').hidden = true;
     state.demo = { stop: false, speed: +(store.get('yf_demo_speed') || 2) };

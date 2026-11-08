@@ -7,6 +7,7 @@ from __future__ import annotations
 
 import datetime as dt
 import json
+import math
 import re
 import time
 import traceback
@@ -16,7 +17,7 @@ from openai import OpenAI
 from . import catalog as catalog_mod
 from . import fit, handbooks, sources
 from .config import DEFAULT_MODEL, LOG_TURNS, MAX_OUTPUT_TOKENS, MAX_STEPS, MODELS, RUNTIME_DIR, openai_key
-from .geo import bbox_size_km, clamp_bbox, valid_bbox
+from .geo import bbox_size_km, clamp_bbox, coverage_fraction, valid_bbox
 from .session import Session, save_layer
 
 SYSTEM = """You are Y-finder, the geospatial data guide of the Yale Center for Geospatial Solutions (YCGS).
@@ -228,6 +229,10 @@ def h_geocode(s: Session, a: dict):
     g = sources.geocode(a["place"])
     if not g:
         raise ToolError(f"Place not found: {a['place']}. Try a fuller name, e.g. 'New Haven, Connecticut'.")
+    wkm0, hkm0 = bbox_size_km(g["bbox"])
+    if max(wkm0, hkm0) < 1.0:  # a point-like result (e.g. "downtown"): give it a 1 km study box
+        dlat, dlon = 0.0045, 0.0045 / max(0.2, math.cos(math.radians(g["lat"])))
+        g = dict(g, bbox=[g["lon"] - dlon, g["lat"] - dlat, g["lon"] + dlon, g["lat"] + dlat])
     ev = [{"type": "zoom", "bbox": g["bbox"]}]
     if g.get("geometry"):
         layer = save_layer({"type": "FeatureCollection", "features": [
@@ -308,9 +313,16 @@ def h_search_stac_items(s: Session, a: dict):
         raise ToolError("Set the scope first (set_scope) so the search has a study area")
     coll = a["collection"].strip().removeprefix("pc:")
     items = sources.stac_search(coll, s.scope["bbox"], a.get("datetime") or _scope_datetime(s.scope),
-                                a.get("max_cloud"), a.get("limit") or 8)
-    for it in items:
+                                a.get("max_cloud"), max(int(a.get("limit") or 8), 12))
+    for it in items:  # how much of the study box each scene covers, so the best one is picked for previews
+        it["covers_pct"] = round(100 * coverage_fraction(it["bbox"], s.scope["bbox"])) if it.get("bbox") else 0
         s.stac_items[it["id"]] = it
+    def date_key(it):
+        d = (it.get("datetime") or "")[:10].replace("-", "")
+        return int(d) if d.isdigit() else 0
+    # scenes covering most of the study area first, then newest, then by coverage
+    items.sort(key=lambda it: (it["covers_pct"] < 90, -date_key(it), -it["covers_pct"]))
+    items = items[: max(1, min(int(a.get("limit") or 8), 12))]
     ev = []
     if items:
         fc = {"type": "FeatureCollection", "features": [
@@ -323,7 +335,7 @@ def h_search_stac_items(s: Session, a: dict):
     if cat.get("pc:" + coll):
         s.seen["pc:" + coll] = cat.get("pc:" + coll)
     out = [{"item_id": it["id"], "date": (it["datetime"] or "")[:10], "cloud_cover": it.get("cloud_cover"),
-            "gsd_m": it.get("gsd")} for it in items]
+            "gsd_m": it.get("gsd"), "covers_study_area_pct": it["covers_pct"]} for it in items]
     res = {"collection_ref": "pc:" + coll, "items": out}
     if not items:
         res["note"] = "No items matched. Widen the dates or drop the cloud filter."
@@ -359,19 +371,52 @@ def h_search_datagov(s, a):
     return _live(s, sources.datagov(a["query"]), a["query"])
 
 
+def _mosaic_partners(s: Session, it: dict, max_extra: int = 5) -> list[dict]:
+    """Scenes from the same collection within 10 days that cover parts of the study box the chosen scene misses."""
+    sb = s.scope.get("bbox")
+    if not sb or not it.get("bbox") or coverage_fraction(it["bbox"], sb) >= 0.97:
+        return []
+    d0 = (it.get("datetime") or "")[:10]
+    out = []
+    for o in sorted(s.stac_items.values(), key=lambda x: -coverage_fraction(x.get("bbox") or [0, 0, 0, 0], sb)):
+        if o["id"] == it["id"] or o.get("collection") != it.get("collection") or not o.get("bbox"):
+            continue
+        try:
+            close = abs((dt.date.fromisoformat((o.get("datetime") or "")[:10]) - dt.date.fromisoformat(d0)).days) <= 10
+        except ValueError:
+            close = False
+        if close and coverage_fraction(o["bbox"], sb) > 0:
+            out.append(o)
+        if len(out) >= max_extra:
+            break
+    return out
+
+
 def h_map_stac_preview(s: Session, a: dict):
     it = s.stac_items.get(a["item_id"])
     if not it:
         raise ToolError("Unknown item_id; use an item_id returned by search_stac_items")
-    t = sources.stac_tiles(it.get("tilejson"))
-    if not t or not t.get("tiles"):
-        raise ToolError("This item has no map preview")
-    layer = {"id": "stac-" + re.sub(r"[^A-Za-z0-9]", "", it["id"])[-40:], "kind": "raster", "title": a.get("title") or it["id"],
-             "source": "Microsoft Planetary Computer", "tiles": t["tiles"], "bbox": t.get("bounds") or it.get("bbox"),
-             "minzoom": t["minzoom"], "maxzoom": t["maxzoom"], "preview": it.get("preview"),
-             "date": (it.get("datetime") or "")[:10], "collection": it["collection"]}
-    s.layers.append(layer)
-    return {"ok": True, "shown": it["id"]}, [{"type": "layer", "layer": layer}, {"type": "zoom", "bbox": s.scope.get("bbox") or layer["bbox"]}], layer["title"]
+    events, shown = [], []
+    for k, scene in enumerate([it] + _mosaic_partners(s, it)):
+        t = sources.stac_tiles(scene.get("tilejson"))
+        if not t or not t.get("tiles"):
+            if k == 0:
+                raise ToolError("This item has no map preview")
+            continue
+        title = (a.get("title") or scene["id"]) + (f" (part {k + 1})" if k else "")
+        layer = {"id": "stac-" + re.sub(r"[^A-Za-z0-9]", "", scene["id"])[-40:], "kind": "raster", "title": title,
+                 "source": "Microsoft Planetary Computer", "tiles": t["tiles"], "bbox": t.get("bounds") or scene.get("bbox"),
+                 "minzoom": t["minzoom"], "maxzoom": t["maxzoom"], "preview": scene.get("preview"),
+                 "date": (scene.get("datetime") or "")[:10], "collection": scene["collection"]}
+        s.layers.append(layer)
+        events.append({"type": "layer", "layer": layer})
+        shown.append(scene["id"])
+    events.append({"type": "zoom", "bbox": s.scope.get("bbox") or events[0]["layer"]["bbox"]})
+    covered = coverage_fraction([min(s.stac_items[i]["bbox"][0] for i in shown), min(s.stac_items[i]["bbox"][1] for i in shown),
+                                 max(s.stac_items[i]["bbox"][2] for i in shown), max(s.stac_items[i]["bbox"][3] for i in shown)],
+                                s.scope["bbox"]) if s.scope.get("bbox") else None
+    label = (a.get("title") or it["id"]) + (f" ({len(shown)} scenes)" if len(shown) > 1 else "")
+    return {"ok": True, "shown": shown, "approx_study_area_covered_pct": round(100 * covered) if covered is not None else None}, events, label
 
 
 def _vector(s: Session, fc: dict, title: str, source: str, style: str = "default"):
@@ -430,6 +475,10 @@ def _resolve(s: Session, ref: str, title: str) -> tuple[dict | None, str]:
         return it, "catalog"
     if ref in s.seen:
         return s.seen[ref], "search"
+    if ref in s.stac_items:  # the model passed a scene id; the dataset is its collection
+        coll = cat.get("pc:" + s.stac_items[ref]["collection"])
+        if coll:
+            return coll, "search"
     n = norm_url(ref)
     for k, v in s.seen.items():  # model used the url of a catalog card or result
         if v and (norm_url(v.get("url", "")) == n or norm_url(v.get("ref", "")) == n):

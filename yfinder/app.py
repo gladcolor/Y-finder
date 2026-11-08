@@ -6,6 +6,7 @@ Server:  gunicorn "yfinder.app:create_app()" -w 1 --threads 16 -b 127.0.0.1:8060
 """
 from __future__ import annotations
 
+import hashlib
 import io
 import json
 import os
@@ -66,9 +67,26 @@ def create_app() -> Flask:
         resp.headers.setdefault("Referrer-Policy", "strict-origin-when-cross-origin")
         return resp
 
+    def _asset_version() -> str:
+        """Content hash of the front-end files. Cloudflare caches .js and .css for hours regardless of our
+        headers, so asset URLs carry ?v=<hash> and change whenever the files change."""
+        h = hashlib.sha1()
+        for name in ("app.js", "app.css", "demos/index.json"):
+            p = STATIC_DIR / name
+            if p.exists():
+                h.update(p.read_bytes())
+        return h.hexdigest()[:10]
+
     @app.get("/")
     def index():
-        return send_from_directory(STATIC_DIR, "index.html")
+        v = _asset_version()
+        html = (STATIC_DIR / "index.html").read_text(encoding="utf-8")
+        html = html.replace('src="static/app.js"', f'src="static/app.js?v={v}"')
+        html = html.replace('href="static/app.css"', f'href="static/app.css?v={v}"')
+        html = html.replace("</head>", f'<script>window.YF_VERSION="{v}";</script>\n</head>', 1)
+        resp = Response(html, mimetype="text/html")
+        resp.headers["Cache-Control"] = "no-cache"
+        return resp
 
     @app.get("/static/<path:name>")
     def static_files(name):

@@ -17,8 +17,9 @@ a { color: var(--navy-2); }
 .small { font-size: 12px; }
 
 #map { position: fixed; inset: 0; }
-#geolibre { position: fixed; top: 0; right: 0; bottom: 0; left: calc(var(--panel-w) + 24px); width: auto; height: 100%; border: 0; background: #fff; z-index: 2; }
-body.collapsed #geolibre { left: 0; }
+/* iframes are replaced elements: left+right do not stretch them, so the width is explicit */
+#geolibre { position: fixed; top: 0; bottom: 0; left: calc(var(--panel-w) + 24px); width: calc(100vw - var(--panel-w) - 24px); height: 100vh; border: 0; background: #fff; z-index: 2; }
+body.collapsed #geolibre { left: 0; width: 100vw; }
 
 /* ---------- floating panel (Google Maps style) ---------- */
 .panel { position: fixed; top: 12px; left: 12px; bottom: 12px; width: var(--panel-w); z-index: 5; display: flex; flex-direction: column;
@@ -49,7 +50,10 @@ body.collapsed .stepper { display: none; }
 .matrix td { padding: 4px 2px; border-bottom: 1px solid var(--soft-2); text-align: center; }
 .matrix td:first-child { text-align: left; max-width: 190px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; cursor: pointer; color: var(--navy-2); }
 .matrix .fitdot { display: inline-block; }
-.timebar { display: block; width: 100%; height: 22px; margin: 4px 0 2px; }
+.tb { margin: 4px 0 2px; }
+.timebar { display: block; width: 100%; height: 16px; }
+.tb-l { display: flex; justify-content: space-between; font-size: 10.5px; color: var(--muted); margin-top: 1px; }
+.tb-l .tb-w { color: var(--navy); font-weight: 600; }
 .themes { display: flex; flex-wrap: wrap; gap: 5px; align-items: center; margin: 0 0 8px; }
 .themes button { border: 0; background: var(--soft-2); border-radius: 12px; padding: 2px 9px; font-size: 12px; color: var(--ink-2); }
 .themes button:hover { background: var(--navy-2); color: #fff; }
@@ -272,6 +276,6 @@ body.collapsed .layers-box { left: 12px; }
   body.collapsed .layers-box { left: auto; bottom: 150px; }
   .layers-btn { width: 56px; height: 56px; }
   .layer-panel { left: auto; right: 0; width: min(300px, 90vw); }
-  #geolibre { left: 0; bottom: 62vh; height: auto; top: 0; }
+  #geolibre { left: 0; width: 100vw; top: 0; height: 38vh; }
   .gis-bar { top: 52px; left: 8px; right: 8px; max-width: none; }
 }

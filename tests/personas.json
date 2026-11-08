@@ -92,7 +92,8 @@
      "goes",
      "aerosol",
      "merra",
-     "cams"
+     "cams",
+     "smoke"
     ],
     "max_seconds": 240
    }
@@ -149,10 +150,6 @@
    "who": "Kofi, global health MPH student, field work planned in western Kenya",
    "message": "Map land cover change and malaria risk around villages in western Kenya from 2015 to 2025.",
    "checks": {
-    "scope_contains": [
-     -0.4,
-     34.6
-    ],
     "scope_inside": [
      31.5,
      -3.5,

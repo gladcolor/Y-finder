@@ -10,8 +10,13 @@ decision log and commit log when you change something important.
 - **Purpose:** working prototype for Huan Ning's answer to the YCGS written question on an *interactive data guide*
   (Lead, Geospatial AI & ML interview, Yale Job 138060WD). The answer text lives in
   `E:\OneDrive_Huan\OneDrive\Job_hunting\2026\Yale\written_exam.md` (Huan edits it himself; do not overwrite it).
-- **Tests:** `python -m pytest -q` (95 pass, no model calls); `scripts/mutation_check.py` (all 9 injected faults caught);
-  persona and demo results in `docs/persona_results.md` and `docs/demo_case_results.md`.
+- **Tests:** `python -m pytest -q` (97 pass, no model calls); `scripts/mutation_check.py` (all 9 injected faults caught);
+  personas 190/195 checks across 3 models (Terra 9/10 personas fully, Sol 8/10, Luna 8/10; fixes after the run listed in
+  `docs/persona_results.md`); demo cases 40/40 checks (`docs/demo_case_results.md`).
+- **Reviewed:** Codex CLI (gpt-6.1-sol) reviewed the code; all 15 findings fixed with regression tests (time-fit bug for
+  same-month windows, SSRF via redirects, watch races, session-lock races, unverified picks counting as coverage, TOML escaping, ...).
+- **Browser-tested** on the live URL in Chrome: welcome, live chat turn, Frame and Data tabs, demo replays (habitat, zoning,
+  waterfront, smoke), GeoLibre hand-off with public layer URLs, live follow-up after a demo.
 
 ## Human input log (decisions made by Huan)
 
@@ -64,6 +69,13 @@ bash deploy/deploy.sh                       # sync code to the server and restar
   `scp -r root@173.212.218.20:/opt/yfinder/handbooks/* handbooks/` before committing.
 
 ## Gotchas
+
+- **Cloudflare caches .js and .css for 4 hours** whatever the origin says. The index route stamps `?v=<content hash>`
+  on app.js, app.css and demo JSON, so every deploy is picked up. Keep that if you add static files.
+- Codex CLI on this workstation cannot run its file tools (`codex-code-mode-host.exe` missing). For reviews, pipe the files
+  in: `for f in yfinder/*.py static/app.js; do echo "== $f"; nl -ba $f; done | codex exec -s read-only "review ..."`.
+- GeoLibre iframe: iframes do not stretch between `left` and `right`; the CSS sets an explicit width.
+- Imagery previews: `map_stac_preview` adds same-week neighbor scenes until the study box is covered (NAIP quarter quads are small).
 
 - The Chrome connected to Claude Code on this workstation is on another computer, so it cannot open `127.0.0.1`. Test the UI on the deployed URL.
 - Bash sandbox: SSH works; a local server started inside the sandbox is not visible outside it (use `dangerouslyDisableSandbox`).

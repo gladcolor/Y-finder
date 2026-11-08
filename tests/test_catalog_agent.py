@@ -143,3 +143,24 @@ def test_web_sources_count_as_found_but_unseen_urls_do_not():
     assert agent._resolve(s, "https://aqs.epa.gov/aqsweb/airdata/download_files.html?", "AQS")[1] == "web"
     assert agent._resolve(s, "https://made-up.example/data", "x")[1] == "unverified"
     assert agent._resolve(s, "cur:aqs", "AQS")[1] == "catalog"
+
+
+def test_scene_id_resolves_to_collection():
+    s = _session()
+    s.stac_items["S2B_MSIL2A_TEST"] = {"id": "S2B_MSIL2A_TEST", "collection": "sentinel-2-l2a"}
+    meta, how = agent._resolve(s, "S2B_MSIL2A_TEST", "scene")
+    assert how == "search" and meta["id"] == "pc:sentinel-2-l2a"
+
+
+def test_stac_preview_adds_mosaic_partners(monkeypatch):
+    s = _session()
+    s.scope = {"bbox": [-72.90, 41.29, -72.86, 41.32]}
+    a = {"id": "A", "collection": "naip", "datetime": "2023-07-05T00:00:00Z", "bbox": [-72.88, 41.28, -72.80, 41.33], "tilejson": "x"}
+    b = {"id": "B", "collection": "naip", "datetime": "2023-07-06T00:00:00Z", "bbox": [-72.95, 41.28, -72.87, 41.33], "tilejson": "y"}
+    far = {"id": "C", "collection": "naip", "datetime": "2021-07-06T00:00:00Z", "bbox": [-72.95, 41.28, -72.87, 41.33], "tilejson": "z"}
+    s.stac_items = {"A": a, "B": b, "C": far}
+    monkeypatch.setattr(agent.sources, "stac_tiles", lambda u: {"tiles": [f"https://t/{u}/{{z}}/{{x}}/{{y}}"], "bounds": None, "minzoom": 0, "maxzoom": 18})
+    res, ev, _ = agent.h_map_stac_preview(s, {"item_id": "A", "title": "NAIP"})
+    assert res["shown"] == ["A", "B"]                      # same-week neighbor added, 2021 scene not
+    assert res["approx_study_area_covered_pct"] == 100
+    assert sum(e["type"] == "layer" for e in ev) == 2

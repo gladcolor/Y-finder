@@ -1,12 +1,12 @@
 # Demo case results
 
-Recorded 2026-11-08 17:33 with gpt-6.1-terra. Checks are defined in yfinder/data/demo_cases.json and scored by yfinder/personas.py.
+Checks are defined in yfinder/data/demo_cases.json and scored by yfinder/personas.py. Updated 2026-11-08 17:48.
 
-| Case | Checks passed | Seconds | Failed checks |
-|---|---|---|---|
-| habitat | 8/8 | 91 | none |
-| smoke | 8/8 | 69 | none |
-| zoning | 7/7 | 48 | none |
-| waterfront | 5/5 | 35 | none |
-| foottraffic | 5/5 | 37 | none |
-| kenya | 7/7 | 50 | none |
+| Case | Checks passed | Seconds | Failed checks | Recorded |
+|---|---|---|---|---|
+| habitat | 8/8 | 106 | none | 2026-11-08 gpt-6.1-terra |
+| smoke | 8/8 | 52 | none | 2026-11-08 gpt-6.1-terra |
+| zoning | 7/7 | 45 | none | 2026-11-08 gpt-6.1-terra |
+| waterfront | 5/5 | 38 | none | 2026-11-08 gpt-6.1-terra |
+| foottraffic | 5/5 | 34 | none | 2026-11-08 gpt-6.1-terra |
+| kenya | 7/7 | 56 | none | 2026-11-08 gpt-6.1-terra |

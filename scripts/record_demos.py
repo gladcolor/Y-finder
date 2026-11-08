@@ -154,9 +154,17 @@ def main():
               "| Case | Checks passed | Seconds | Failed checks |", "|---|---|---|---|"]
     with cf.ThreadPoolExecutor(3) as ex:
         for cid, size, sec, ev in ex.map(lambda c: record(c, a.model), cases):
-            bad = "; ".join(f"{k} ({v['detail']})" for k, v in ev["checks"].items() if not v["pass"]) or "none"
-            report.append(f"| {cid} | {ev['passed']}/{ev['total']} | {sec} | {bad} |")
             print(f"{cid}: {size / 1024:.0f} KB, {sec}s, {ev['passed']}/{ev['total']} checks", flush=True)
+    # the report covers every saved demo, not only the ones recorded in this run
+    for c in json.load(open(os.path.join(DATA_DIR, "demo_cases.json"), encoding="utf-8"))["cases"]:
+        p = os.path.join(OUT, c["id"] + ".json")
+        if not os.path.exists(p):
+            continue
+        d = json.load(open(p, encoding="utf-8"))
+        ev = d["eval"]
+        bad = "; ".join(f"{k} ({v['detail']})" for k, v in ev["checks"].items() if not v["pass"]) or "none"
+        report.append(f"| {c['id']} | {ev['passed']}/{ev['total']} | {d['seconds']} | {bad} | {d['recorded']} {d['model']} |")
+    report[3:5] = ["| Case | Checks passed | Seconds | Failed checks | Recorded |", "|---|---|---|---|---|"]
     open(os.path.join(ROOT, "docs", "demo_case_results.md"), "w", encoding="utf-8").write("\n".join(report) + "\n")
     index = []
     for c in json.load(open(os.path.join(DATA_DIR, "demo_cases.json"), encoding="utf-8"))["cases"]:
