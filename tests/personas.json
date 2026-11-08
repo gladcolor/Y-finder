@@ -1,0 +1,262 @@
+{
+ "_note": "Fictional users built from YCGS service areas (lidar, imagery, drone data, dashboards, training) and common Yale research themes. Names are invented; no real faculty are represented. Checks are what a YCGS consultant would expect from a good first answer.",
+ "personas": [
+  {
+   "id": "mph_mosquito",
+   "who": "Maya, MPH student (epidemiology of microbial diseases), first GIS project",
+   "message": "Which standing water sites in New Haven are most likely to breed Culex mosquitoes this summer, to guide larval control?",
+   "checks": {
+    "graph_min_nodes": 6,
+    "scope_contains": [
+     41.308,
+     -72.925
+    ],
+    "scope_max_res_m": 5,
+    "picks_min": 3,
+    "no_unverified": true,
+    "picks_any": [
+     "cur:eagleview",
+     "cur:ycgs_drone",
+     "cur:cteco",
+     "pc:naip",
+     "gee:USDA/NAIP",
+     "cur:planet"
+    ],
+    "if_pick_then_fit": {
+     "ref_contains": "sentinel-2",
+     "role": "core",
+     "not_overall": "good"
+    },
+    "max_seconds": 240
+   }
+  },
+  {
+   "id": "yse_canopy_heat",
+   "who": "Jordan, forest ecology PhD student, urban forestry lab",
+   "message": "How has tree canopy changed in New Haven neighborhoods since 2012, and is canopy loss linked to summer heat?",
+   "checks": {
+    "graph_min_nodes": 6,
+    "scope_contains": [
+     41.308,
+     -72.925
+    ],
+    "scope_time_start_max": 2013,
+    "picks_min": 3,
+    "no_unverified": true,
+    "picks_any": [
+     "cur:cteco",
+     "pc:naip",
+     "gee:USDA/NAIP",
+     "landsat",
+     "pc:3dep",
+     "nlcd",
+     "canopy"
+    ],
+    "picks_any_2": [
+     "landsat",
+     "lst",
+     "modis",
+     "temperature",
+     "prism",
+     "gridmet",
+     "daymet",
+     "ecostress"
+    ],
+    "max_seconds": 240
+   }
+  },
+  {
+   "id": "ysph_smoke_asthma",
+   "who": "Dr. Lena Ortiz (fictional), environmental health faculty, asthma study",
+   "message": "Estimate daily PM2.5 exposure by census tract in Connecticut during the June 2023 wildfire smoke, for an asthma study.",
+   "checks": {
+    "scope_contains": [
+     41.764,
+     -72.674
+    ],
+    "scope_time_includes": "2023-06",
+    "scope_unit_any": [
+     "tract"
+    ],
+    "picks_min": 3,
+    "no_unverified": true,
+    "picks_any": [
+     "cur:aqs"
+    ],
+    "picks_any_2": [
+     "cur:hms",
+     "cur:goesaod",
+     "cur:naqfc",
+     "cur:acag",
+     "cur:purpleair",
+     "goes",
+     "aerosol",
+     "merra",
+     "cams"
+    ],
+    "max_seconds": 240
+   }
+  },
+  {
+   "id": "econ_zoning_permits",
+   "who": "Sam, economics PhD student, housing policy",
+   "message": "Did Connecticut towns that eased multifamily zoning after 2021 see more new housing permits?",
+   "checks": {
+    "scope_contains": [
+     41.6,
+     -72.7
+    ],
+    "scope_unit_any": [
+     "town",
+     "municipal",
+     "place"
+    ],
+    "picks_min": 2,
+    "no_unverified": true,
+    "picks_any": [
+     "cur:bps",
+     "cur:ctzoning"
+    ],
+    "methods_any": [
+     "difference",
+     "event study",
+     "panel",
+     "regression"
+    ],
+    "max_seconds": 240
+   }
+  },
+  {
+   "id": "history_waterfront",
+   "who": "Ava, history PhD student, digital humanities",
+   "message": "Find historical maps of New Haven's waterfront from 1850 to 1950 to trace how the shoreline changed.",
+   "checks": {
+    "scope_contains": [
+     41.29,
+     -72.91
+    ],
+    "scope_time_start_max": 1860,
+    "tool_used": "search_yale_geoblacklight",
+    "picks_min": 2,
+    "picks_any": [
+     "geoblacklight"
+    ],
+    "max_seconds": 240
+   }
+  },
+  {
+   "id": "kenya_malaria",
+   "who": "Kofi, global health MPH student, field work planned in western Kenya",
+   "message": "Map land cover change and malaria risk around villages in western Kenya from 2015 to 2025.",
+   "checks": {
+    "scope_contains": [
+     -0.4,
+     34.6
+    ],
+    "scope_inside": [
+     31.5,
+     -3.5,
+     38.5,
+     4.5
+    ],
+    "picks_min": 3,
+    "no_unverified": true,
+    "no_core_pick_with_poor_extent": true,
+    "picks_any": [
+     "worldcover",
+     "io-lulc",
+     "dynamicworld",
+     "dynamic world",
+     "sentinel-2",
+     "landsat",
+     "s2",
+     "copernicus",
+     "lulc"
+    ],
+    "max_seconds": 240
+   }
+  },
+  {
+   "id": "vague_undergrad",
+   "who": "Riley, first-year undergraduate, no GIS background",
+   "message": "I want to do something about climate change and cities for my essay but I don't know where to start.",
+   "checks": {
+    "ends_with_question": true,
+    "choices_offered": true,
+    "max_seconds": 200
+   }
+  },
+  {
+   "id": "dewey_mobility",
+   "who": "Priya, School of Management MBA student, downtown retail project",
+   "message": "How did foot traffic in downtown New Haven recover after COVID from 2019 to 2023?",
+   "checks": {
+    "scope_contains": [
+     41.308,
+     -72.925
+    ],
+    "picks_min": 2,
+    "no_unverified": true,
+    "picks_any": [
+     "cur:dewey"
+    ],
+    "text_contains_any": [
+     "Yale",
+     "NetID",
+     "subscription"
+    ],
+    "max_seconds": 240
+   }
+  },
+  {
+   "id": "polisci_polling",
+   "who": "Marcus, political science PhD student, voting access",
+   "message": "How long do people travel to their polling places in Connecticut neighborhoods, and does it differ by income?",
+   "checks": {
+    "scope_contains": [
+     41.6,
+     -72.7
+    ],
+    "picks_min": 3,
+    "no_unverified": true,
+    "picks_any": [
+     "cur:osm",
+     "cur:overture",
+     "cur:acs",
+     "cur:tiger",
+     "cur:l2"
+    ],
+    "methods_any": [
+     "access",
+     "travel",
+     "network"
+    ],
+    "max_seconds": 240
+   }
+  },
+  {
+   "id": "facilities_solar",
+   "who": "Dana, Yale sustainability staff, campus energy planning",
+   "message": "Which Yale campus buildings in New Haven have the best rooftop solar potential?",
+   "checks": {
+    "scope_contains": [
+     41.311,
+     -72.926
+    ],
+    "scope_max_res_m": 2,
+    "picks_min": 2,
+    "no_unverified": true,
+    "picks_any": [
+     "3dep",
+     "cur:cteco",
+     "lidar",
+     "dsm",
+     "buildings",
+     "cur:overture",
+     "cur:osm"
+    ],
+    "max_seconds": 240
+   }
+  }
+ ]
+}

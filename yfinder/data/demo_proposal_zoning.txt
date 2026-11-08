@@ -1,0 +1,13 @@
+Proposal: Did Connecticut's 2021 zoning reform change how much housing towns permit?
+
+Sam Rivera, PhD student, Department of Economics (fictional proposal for a Y-finder demo)
+
+Background. In 2021 Connecticut passed Public Act 21-29, which changed the state's zoning enabling act. Among other provisions, it required towns to allow accessory apartments unless they voted to opt out, and it limited parking requirements for new housing, again with an opt-out. About a third of towns opted out of at least one provision. Housing advocates argue that local zoning keeps multifamily housing out of most Connecticut towns; opponents argue that market conditions, sewer and water capacity, and land costs matter more than rules.
+
+Research question. Did towns that kept the 2021 reforms (did not opt out) permit more new housing units, especially two- to four-unit buildings and accessory apartments, than towns that opted out?
+
+Design. A town-level panel for all 169 Connecticut towns, from several years before the reform through 2025. I will compare permits before and after 2021 in towns that kept the reforms versus towns that opted out (difference-in-differences, with an event-study version to check pre-trends). Controls: population, median income, home values, distance to transit, share of land with public sewer, and the share of land zoned for multifamily housing before the reform.
+
+Data I think I need. Annual housing permits by town and building size; which towns opted out of which provisions; the zoning rules in each town before the reform; town boundaries; demographic and housing variables; transit stations; sewer service areas.
+
+Output. A paper chapter and a public map of permits per 1,000 residents by town, before and after the reform.

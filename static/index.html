@@ -1,0 +1,168 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Y-finder</title>
+<meta name="description" content="Y-finder: a conversational geospatial data guide that frames a research question, sets its scope and finds data that fits.">
+<link rel="icon" href="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 32 32'%3E%3Crect width='32' height='32' rx='8' fill='%231f3a68'/%3E%3Cpath d='M9 8l7 9 7-9M16 17v8' stroke='white' stroke-width='3' fill='none' stroke-linecap='round' stroke-linejoin='round'/%3E%3C/svg%3E">
+<link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/maplibre-gl/4.7.1/maplibre-gl.min.css">
+<link rel="stylesheet" href="static/app.css">
+</head>
+<body>
+<div id="map" aria-label="Map"></div>
+<iframe id="geolibre" title="GeoLibre web GIS" hidden allow="fullscreen; geolocation"></iframe>
+
+<section id="panel" class="panel" aria-label="Y-finder assistant">
+  <div class="interview-banner">Prepared for the Yale Center for Geospatial Solutions · interview prototype by Huan Ning</div>
+  <header class="brand">
+    <img class="brand-logo" src="static/brand/logo.png" alt="" onerror="this.remove()">
+    <div class="logo" aria-hidden="true">Y</div>
+    <div class="brand-text"><b>Y-finder</b><span>Geospatial data guide for YCGS · independent prototype</span></div>
+    <button id="btnWide" class="icon-btn" title="Widen panel" aria-pressed="false">
+      <svg viewBox="0 0 24 24" width="18" height="18"><path d="M4 12h16M8 8l-4 4 4 4M16 8l4 4-4 4" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round"/></svg>
+    </button>
+    <button id="btnCollapse" class="icon-btn" title="Collapse panel" aria-expanded="true">
+      <svg viewBox="0 0 24 24" width="20" height="20"><path d="M15 6l-6 6 6 6" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"/></svg>
+    </button>
+  </header>
+
+  <form id="ask" class="ask" autocomplete="off">
+    <button type="button" id="btnAttach" class="icon-btn" title="Attach a proposal (PDF, DOCX, TXT)">
+      <svg viewBox="0 0 24 24" width="20" height="20"><path d="M21 11.5l-8.6 8.6a5 5 0 01-7.1-7.1l8.6-8.6a3.3 3.3 0 014.7 4.7l-8.6 8.6a1.7 1.7 0 01-2.4-2.4l7.9-7.9" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round"/></svg>
+    </button>
+    <textarea id="q" rows="1" placeholder="Describe your research question..." aria-label="Research question"></textarea>
+    <button id="btnSend" type="submit" class="send" title="Send">
+      <svg viewBox="0 0 24 24" width="20" height="20"><path d="M4 12l16-8-6 16-2.5-6.5z" fill="currentColor"/></svg>
+    </button>
+    <input type="file" id="file" accept=".pdf,.docx,.txt,.md" hidden>
+  </form>
+  <div id="attachInfo" class="attach-info" hidden></div>
+
+  <nav class="tabs" role="tablist">
+    <button data-tab="chat" class="on" role="tab">Chat</button>
+    <button data-tab="frame" role="tab">Frame</button>
+    <button data-tab="data" role="tab">Data <span id="nData" class="count" hidden></span></button>
+    <button data-tab="catalog" role="tab">Catalog</button>
+  </nav>
+
+  <ol id="stepper" class="stepper" aria-label="Progress">
+    <li data-step="frame" data-tab="frame"><b>1</b>Frame</li>
+    <li data-step="scope" data-tab="frame"><b>2</b>Scope</li>
+    <li data-step="data" data-tab="data"><b>3</b>Data</li>
+    <li data-step="map" data-tab="map"><b>4</b>Map</li>
+  </ol>
+
+  <div class="tabbody">
+    <div id="tab-chat" class="tab on">
+      <div id="welcome" class="welcome">
+        <h2>Start from your question, not from a dataset.</h2>
+        <p>Y-finder works in three steps. It maps the factors behind your question, agrees a study scope with you
+           (place, time, resolution, unit), then finds data and labels how well each source fits that scope.</p>
+        <div class="tri small"><span>Real world</span><i></i><span>Influence graph</span><i></i><span>Scope</span><i></i><span>Data</span></div>
+        <div id="demoWrap" hidden>
+          <h3 class="sec-h">Demo cases <span class="muted small">real questions, recorded runs you can continue live</span></h3>
+          <div id="demos" class="demos"></div>
+        </div>
+        <h3 class="sec-h">Or ask your own question</h3>
+        <div id="examples" class="examples"></div>
+      </div>
+      <div id="msgs" class="msgs" aria-live="polite"></div>
+    </div>
+
+    <div id="tab-frame" class="tab">
+      <div class="tri"><span>Real world</span><i></i><span class="on">Influence graph</span><i></i><span class="on">Scope</span><i></i><span>Data</span></div>
+      <div id="graphEmpty" class="empty">Ask a question and Y-finder will draw the factors behind it here.</div>
+      <div id="graph" hidden></div>
+      <div id="graphLegend" class="legend" hidden>
+        <span><b class="dot covered"></b>Data fits</span><span><b class="dot partial"></b>Partly</span><span><b class="dot uncovered"></b>No data yet</span><span><b class="dot outcome"></b>Outcome</span><span><b class="ring"></b>Core factor</span>
+      </div>
+      <div id="nodeInfo" class="node-info" hidden></div>
+      <div id="scopeCard" class="scope-card" hidden></div>
+      <div id="frameActions" class="actions" hidden>
+        <a id="btnGraphml" class="btn ghost" href="#" download>Export graph (GraphML)</a>
+        <a class="btn ghost" href="https://app.researcharchitect.ai/" target="_blank" rel="noopener">Open in Research Architect</a>
+      </div>
+    </div>
+
+    <div id="tab-data" class="tab">
+      <div id="dataEmpty" class="empty">Recommended datasets, methods and tools appear here, each labeled against your scope.</div>
+      <div id="matrix"></div>
+      <label id="hidePoorWrap" class="toggle" hidden><input type="checkbox" id="hidePoor"> Hide poor fits</label>
+      <div id="picks"></div>
+      <div id="methods"></div>
+    </div>
+
+    <div id="tab-catalog" class="tab">
+      <div class="cat-search">
+        <input id="catQ" type="search" placeholder="Search 1,100+ datasets, tools and methods" aria-label="Search the catalog">
+        <div class="chips" id="catChips">
+          <button data-kind="any" data-access="any" class="on">All</button>
+          <button data-kind="dataset" data-access="yale">Yale access</button>
+          <button data-kind="dataset" data-access="open">Open data</button>
+          <button data-kind="tool" data-access="any">Tools</button>
+          <button data-kind="method" data-access="any">Methods</button>
+        </div>
+        <div class="themes" id="catThemes">
+          <span class="muted small">Browse:</span>
+          <button data-q="health disease chronic outcomes">Health</button>
+          <button data-q="air quality pm25 pollution">Air quality</button>
+          <button data-q="land cover vegetation canopy">Land and trees</button>
+          <button data-q="flood sea level hazard risk">Hazards</button>
+          <button data-q="housing zoning parcels">Housing</button>
+          <button data-q="demographics census income">People</button>
+          <button data-q="mobility foot traffic commuting">Mobility</button>
+          <button data-q="aerial imagery high resolution">Imagery</button>
+          <button data-q="historical maps">History</button>
+        </div>
+      </div>
+      <div id="catMeta" class="muted small"></div>
+      <div id="catRes"></div>
+    </div>
+  </div>
+</section>
+
+<div class="topright">
+  <label class="model-pick" title="Language model"><span>Model</span><select id="model"></select></label>
+  <div class="seg" role="group" aria-label="View">
+    <button id="modeMap" class="on">Map</button>
+    <button id="modeGIS" title="Open the same layers in GeoLibre, a full web GIS">Full GIS</button>
+  </div>
+  <button id="btnNew" class="pill" title="Start a new conversation">New</button>
+  <button id="btnAbout" class="pill" title="About Y-finder">About</button>
+</div>
+
+<div id="gisBar" class="gis-bar" hidden>
+  <span>GeoLibre</span>
+  <div class="seg small" role="group" aria-label="GeoLibre menus">
+    <button id="gisSimple" class="on">Simple menus</button><button id="gisFull">All menus</button>
+  </div>
+  <span id="gisNote" class="muted"></span>
+</div>
+
+<div class="layers-box">
+  <button id="btnLayers" class="layers-btn" title="Layers">
+    <span class="thumb" id="baseThumb"></span><span>Layers</span>
+  </button>
+  <div id="layerPanel" class="layer-panel" hidden>
+    <div class="lp-head"><b>Basemap</b>
+      <div class="seg small"><button id="baseStreets" class="on">Streets</button><button id="baseSat">Satellite</button></div>
+    </div>
+    <div class="lp-head"><b>Layers</b><span id="nLayers" class="muted"></span></div>
+    <div id="layerList"><div class="muted small">Layers that Y-finder adds appear here.</div></div>
+  </div>
+</div>
+
+<dialog id="dlg" class="dlg">
+  <div class="dlg-head"><b id="dlgTitle"></b><button class="icon-btn" id="dlgClose" title="Close">&times;</button></div>
+  <div id="dlgBody" class="dlg-body md"></div>
+</dialog>
+<div id="toast" class="toast" role="status" hidden></div>
+
+<script src="https://cdnjs.cloudflare.com/ajax/libs/maplibre-gl/4.7.1/maplibre-gl.min.js"></script>
+<script src="https://cdnjs.cloudflare.com/ajax/libs/cytoscape/3.30.2/cytoscape.min.js"></script>
+<script src="https://cdnjs.cloudflare.com/ajax/libs/marked/12.0.2/marked.min.js"></script>
+<script src="https://cdnjs.cloudflare.com/ajax/libs/dompurify/3.1.6/purify.min.js"></script>
+<script src="static/app.js"></script>
+</body>
+</html>

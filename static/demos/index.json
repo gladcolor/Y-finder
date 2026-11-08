@@ -1,0 +1,91 @@
+{
+ "cases": [
+  {
+   "id": "habitat",
+   "title": "Where do mosquitoes breed?",
+   "field": "Public health",
+   "who": "Maya Chen (fictional), MPH student at the Yale School of Public Health, joining a New Haven larval-control pilot. First GIS project.",
+   "shows": [
+    "Influence graph from a plain question",
+    "10 m satellite flagged too coarse for small pools",
+    "Water features mapped from OpenStreetMap",
+    "Yale aerial imagery and YCGS drone support",
+    "Recent aerial photo loaded on the map"
+   ],
+   "recorded": "2026-11-08",
+   "model": "gpt-6.1-terra"
+  },
+  {
+   "id": "smoke",
+   "title": "Wildfire smoke and asthma",
+   "field": "Environmental health",
+   "who": "Dr. Lena Ortiz (fictional), environmental health faculty. Her asthma team needs daily PM2.5 for every Connecticut census tract during the June 2023 Canadian wildfire smoke.",
+   "shows": [
+    "Tract-level scope across a whole state",
+    "Monitors, satellite aerosol and smoke plumes combined",
+    "Methods with validation advice",
+    "Census tracts on the map",
+    "Access handbook with Python code"
+   ],
+   "recorded": "2026-11-08",
+   "model": "gpt-6.1-terra"
+  },
+  {
+   "id": "zoning",
+   "title": "Zoning reform and new housing",
+   "field": "Economics",
+   "who": "Sam Rivera (fictional), economics PhD student. He attaches his one-page proposal instead of typing a question.",
+   "shows": [
+    "Reads an attached proposal",
+    "Town-level scope for a policy study",
+    "Difference-in-differences suggested",
+    "Town boundaries on the map",
+    "Editing the scope re-checks every dataset"
+   ],
+   "recorded": "2026-11-08",
+   "model": "gpt-6.1-terra"
+  },
+  {
+   "id": "waterfront",
+   "title": "New Haven's lost shoreline",
+   "field": "History",
+   "who": "Ava Brooks (fictional), history PhD student writing about the harbor's industrial past.",
+   "shows": [
+    "Live search of Yale Library map holdings",
+    "A historical scope (1850 to 1950)",
+    "Georeferencing method and tools",
+    "Hand-off to GeoLibre for full GIS"
+   ],
+   "recorded": "2026-11-08",
+   "model": "gpt-6.1-terra"
+  },
+  {
+   "id": "foottraffic",
+   "title": "Downtown recovery after COVID",
+   "field": "Management",
+   "who": "Priya Nair (fictional), MBA student at the School of Management, studying downtown retail in New Haven.",
+   "shows": [
+    "Yale-licensed data (Dewey) with the access route",
+    "Commercial data limits stated plainly",
+    "Mobility analysis method",
+    "Follow-up searches with consent"
+   ],
+   "recorded": "2026-11-08",
+   "model": "gpt-6.1-terra"
+  },
+  {
+   "id": "kenya",
+   "title": "Malaria and land cover in western Kenya",
+   "field": "Global health",
+   "who": "Kofi Mensah (fictional), global health MPH student planning field work around Kisumu.",
+   "shows": [
+    "Global datasets for a study outside the US",
+    "US-only sources flagged as outside the area",
+    "Satellite imagery preview over Kenya",
+    "Field data needs called out"
+   ],
+   "recorded": "2026-11-08",
+   "model": "gpt-6.1-terra"
+  }
+ ]
+}

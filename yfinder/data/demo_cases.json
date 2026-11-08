@@ -1,0 +1,330 @@
+{
+ "_note": "Demo cases shown on the Y-finder welcome screen. People are fictional; questions, places, data and Yale access routes are real. scripts/record_demos.py runs each script against the live agent and saves the event stream to static/demos/<id>.json so the app can replay it quickly and reliably, then continue live.",
+ "cases": [
+  {
+   "id": "habitat",
+   "title": "Where do mosquitoes breed?",
+   "field": "Public health",
+   "who": "Maya Chen (fictional), MPH student at the Yale School of Public Health, joining a New Haven larval-control pilot. First GIS project.",
+   "shows": [
+    "Influence graph from a plain question",
+    "10 m satellite flagged too coarse for small pools",
+    "Water features mapped from OpenStreetMap",
+    "Yale aerial imagery and YCGS drone support",
+    "Recent aerial photo loaded on the map"
+   ],
+   "steps": [
+    {
+     "type": "turn",
+     "message": "Which standing water sites in New Haven are most likely to breed Culex mosquitoes this summer, to guide larval control?"
+    },
+    {
+     "type": "ui",
+     "action": "tab",
+     "tab": "frame",
+     "note": "Step 1 and 2 of tri-projection: the influence graph puts the outcome in the center and core factors on the inner ring. Below it, the scope: defaults are tagged so Maya can correct them."
+    },
+    {
+     "type": "ui",
+     "action": "tab",
+     "tab": "data",
+     "note": "Step 3: every dataset is checked against the scope by rules, not by the AI. Satellite imagery at 10 m cannot see small pools, so it is labeled a poor fit."
+    },
+    {
+     "type": "turn",
+     "message": "Focus on the Fair Haven neighborhood for June to August 2026, and show me the most recent aerial imagery there."
+    },
+    {
+     "type": "ui",
+     "action": "map",
+     "note": "Recent aerial imagery for Fair Haven loads from Microsoft Planetary Computer, inside the new study area."
+    }
+   ],
+   "checks": {
+    "graph_min_nodes": 6,
+    "scope_contains": [
+     41.31,
+     -72.89
+    ],
+    "scope_max_res_m": 5,
+    "picks_min": 3,
+    "no_unverified": true,
+    "picks_any": [
+     "cur:eagleview",
+     "cur:ycgs_drone",
+     "cur:cteco",
+     "naip",
+     "cur:planet"
+    ],
+    "tool_used": "map_stac_preview",
+    "if_pick_then_fit": {
+     "ref_contains": "sentinel-2",
+     "role": "core",
+     "not_overall": "good"
+    }
+   }
+  },
+  {
+   "id": "smoke",
+   "title": "Wildfire smoke and asthma",
+   "field": "Environmental health",
+   "who": "Dr. Lena Ortiz (fictional), environmental health faculty. Her asthma team needs daily PM2.5 for every Connecticut census tract during the June 2023 Canadian wildfire smoke.",
+   "shows": [
+    "Tract-level scope across a whole state",
+    "Monitors, satellite aerosol and smoke plumes combined",
+    "Methods with validation advice",
+    "Census tracts on the map",
+    "Access handbook with Python code"
+   ],
+   "steps": [
+    {
+     "type": "turn",
+     "message": "Estimate daily PM2.5 exposure by census tract in Connecticut during the June 2023 wildfire smoke, for an asthma study."
+    },
+    {
+     "type": "ui",
+     "action": "tab",
+     "tab": "data",
+     "note": "Monitors alone are too sparse for tracts, so Y-finder pairs EPA monitors with satellite aerosol and NOAA smoke plumes, and suggests how to validate the result."
+    },
+    {
+     "type": "turn",
+     "message": "How do I download the EPA monitor data for Connecticut?"
+    },
+    {
+     "type": "ui",
+     "action": "handbook",
+     "ref": "cur:aqs",
+     "title": "EPA Air Quality System (AirData)",
+     "note": "Each source can carry an access handbook written like an Agent Skill: access route, endpoint, a Python example and pitfalls. Coding agents can use it too."
+    }
+   ],
+   "checks": {
+    "scope_contains": [
+     41.764,
+     -72.674
+    ],
+    "scope_time_includes": "2023-06",
+    "scope_unit_any": [
+     "tract"
+    ],
+    "picks_min": 3,
+    "no_unverified": true,
+    "picks_any": [
+     "cur:aqs"
+    ],
+    "picks_any_2": [
+     "cur:hms",
+     "cur:goesaod",
+     "cur:naqfc",
+     "cur:acag",
+     "cur:purpleair",
+     "goes",
+     "aerosol"
+    ],
+    "tool_used": "get_access_handbook"
+   }
+  },
+  {
+   "id": "zoning",
+   "title": "Zoning reform and new housing",
+   "field": "Economics",
+   "who": "Sam Rivera (fictional), economics PhD student. He attaches his one-page proposal instead of typing a question.",
+   "shows": [
+    "Reads an attached proposal",
+    "Town-level scope for a policy study",
+    "Difference-in-differences suggested",
+    "Town boundaries on the map",
+    "Editing the scope re-checks every dataset"
+   ],
+   "steps": [
+    {
+     "type": "upload",
+     "name": "Rivera_zoning_proposal.docx",
+     "text_file": "demo_proposal_zoning.txt"
+    },
+    {
+     "type": "turn",
+     "message": "Here is my proposal. Help me find data for it."
+    },
+    {
+     "type": "ui",
+     "action": "scope_edit",
+     "set": {
+      "time_start": "2016"
+     },
+     "note": "Sam widens the window to start in 2016 to get five years before the reform. The fit labels update at once, with no new AI call."
+    },
+    {
+     "type": "ui",
+     "action": "tab",
+     "tab": "data",
+     "note": "The fit matrix compares every source on area, time, detail and access at a glance."
+    }
+   ],
+   "checks": {
+    "scope_contains": [
+     41.6,
+     -72.7
+    ],
+    "scope_unit_any": [
+     "town",
+     "municipal",
+     "place"
+    ],
+    "scope_time_start_max": 2016,
+    "picks_min": 2,
+    "no_unverified": true,
+    "picks_any": [
+     "cur:bps",
+     "cur:ctzoning"
+    ],
+    "methods_any": [
+     "difference",
+     "event study",
+     "panel"
+    ]
+   }
+  },
+  {
+   "id": "waterfront",
+   "title": "New Haven's lost shoreline",
+   "field": "History",
+   "who": "Ava Brooks (fictional), history PhD student writing about the harbor's industrial past.",
+   "shows": [
+    "Live search of Yale Library map holdings",
+    "A historical scope (1850 to 1950)",
+    "Georeferencing method and tools",
+    "Hand-off to GeoLibre for full GIS"
+   ],
+   "steps": [
+    {
+     "type": "turn",
+     "message": "Find historical maps of New Haven's waterfront from 1850 to 1950 so I can trace how the shoreline changed."
+    },
+    {
+     "type": "ui",
+     "action": "tab",
+     "tab": "data",
+     "note": "Results come from a live search of Yale Library's GeoBlacklight portal, so they are real Yale holdings with record links."
+    },
+    {
+     "type": "ui",
+     "action": "gis",
+     "note": "Full GIS opens the same layers in GeoLibre, an open-source web GIS, with its menus collapsed until needed."
+    }
+   ],
+   "checks": {
+    "scope_contains": [
+     41.29,
+     -72.91
+    ],
+    "scope_time_start_max": 1860,
+    "tool_used": "search_yale_geoblacklight",
+    "picks_min": 2,
+    "picks_any": [
+     "geoblacklight"
+    ]
+   }
+  },
+  {
+   "id": "foottraffic",
+   "title": "Downtown recovery after COVID",
+   "field": "Management",
+   "who": "Priya Nair (fictional), MBA student at the School of Management, studying downtown retail in New Haven.",
+   "shows": [
+    "Yale-licensed data (Dewey) with the access route",
+    "Commercial data limits stated plainly",
+    "Mobility analysis method",
+    "Follow-up searches with consent"
+   ],
+   "steps": [
+    {
+     "type": "turn",
+     "message": "How did foot traffic in downtown New Haven recover after COVID, from 2019 to 2023?"
+    },
+    {
+     "type": "ui",
+     "action": "tab",
+     "tab": "data",
+     "note": "Dewey Data is a Yale subscription; the card says how to get access with a Yale email, and what the data cannot show."
+    },
+    {
+     "type": "ui",
+     "action": "watch",
+     "note": "With her consent, Y-finder can search again on a schedule and post short updates to a private link."
+    }
+   ],
+   "checks": {
+    "scope_contains": [
+     41.308,
+     -72.925
+    ],
+    "picks_min": 2,
+    "no_unverified": true,
+    "picks_any": [
+     "cur:dewey"
+    ],
+    "text_contains_any": [
+     "Yale"
+    ]
+   }
+  },
+  {
+   "id": "kenya",
+   "title": "Malaria and land cover in western Kenya",
+   "field": "Global health",
+   "who": "Kofi Mensah (fictional), global health MPH student planning field work around Kisumu.",
+   "shows": [
+    "Global datasets for a study outside the US",
+    "US-only sources flagged as outside the area",
+    "Satellite imagery preview over Kenya",
+    "Field data needs called out"
+   ],
+   "steps": [
+    {
+     "type": "turn",
+     "message": "Map land cover change and malaria risk around villages near Kisumu, Kenya, from 2015 to 2025."
+    },
+    {
+     "type": "ui",
+     "action": "tab",
+     "tab": "frame",
+     "note": "The scope is set to western Kenya, so US-only datasets such as Census tables or NAIP would be labeled outside the study area."
+    },
+    {
+     "type": "turn",
+     "message": "Show me a recent cloud-free satellite image of the study area."
+    },
+    {
+     "type": "ui",
+     "action": "map",
+     "note": "A recent Sentinel-2 scene over the study area, streamed from Planetary Computer."
+    }
+   ],
+   "checks": {
+    "scope_contains": [
+     -0.09,
+     34.77
+    ],
+    "scope_inside": [
+     31.5,
+     -3.5,
+     38.5,
+     4.5
+    ],
+    "picks_min": 3,
+    "no_unverified": true,
+    "no_core_pick_with_poor_extent": true,
+    "picks_any": [
+     "sentinel-2",
+     "worldcover",
+     "lulc",
+     "landsat",
+     "dynamic"
+    ],
+    "tool_used": "map_stac_preview"
+   }
+  }
+ ]
+}

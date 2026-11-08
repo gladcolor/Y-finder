@@ -1,0 +1,12 @@
+[Unit]
+Description=Y-finder follow-up searches that users opted into
+
+[Service]
+Type=oneshot
+User=yfinder
+Group=yfinder
+WorkingDirectory=/opt/yfinder
+EnvironmentFile=/etc/yfinder.env
+Environment=YFINDER_RUNTIME_DIR=/var/lib/yfinder
+Environment=YFINDER_PUBLIC_BASE=https://app.researcharchitect.ai/y-finder/
+ExecStart=/opt/yfinder/venv/bin/python scripts/run_watches.py

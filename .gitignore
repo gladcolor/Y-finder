@@ -1,0 +1,24 @@
+# Secrets: never commit keys
+OpenAI_key.txt
+*key*.txt
+*.keys
+.env
+.env.*
+config.ini
+secrets/
+
+# Python
+__pycache__/
+*.pyc
+.pytest_cache/
+.venv/
+venv/
+
+# Runtime data (sessions, cached layers, logs, eval outputs)
+runtime/
+logs/
+*.log
+eval_runs/
+
+# Local-only branding for screen shares (never committed or deployed)
+static/brand/
