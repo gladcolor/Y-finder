@@ -97,3 +97,6 @@ bash deploy/deploy.sh                       # sync code to the server and restar
 ## Commit log (important commits)
 
 See `git log --oneline`. Add a line here for any commit that changes behavior users see.
+
+- `8e58c88` (2026-11-08) First prototype: agent, catalog, fit rules, UI, handbooks, watches, tests, deploy files.
+- `98b1d85` (2026-11-08) Demo cases, UI pass (stepper, quick replies, fit matrix, time bars), Codex-review and persona fixes, cache-busting.
