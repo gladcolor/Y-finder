@@ -47,6 +47,7 @@
     <button data-tab="chat" class="on" role="tab">Chat</button>
     <button data-tab="frame" role="tab">Frame</button>
     <button data-tab="data" role="tab">Data <span id="nData" class="count" hidden></span></button>
+    <button data-tab="insights" role="tab" title="What Y-finder finds when it explores the previews">Insights <span id="nIns" class="count" hidden></span></button>
     <button data-tab="catalog" role="tab">Catalog</button>
   </nav>
 
@@ -96,6 +97,10 @@
           <span class="ra-li" title="Sink: no outgoing links. The pulsing node is the outcome."><i class="ra-n sink"></i>Sink</span>
           <span class="ra-li" title="Core factor: needed to answer the question"><i class="ra-n core"></i>Core</span>
         </div>
+        <div class="ra-lg" id="testedLegend" hidden><div class="ra-lt">Checked on the previews</div>
+          <span class="ra-li" title="A link Y-finder compared on the preview data; the label is the rank correlation (rho) or the inside/outside effect"><i class="ra-e"></i>Tested link</span>
+          <span class="ra-li" title="Two factors joined by a path through other factors, compared directly"><i class="ra-e dash"></i>Through other factors</span>
+        </div>
         <div class="ra-lg" id="covLegend" hidden><div class="ra-lt">Data coverage · opacity</div>
           <span class="ra-li" title="A dataset that fits your scope measures this factor"><i class="ra-n"></i>Covered <b data-c="covered"></b></span>
           <span class="ra-li" title="Only partial data, or a proxy"><i class="ra-n" style="opacity:.5"></i>Partial <b data-c="partial"></b></span>
@@ -116,6 +121,16 @@
       <label id="hidePoorWrap" class="toggle" hidden><input type="checkbox" id="hidePoor"> Hide poor fits</label>
       <div id="picks"></div>
       <div id="methods"></div>
+    </div>
+
+    <div id="tab-insights" class="tab">
+      <div id="insEmpty" class="empty">When map previews of your data are ready, Y-finder explores them here,
+        guided by your question and graph: where values are high, which factors vary together, and what to check next.
+        You can pause or stop it at any time.</div>
+      <div id="insHead"></div>
+      <div id="insSyn"></div>
+      <div id="insList"></div>
+      <div id="insFoot"></div>
     </div>
 
     <div id="tab-catalog" class="tab">
@@ -179,6 +194,13 @@
   <span id="gisNote" class="muted"></span>
 </div>
 
+<div id="xPill" class="xpill" hidden role="status" aria-live="polite">
+  <span class="xdot"></span>
+  <button type="button" class="xp-t" id="xPillText" title="Open the Insights tab"></button>
+  <button type="button" class="xp-b" id="xPillPause" title="Pause"></button>
+  <button type="button" class="xp-b" id="xPillStop" title="Stop exploring" aria-label="Stop exploring">
+    <svg viewBox="0 0 16 16" width="12" height="12" aria-hidden="true"><rect x="3.5" y="3.5" width="9" height="9" rx="1.5" fill="currentColor"/></svg></button>
+</div>
 <div id="mapLegend" class="map-legend" hidden>
   <button class="ml-head" id="mlToggle" type="button" aria-expanded="true"><b>Legend</b><span class="ml-chev">&#8964;</span></button>
   <div id="mlBody" class="ml-body"></div>

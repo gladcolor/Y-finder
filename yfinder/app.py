@@ -18,7 +18,7 @@ from xml.sax.saxutils import escape
 
 from flask import Flask, Response, abort, jsonify, request, send_file, send_from_directory, stream_with_context
 
-from . import agent, catalog, downloads, fit, handbooks, janitor, previews, session, watch
+from . import agent, catalog, downloads, explore, fit, handbooks, janitor, previews, session, watch
 from .config import (ACCESS_CODE, DAILY_CAP, DEFAULT_MODEL, MODEL_IDS, MODELS, RATE_PER_HOUR, STATIC_DIR,
                      UPLOAD_MAX_BYTES, openai_key)
 
@@ -268,6 +268,26 @@ def create_app() -> Flask:
             _check_code()
             previews.start(s)
         return jsonify(previews.public(s))
+
+    @app.route("/api/session/<sid>/explore", methods=["GET", "POST"])
+    def session_explore(sid):
+        """Y-finder's exploration of the previews (POST {"action": "start" | "pause" | "resume" | "stop"})."""
+        s = session.peek(sid)
+        if not s:
+            return jsonify(error="Not found"), 404
+        if request.method == "POST":
+            _check_code()
+            action = str((request.get_json(silent=True) or {}).get("action") or "")
+            if action not in ("start", "pause", "resume", "stop"):
+                return jsonify(error="Unknown action"), 400
+            if action == "start":
+                live = explore.public(s).get("status") in ("running", "paused", "waiting")
+                if not live and s.explore_runs >= explore.MAX_RUNS:
+                    return jsonify(explore.public(s) | {"error": "Y-finder explored this conversation's data several times already."}), 429
+                if not live:
+                    s.explore_runs += 1
+            return jsonify(explore.control(s, action))
+        return jsonify(explore.public(s))
 
     @app.get("/api/session/<sid>/sample/<name>")
     def session_sample(sid, name):

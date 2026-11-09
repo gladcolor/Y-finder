@@ -87,6 +87,27 @@ def geocode(place: str) -> dict | None:
     return _cached("geo:" + place.strip().lower(), 86400, run)
 
 
+def reverse(lon: float, lat: float) -> str | None:
+    """The neighbourhood, district or town at a point (Nominatim reverse, same 1-per-second rule, cached a week)."""
+    def run():
+        with _nom_lock:
+            wait = 1.05 - (time.time() - _nom_last[0])
+            if wait > 0:
+                time.sleep(wait)
+            _nom_last[0] = time.time()
+            try:
+                d = _get("https://nominatim.openstreetmap.org/reverse",
+                         {"lat": f"{lat:.4f}", "lon": f"{lon:.4f}", "format": "jsonv2", "zoom": 14})
+            except (requests.RequestException, ValueError):
+                return None
+        a = (d or {}).get("address") or {}
+        for k in ("neighbourhood", "suburb", "quarter", "city_district", "village", "town", "city", "county", "state"):
+            if a.get(k):
+                return str(a[k])[:60]
+        return None
+    return _cached(f"rev:{lon:.3f},{lat:.3f}", 7 * 86400, run)
+
+
 # --------------------------------------------------------------------------- STAC (Planetary Computer)
 PC_STAC = "https://planetarycomputer.microsoft.com/api/stac/v1"
 

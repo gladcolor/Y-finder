@@ -9,6 +9,8 @@ os.environ.setdefault("YFINDER_JANITOR", "0")  # tests call janitor.sweep() them
 os.environ.setdefault("YFINDER_PREVIEWS", "0")  # no background network calls; tests run previews.build directly
 os.environ.setdefault("YFINDER_BROWSER", "0")  # no headless browser in tests; they fake browser.find
 os.environ.setdefault("YFINDER_LINKCHECK", "0")  # recommend_data does not open web links in tests
+os.environ.setdefault("YFINDER_EXPLORE_MODEL", "0")  # exploration never calls the model in tests
+os.environ.setdefault("YFINDER_EXPLORE_NAMES", "0")  # nor the reverse geocoder
 MUTANT = os.environ.get("YF_MUTANT")
 
 if MUTANT:
@@ -72,5 +74,16 @@ if MUTANT:
         previews._browser_ok = lambda s, pick: browser.available() and s.browser_tries < previews.MAX_BROWSER
     elif MUTANT == "dead_links_trusted":
         agent._check_web_links = lambda picks: []
+    elif MUTANT == "explore_ignores_pause":
+        from yfinder import explore
+        _orig_control = explore.control
+        explore.control = lambda s, action: _orig_control(s, "resume" if action == "pause" else action)
+    elif MUTANT == "explore_hides_uneven_sample":
+        from yfinder import explore
+        _orig_time = explore._time_part
+        explore._time_part = lambda g, mask, sampled: _orig_time(g, mask, False)
+    elif MUTANT == "explore_no_stand_in_note":
+        from yfinder import explore
+        explore._proxy = lambda v, factor: ""
     else:
         raise SystemExit(f"unknown mutant {MUTANT}")

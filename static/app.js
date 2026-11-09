@@ -535,6 +535,11 @@
     { selector: 'edge.cov-covered-edge', style: { opacity: 0.95 } },
     { selector: 'edge.cov-partial-edge', style: { opacity: 0.66 } },
     { selector: 'edge.cov-uncovered-edge', style: { opacity: 0.42 } },
+    // links Y-finder compared on the preview data, labelled with the statistic
+    { selector: 'edge.tested', style: { label: 'data(rl)', 'font-size': 10, 'font-weight': 700, color: '#00356b', 'text-background-color': '#ffffff',
+      'text-background-opacity': 0.95, 'text-background-padding': 2, 'text-background-shape': 'roundrectangle', 'text-border-width': 1,
+      'text-border-color': '#c3cfdf', 'text-border-opacity': 1, 'line-color': '#286dc0', 'target-arrow-color': '#286dc0', width: 2.6, opacity: 1 } },
+    { selector: 'edge.indirect', style: { 'line-style': 'dashed', 'line-dash-pattern': [6, 4], 'curve-style': 'bezier' } },
     // interaction states follow the analytical symbology, as in Research Architect
     { selector: 'node.dim', style: { opacity: 0.25, 'background-color': '#cccccc' } },
     { selector: 'edge.dim', style: { opacity: 0.15, 'line-color': '#dddddd', 'target-arrow-color': '#dddddd' } },
@@ -555,11 +560,17 @@
       return { data: { id: n.id, label: n.label, len: String(n.label || '').length, role, kind: n.role, core: n.core ? 1 : 0,
         target: n.role === 'outcome' || n.id === g.outcome }, classes: withCoverage ? 'cov-' + cov[n.id] : '' };
     });
+    const tested = {};
+    ((state.explore || {}).findings || []).forEach((f) => { if (f.edge && f.rho != null) tested[f.edge.join('>')] = f; });
+    const lab = (f) => `${f.chart && f.chart.type === 'groups' ? 'effect' : 'ρ'} ${f.rho > 0 ? '+' : ''}${f.rho}`;
     const edges = g.edges.map((e, i) => {
       const a = cov[e.source], b = cov[e.target];
       const cls = !withCoverage ? '' : a === 'uncovered' || b === 'uncovered' ? 'cov-uncovered-edge' : a === 'partial' || b === 'partial' ? 'cov-partial-edge' : 'cov-covered-edge';
-      return { data: { id: 'e' + i, source: e.source, target: e.target, note: e.note }, classes: cls };
+      const t = tested[e.source + '>' + e.target]; if (t) delete tested[e.source + '>' + e.target];
+      return { data: { id: 'e' + i, source: e.source, target: e.target, note: e.note, rl: t ? lab(t) : '' }, classes: cls + (t ? ' tested' : '') };
     });
+    const ids = new Set(g.nodes.map((n) => n.id));
+    Object.values(tested).forEach((f, i) => { if (ids.has(f.edge[0]) && ids.has(f.edge[1])) edges.push({ data: { id: 'x' + i, source: f.edge[0], target: f.edge[1], note: `Compared on the previews through other factors: ${f.headline}`, rl: lab(f) }, classes: 'tested indirect' }); });
     return nodes.concat(edges);
   }
   function destroyGraph() {
@@ -575,6 +586,7 @@
     const withCov = (state.picks || []).length > 0; // coverage is shown once datasets have been checked
     const els = graphElements(g, withCov);
     $('#covLegend').hidden = !withCov;
+    $('#testedLegend').hidden = !els.some((e) => e.classes && String(e.classes).includes('tested'));
     ['covered', 'partial', 'uncovered'].forEach((k) => { $(`#covLegend [data-c="${k}"]`).textContent = g.nodes.filter((n) => (n.data_coverage || 'uncovered') === k).length; });
     const draw = () => {
       destroyGraph();
@@ -954,9 +966,227 @@
         if (t) convSave();
       }
       refreshPreviewLines();
+      maybeExplore(); // explore what is ready while the user looks at it
       if (j.running && Date.now() - t0 < 600000) state.pvTimer = setTimeout(() => tick(false), 2000); // the browser can take minutes
     };
     tick(true);
+  }
+
+  // ------------------------------------------------------------------ Y-finder explores the previews (Insights tab and map pill)
+  // The server reads the preview layers, guided by the question and graph, one step at a time; the user can pause or stop it.
+  const xLive = (st) => st === 'running' || st === 'waiting' || st === 'paused';
+  const xAuto = () => local.get('yf_explore_auto') !== '0';
+  const xAnyReady = () => Object.values(state.previews || {}).some((it) => it.status === 'ready' && ((it.layers || []).some((l) => l.kind === 'geojson') || it.series));
+  const xUrl = () => `api/session/${encodeURIComponent(state.sid)}/explore`;
+  async function xPost(action) {
+    if (!state.sid) return null;
+    if (state.restoring) await state.restoring;
+    try {
+      const r = await fetch(xUrl(), { method: 'POST', headers: headers(), body: JSON.stringify({ action }) });
+      const j = await r.json().catch(() => ({}));
+      if (j.error) toast(j.error);
+      if (j.status) { if (action === 'start') state.xSeen = false; xApply(j); }
+      if (xLive(j.status)) xWatch();
+      return j;
+    } catch { toast('Could not reach the server.'); return null; }
+  }
+  async function maybeExplore() {
+    if (!state.sid || state.xAsking || !xAuto() || !xAnyReady()) return;
+    const st = state.explore && state.explore.status;
+    if (st && st !== 'idle' && st !== 'stale') return;
+    state.xAsking = true;
+    try {
+      if (!st) { // first look: the server may already be exploring this session
+        const j = await getJSON(xUrl()).catch(() => null);
+        if (!j) return;
+        xApply(j);
+        if (j.status !== 'idle' && j.status !== 'stale') { if (xLive(j.status)) xWatch(); return; }
+      }
+      await xPost('start');
+    } finally { state.xAsking = false; }
+  }
+  function xWatch() {
+    clearTimeout(state.xTimer); const sid = state.sid; const gen = state.xGen = (state.xGen || 0) + 1;
+    const tick = async () => {
+      if (gen !== state.xGen || sid !== state.sid) return;
+      let j = null; try { j = await getJSON(xUrl()); } catch { j = null; }
+      if (gen !== state.xGen || sid !== state.sid) return;
+      if (j) xApply(j);
+      if (!j || j.status === 'running' || j.status === 'waiting') state.xTimer = setTimeout(tick, j ? 1800 : 5000);
+    };
+    state.xTimer = setTimeout(tick, 900);
+  }
+  const xEdgeKey = () => ((state.explore || {}).findings || []).filter((f) => f.edge).map((f) => f.edge.join('>') + f.rho).join('|');
+  function xApply(j) {
+    const before = ((state.explore || {}).findings || []).length; const edges = xEdgeKey();
+    state.explore = j;
+    renderInsights();
+    if (xEdgeKey() !== edges && state.graph) renderGraph();
+    const n = (j.findings || []).length;
+    if (before === 0 && n > 0 && !$('#tab-insights').classList.contains('on')) toast('Y-finder found patterns in your data. See the Insights tab.');
+    if (state.conv && n && (j.status === 'done' || j.status === 'stopped') && state.conv.explore !== j) { state.conv.explore = j; convSave(); }
+  }
+  const X_STATUS = { running: 'Exploring your data', waiting: 'Exploring your data', paused: 'Paused', done: 'Done', stopped: 'Stopped',
+    stale: 'Your data changed since this exploration', idle: 'Ready to explore', off: 'Exploration is off on this server' };
+  const PAUSE_SVG = '<svg viewBox="0 0 16 16" width="12" height="12" aria-hidden="true"><rect x="3.5" y="3" width="3" height="10" rx="1" fill="currentColor"/><rect x="9.5" y="3" width="3" height="10" rx="1" fill="currentColor"/></svg>';
+  const PLAY_SVG = '<svg viewBox="0 0 16 16" width="12" height="12" aria-hidden="true"><path d="M5 3.2v9.6L13 8z" fill="currentColor"/></svg>';
+  function renderInsights() {
+    const x = state.explore || { status: 'idle' }; const fs = x.findings || []; const live = xLive(x.status);
+    $('#nIns').hidden = !fs.length; $('#nIns').textContent = fs.length;
+    $('.tabs [data-tab=insights]').classList.toggle('running', x.status === 'running' || x.status === 'waiting');
+    const ready = xAnyReady();
+    $('#insEmpty').hidden = !(x.status === 'idle' && !fs.length);
+    let ctl = '';
+    if (live) ctl = (x.status === 'paused' ? '<button class="btn primary" data-xa="resume">Resume</button>' : '<button class="btn" data-xa="pause">Pause</button>') + '<button class="btn" data-xa="stop">Stop</button>';
+    else if (x.status === 'done' || x.status === 'stopped' || x.status === 'stale') ctl = '<button class="btn" data-xa="start">Explore again</button>';
+    else if (x.status === 'idle' && ready) ctl = '<button class="btn primary" data-xa="start">Explore now</button>';
+    const plan = x.plan || [];
+    const showHead = x.status !== 'idle' || ready;
+    $('#insHead').innerHTML = !showHead ? '' : `<div class="xhead ${esc(x.status)}">
+      <div class="xh-row"><span class="xdot ${esc(x.status)}"></span><b>${esc(X_STATUS[x.status] || '')}</b><span class="xh-ctl">${ctl}</span></div>
+      ${x.step && x.status !== 'idle' ? `<div class="xh-step">${esc(x.step)}</div>` : ''}
+      ${plan.length ? `<details class="xplan"${state.xPlanOpen ? ' open' : ''}><summary>Plan from your question and graph · ${x.done || 0} of ${x.total || plan.length} steps</summary>
+        <ol>${plan.map((p) => `<li class="${esc(p.status)}"><span class="pi" aria-hidden="true"></span><span>${esc(p.title)}${p.why ? `<span class="muted"> · ${esc(p.why)}</span>` : ''}</span></li>`).join('')}</ol></details>` : ''}
+      <label class="xauto"><input type="checkbox" id="xAutoBox"${xAuto() ? ' checked' : ''}> Explore automatically when previews are ready</label></div>`;
+    $$('#insHead [data-xa]').forEach((b) => { b.onclick = () => xPost(b.dataset.xa); });
+    const det = $('#insHead details'); if (det) det.ontoggle = () => { state.xPlanOpen = det.open; };
+    const ab = $('#xAutoBox'); if (ab) ab.onchange = () => { local.set('yf_explore_auto', ab.checked ? '1' : '0'); if (ab.checked) maybeExplore(); };
+    const sy = x.synthesis;
+    $('#insSyn').innerHTML = sy && sy.summary ? `<section class="xsyn" aria-label="What the findings suggest">
+      <h3>What this suggests for your question</h3>
+      <p>${esc(sy.summary).replace(/\[(\d+(?:\s*,\s*\d+)*)\]/g, (_m, g) => g.split(/\s*,\s*/).map((k) => `<button class="xcite" data-f="${k}">${k}</button>`).join(''))}</p>
+      ${(sy.next || []).length ? `<div class="xs-sub">Next checks</div><ul>${sy.next.map((t) => `<li>${esc(t)}</li>`).join('')}</ul>` : ''}
+      ${sy.caveat ? `<div class="lim"><b>Careful:</b> ${esc(sy.caveat)}</div>` : ''}
+      <div class="xs-by">Written by the AI model from the findings below; every number in them was computed by Y-finder.</div></section>` : '';
+    $$('#insSyn .xcite').forEach((b) => { b.onclick = () => { const c = $(`#insList [data-n="${b.dataset.f}"]`); if (c) { c.scrollIntoView({ behavior: 'smooth', block: 'center' }); c.classList.add('flash'); setTimeout(() => c.classList.remove('flash'), 1400); } }; });
+    const nodeLabel = (id) => ((state.graph?.nodes || []).find((n) => n.id === id) || {}).label || id;
+    $('#insList').innerHTML = fs.map((f, i) => {
+      const tag = f.kind === 'relate'
+        ? (f.edge ? `<span class="xedge" title="The link in your graph that this checks">${esc(nodeLabel(f.edge[0]))} → ${esc(nodeLabel(f.edge[1]))}</span>` : '<span class="xedge">Two layers of the outcome</span>')
+          + (f.rho != null ? `<span class="xrho ${Math.abs(f.rho) >= 0.3 ? 'on' : ''}" title="${f.chart && f.chart.type === 'groups' ? 'Rank-biserial effect: inside versus outside' : 'Spearman rank correlation'}">${f.chart && f.chart.type === 'groups' ? 'effect' : 'ρ'} ${f.rho > 0 ? '+' : ''}${esc(f.rho)}</span>` : '')
+        : (f.factors || []).slice(0, 1).map((id) => `<span class="xfac">${esc(nodeLabel(id))}</span>`).join('');
+      return `<article class="xcard ${esc(f.kind)}" data-n="${i + 1}">
+        <div class="xc-top"><span class="xnum">${i + 1}</span>${tag}${f.coverage_warning ? '<span class="badge partial" title="The preview is not an even sample over time">Uneven sample</span>' : ''}</div>
+        <h4>${esc(f.headline)}</h4>
+        ${xChart(f.chart)}
+        <p class="xc-d${state.xOpen && state.xOpen.has(f.id) ? ' open' : ''}">${esc(f.detail)}</p>${(f.detail || '').length > 150 ? `<button class="linkbtn xmore" data-x="more">${state.xOpen && state.xOpen.has(f.id) ? 'Less' : 'More'}</button>` : ''}
+        <div class="row">${(f.focus || {}).layers?.length || (f.focus || {}).points?.length ? '<button class="btn" data-x="map">Show on map</button>' : ''}<button class="btn" data-x="ask">Ask about this</button></div>
+      </article>`;
+    }).join('');
+    $$('#insList .xcard').forEach((c) => {
+      const f = fs[+c.dataset.n - 1]; if (!f) return;
+      const mb = c.querySelector('[data-x=map]'); if (mb) mb.onclick = () => xFocus(f, +c.dataset.n);
+      const more = c.querySelector('[data-x=more]');
+      if (more) more.onclick = () => { state.xOpen = state.xOpen || new Set(); const d = c.querySelector('.xc-d'); const open = d.classList.toggle('open');
+        open ? state.xOpen.add(f.id) : state.xOpen.delete(f.id); more.textContent = open ? 'Less' : 'More'; };
+      c.querySelector('[data-x=ask]').onclick = () => { $('#q').value = `About finding ${c.dataset.n} ("${f.headline}"): `; switchTab('chat'); $('#q').focus(); autosize(); };
+    });
+    $('#insFoot').innerHTML = fs.length || (x.skipped || []).length ? `<div class="xfoot">Computed on the map previews, which are samples, not on the full datasets.
+      A correlation across places is a lead to check, not a test of the link.${(x.skipped || []).length ? `<br>Not measured: ${x.skipped.map(esc).join('; ')}.` : ''}</div>` : '';
+    // the pill on the map: visible while exploring, and once at the end until the user looks
+    const pill = $('#xPill'); const showPill = live || ((x.status === 'done' || x.status === 'stopped') && fs.length && !state.xSeen);
+    pill.hidden = !showPill || state.gisMode;
+    if (showPill) {
+      pill.className = 'xpill ' + x.status;
+      $('#xPillText').textContent = live ? `${x.status === 'paused' ? 'Paused' : 'Exploring'}${fs.length ? ` · ${fs.length} found` : ''} · ${x.step || ''}`
+        : `${fs.length} finding${fs.length === 1 ? '' : 's'} in your data · View`;
+      $('#xPillPause').hidden = !live; $('#xPillStop').hidden = !live;
+      $('#xPillPause').innerHTML = x.status === 'paused' ? PLAY_SVG : PAUSE_SVG;
+      $('#xPillPause').title = x.status === 'paused' ? 'Resume' : 'Pause'; $('#xPillPause').setAttribute('aria-label', $('#xPillPause').title);
+    }
+  }
+  $('#xPillText').onclick = () => { state.xSeen = true; if (document.body.classList.contains('collapsed')) $('#btnCollapse').click(); switchTab('insights'); renderInsights(); };
+  $('#xPillPause').onclick = () => xPost(state.explore && state.explore.status === 'paused' ? 'resume' : 'pause');
+  $('#xPillStop').onclick = () => xPost('stop');
+  function xMarkers(pts) {
+    (state.xMk || []).forEach((m) => m.remove()); state.xMk = [];
+    (pts || []).slice(0, 8).forEach((p, i) => {
+      if (!Number.isFinite(+p[0]) || !Number.isFinite(+p[1])) return;
+      const el = document.createElement('div'); el.className = 'xmk';
+      el.innerHTML = `<b>${i + 1}</b>${p[2] ? `<span>${esc(p[2])}</span>` : ''}`; el.title = p[2] || '';
+      state.xMk.push(new maplibregl.Marker({ element: el, anchor: 'left' }).setLngLat([+p[0], +p[1]]).addTo(map));
+    });
+  }
+  async function xFocus(f) {
+    const fo = f.focus || {}; const ids = new Set(fo.layers || []);
+    for (const d of fo.add || []) {
+      if (state.layers.has(d.id)) continue;
+      const t = state.conv ? convTurn(null) : null; const ev = { type: 'layer', layer: d }; if (t) { convRecord(t, ev); convSave(); }
+      await addLayer(d);
+    }
+    (fo.hide || []).forEach((id) => { const e = state.layers.get(id); if (e && e.visible) toggleLayer(id); });
+    // only the finding's layers stay on (the study box, boundaries and imagery too), so it reads on the map; Layers turns others back on
+    [...state.layers.entries()].forEach(([id, e]) => { if (e.visible && !ids.has(id) && e.d.kind === 'geojson' && e.d.style !== 'scope' && e.d.style !== 'boundary') toggleLayer(id); });
+    ids.forEach((id) => { const e = state.layers.get(id); if (e && !e.visible) toggleLayer(id); });
+    xMarkers(fo.points || []);
+    if (fo.bbox) fit(fo.bbox); else if (state.scope && state.scope.bbox) fit(state.scope.bbox);
+    if (state.gisMode) setMode(false);
+    refreshPreviewLines();
+    if (innerWidth <= 720 && !document.body.classList.contains('collapsed')) $('#btnCollapse').click(); // phones: show the map
+  }
+
+  // small charts on the finding cards (inline SVG, no library)
+  function xChart(c) {
+    if (!c || !c.type) return '';
+    const W = 300, H = 118, L = 40, R = 10, T = 10, B = 26;
+    const f = (v) => fmtNum(+v);
+    const frame = (inner, label) => `<figure class="xchart"><svg viewBox="0 0 ${W} ${H}" role="img" aria-label="${esc(label)}">${inner}</svg></figure>`;
+    const axis = `<line x1="${L}" y1="${H - B}" x2="${W - R}" y2="${H - B}" class="ax"/><line x1="${L}" y1="${T}" x2="${L}" y2="${H - B}" class="ax"/>`;
+    const sx = (lo, hi) => (v) => L + ((v - lo) / Math.max(1e-12, hi - lo)) * (W - L - R);
+    const sy = (lo, hi) => (v) => H - B - ((v - lo) / Math.max(1e-12, hi - lo)) * (H - T - B);
+    if (c.type === 'scatter') {
+      // skewed values: log when all are positive (server's choice), square root when many are zero
+      const skew = (a) => { const s = a.map(Number).sort((p, q) => p - q); const med = s[s.length >> 1]; return s[0] >= 0 && (med === 0 || s[s.length - 1] / med > 25); };
+      const mode = (lg, a) => (lg ? 'log' : skew(a) ? 'sqrt' : '');
+      const mx = mode(c.logx, c.x || []), my = mode(c.logy, c.y || []);
+      const tf = (m) => (m === 'log' ? (v) => Math.log10(Math.max(+v, 1e-9)) : m === 'sqrt' ? (v) => Math.sqrt(Math.max(+v, 0)) : (v) => +v);
+      const xs = (c.x || []).map(tf(mx)), ys = (c.y || []).map(tf(my)); if (xs.length < 3) return '';
+      const T2 = T + 10; const sy2 = (lo, hi) => (v) => H - B - ((v - lo) / Math.max(1e-12, hi - lo)) * (H - T2 - B);
+      const x0 = Math.min(...xs), x1 = Math.max(...xs), y0 = Math.min(...ys), y1 = Math.max(...ys); const X = sx(x0, x1), Y = sy2(y0, y1);
+      const inv = (m, v) => (m === 'log' ? 10 ** v : m === 'sqrt' ? v * v : v);
+      const note = (m) => (m === 'log' ? ' (log scale)' : m === 'sqrt' ? ' (square-root scale)' : '');
+      const dots = xs.map((v, i) => `<circle cx="${X(v).toFixed(1)}" cy="${Y(ys[i]).toFixed(1)}" r="2.3"/>`).join('');
+      const axis2 = `<line x1="${L}" y1="${H - B}" x2="${W - R}" y2="${H - B}" class="ax"/><line x1="${L}" y1="${T2}" x2="${L}" y2="${H - B}" class="ax"/>`;
+      return frame(`${axis2}<g class="dots">${dots}</g>
+        <text x="${L}" y="${H - B + 11}" class="tk">${esc(f(inv(mx, x0)))}</text><text x="${W - R}" y="${H - B + 11}" class="tk" text-anchor="end">${esc(f(inv(mx, x1)))}</text>
+        <text x="${L - 4}" y="${H - B}" class="tk" text-anchor="end">${esc(f(inv(my, y0)))}</text><text x="${L - 4}" y="${T2 + 6}" class="tk" text-anchor="end">${esc(f(inv(my, y1)))}</text>
+        <text x="${(L + W - R) / 2}" y="${H - 3}" class="al" text-anchor="middle">${esc(c.xl)}${note(mx)}</text>
+        <text x="${L}" y="${T + 1}" class="al">↑ ${esc(c.yl)}${note(my)}</text>`, `Scatter plot of ${c.yl} against ${c.xl}`);
+    }
+    if (c.type === 'hist' || c.type === 'bars') {
+      const items = c.type === 'hist' ? (c.bins || []).map((b) => [b[0], b[2], b[1]]) : (c.items || []);
+      if (!items.length) return '';
+      const mx = Math.max(...items.map((it) => +it[1]), 1); const bw = (W - L - R) / items.length; const Y = sy(0, mx);
+      const peak = items.reduce((a, b) => (+b[1] > +a[1] ? b : a), items[0]);
+      const bars = items.map((it, i) => `<rect x="${(L + i * bw + 1).toFixed(1)}" y="${Y(+it[1]).toFixed(1)}" width="${Math.max(1, bw - 2).toFixed(1)}" height="${(H - B - Y(+it[1])).toFixed(1)}" class="${it === peak ? 'pk' : ''}"><title>${esc(String(it[0]))}: ${esc(f(it[1]))}</title></rect>`).join('');
+      const first = c.type === 'hist' ? f(items[0][0]) : String(items[0][0]); const last = c.type === 'hist' ? f(items[items.length - 1][2]) : String(items[items.length - 1][0]);
+      return frame(`${axis}${bars}<text x="${L}" y="${H - B + 11}" class="tk">${esc(first)}</text><text x="${W - R}" y="${H - B + 11}" class="tk" text-anchor="end">${esc(last)}</text>
+        <text x="${L - 4}" y="${T + 7}" class="tk" text-anchor="end">${esc(f(mx))}</text><text x="${L - 4}" y="${H - B}" class="tk" text-anchor="end">0</text>
+        <text x="${(L + W - R) / 2}" y="${H - 3}" class="al" text-anchor="middle">${esc(c.type === 'hist' ? (c.label || '') : (c.label || ''))}${c.type === 'hist' ? ' · number of places' : ''}</text>`,
+      c.type === 'hist' ? `Histogram of ${c.label}` : `${c.label}`);
+    }
+    if (c.type === 'line') {
+      const pts = (c.points || []).filter((p) => Number.isFinite(+p[0]) && Number.isFinite(+p[1])); if (pts.length < 2) return '';
+      const xs = pts.map((p) => +p[0]), ys = pts.map((p) => +p[1]);
+      const X = sx(Math.min(...xs), Math.max(...xs)), y0 = Math.min(...ys), y1 = Math.max(...ys), Y = sy(y0, y1);
+      const d = pts.map((p, i) => `${i ? 'L' : 'M'}${X(+p[0]).toFixed(1)},${Y(+p[1]).toFixed(1)}`).join('');
+      return frame(`${axis}<path d="${d}" class="ln"/><text x="${L}" y="${H - B + 11}" class="tk">${esc(String(xs[0]))}</text><text x="${W - R}" y="${H - B + 11}" class="tk" text-anchor="end">${esc(String(xs[xs.length - 1]))}</text>
+        <text x="${L - 4}" y="${T + 7}" class="tk" text-anchor="end">${esc(f(y1))}</text><text x="${L - 4}" y="${H - B}" class="tk" text-anchor="end">${esc(f(y0))}</text>
+        <text x="${(L + W - R) / 2}" y="${H - 3}" class="al" text-anchor="middle">${esc(c.label || '')}</text>`, `Trend of ${c.label}`);
+    }
+    if (c.type === 'groups') {
+      const gs = (c.groups || []).filter((g) => (g[1] || []).length); if (gs.length < 2) return '';
+      const all = gs.flatMap((g) => g[1].map(Number)); const X = sx(Math.min(...all), Math.max(...all));
+      const rowH = (H - T - B) / gs.length;
+      const med = (a) => { const s = a.map(Number).sort((p, q) => p - q); const m = s.length >> 1; return s.length % 2 ? s[m] : (s[m - 1] + s[m]) / 2; };
+      const rows = gs.map((g, r) => { const cy = T + rowH * (r + 0.5); const m = med(g[1]);
+        return `<text x="${L - 4}" y="${cy + 3}" class="tk" text-anchor="end">${esc(g[0])}</text>` + g[1].map((v, i) => `<circle cx="${X(+v).toFixed(1)}" cy="${(cy + (((i * 37) % 11) - 5) * rowH / 26).toFixed(1)}" r="2.3"/>`).join('')
+          + `<line x1="${X(m).toFixed(1)}" x2="${X(m).toFixed(1)}" y1="${cy - rowH * 0.36}" y2="${cy + rowH * 0.36}" class="md"/>`; }).join('');
+      return frame(`<line x1="${L}" y1="${H - B}" x2="${W - R}" y2="${H - B}" class="ax"/><g class="dots">${rows}</g>
+        <text x="${L}" y="${H - B + 11}" class="tk">${esc(f(Math.min(...all)))}</text><text x="${W - R}" y="${H - B + 11}" class="tk" text-anchor="end">${esc(f(Math.max(...all)))}</text>
+        <text x="${(L + W - R) / 2}" y="${H - 3}" class="al" text-anchor="middle">${esc(c.label || '')} · line = median</text>`, `${c.label} inside and outside`);
+    }
+    return '';
   }
 
   // ------------------------------------------------------------------ data files from a link, kept on the server for this session
@@ -1029,6 +1259,7 @@
   function setMode(gis) {
     state.gisMode = gis; $('#modeGIS').classList.toggle('on', gis); $('#modeMap').classList.toggle('on', !gis);
     $('#geolibre').hidden = !gis; $('#gisBar').hidden = !gis; $('.layers-box').hidden = gis; renderLegend();
+    if (gis) $('#xPill').hidden = true; else setTimeout(renderInsights, 0); // the exploration pill belongs to Y-finder's map
     if (gis) loadGeoLibre();
   }
   $('#modeMap').onclick = () => setMode(false);
@@ -1136,12 +1367,13 @@
     [...state.layers.keys()].forEach(removeLayer);
     Object.assign(state, { graph: null, scope: null, picks: [], methods: [], nextSteps: [], conv: null, previews: {} });
     clearTimeout(state.pvTimer); state.pvGen = (state.pvGen || 0) + 1;
+    state.explore = null; state.xSeen = false; clearTimeout(state.xTimer); state.xGen = (state.xGen || 0) + 1; xMarkers([]);
     destroyGraph();
     msgs.innerHTML = ''; $('#welcome').hidden = false; $('#nodeInfo').hidden = true; $('#attachInfo').hidden = true;
     STEPS.forEach((s) => step(s, null));
     if (state.mapReady && map.getSource('coverage')) map.getSource('coverage').setData({ type: 'FeatureCollection', features: [] });
     if (state.gisMode) setMode(false);
-    renderGraph(); renderScope(); renderData(); switchTab('chat');
+    renderGraph(); renderScope(); renderData(); renderInsights(); switchTab('chat');
   }
 
   // ------------------------------------------------------------------ conversation history (ChatGPT-style list, this browser only)
@@ -1206,6 +1438,7 @@
     state.conv = c; store.set('yf_conv', c.id);
     state.sid = c.sid || ''; store.set('yf_sid', state.sid);
     replayConv(c); renderHist();
+    if (c.explore) { state.explore = { ...c.explore, status: xLive(c.explore.status) ? 'stopped' : c.explore.status }; state.xSeen = true; renderInsights(); if (state.graph) renderGraph(); }
     if (!isWide()) setHist(false);
     if (state.sid) { const p = ensureSession(c); state.restoring = p; p.finally(() => { if (state.restoring === p) state.restoring = null; }); }
   }

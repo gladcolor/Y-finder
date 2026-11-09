@@ -15,7 +15,7 @@ import traceback
 from openai import OpenAI
 
 from . import catalog as catalog_mod
-from . import downloads, fit, geolibre, handbooks, sources, websearch
+from . import downloads, explore, fit, geolibre, handbooks, sources, websearch
 from .config import DEFAULT_MODEL, LOG_TURNS, MAX_OUTPUT_TOKENS, MAX_STEPS, MODELS, RUNTIME_DIR, openai_key
 from .geo import bbox_size_km, clamp_bbox, coverage_fraction, valid_bbox
 from .geo import parse_resolution_m as geo_parse_res
@@ -871,6 +871,9 @@ def _state_note(s: Session) -> str:
         bits.append(f"graph has {len(s.graph['nodes'])} factors (outcome: {s.graph['outcome']})")
     if s.picks:
         bits.append(f"{len(s.picks)} datasets already recommended")
+    seen = explore.brief(s)
+    if seen:
+        bits.append(seen + " (computed on preview samples; the user sees these in the Insights tab)")
     return ("[Y-finder state: " + "; ".join(bits) + "]") if bits else ""
 
 

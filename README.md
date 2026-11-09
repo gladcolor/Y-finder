@@ -13,6 +13,7 @@ Y-finder is an independent prototype by Huan Ning, prepared for the Yale Center 
 - **Real catalogs:** about 3,100 cards (YCGS curated cards with Yale access routes, Microsoft Planetary Computer, Google Earth Engine and its community catalog, the layers collected in GeoLibre, World Bank indicators) plus live search of Yale and Harvard Dataverse, Yale Library GeoBlacklight, ArcGIS Online, Data.gov, US open data portals (Socrata, including Connecticut Open Data), Planetary Computer STAC and the web (DeepSeek Search and Fetch).
 - **Maps and tables:** factors measured by statistics, surveys or records get tables, marked with a Table badge; tables with place codes or town names are joined to boundaries.
 - **Previews:** every recommended dataset is drawn from its online service, or a small slice for the study area is downloaded (up to 100 MB, kept for the session only) and shown on the map or as a table preview with a trend line and CSV.
+- **Insights while you look:** once previews are on the map, Y-finder explores them in the background, following the graph: the outcome's data first (spread, highest and lowest places, clustering by Moran's I; for points, where they concentrate, which records match the question, and whether the preview is an even sample over time), then each link into the outcome where both ends have data (Spearman rank correlation after a map join), then the other core factors. Findings appear one by one in the Insights tab with a small chart and Show on map; tested links are labelled in the graph; the AI model reads the findings against the question at the end. Pause and Stop sit on the map and in the tab.
 - **Map first:** study area, imagery previews, OpenStreetMap features, Census boundaries and dataset coverage on a Google-Maps-like map with a legend; open the same layers in GeoLibre for full GIS.
 - **Access handbooks:** Agent-Skill style `SKILL.md` per source (endpoint, Python example, pitfalls), exportable to LLM-Find's TOML handbooks.
 - **People in the loop:** quick replies, scope editing, consultation summary for YCGS staff, opt-in follow-up searches.
@@ -34,7 +35,8 @@ Models: GPT-6.1 Terra (default), GPT-6.1 Sol, GPT-6 Luna (picker in the top bar)
 ```
 yfinder/        app.py (Flask API), agent.py (prompt, tools, loop), catalog.py (search), fit.py (scope-fit rules),
                 sources.py (live connectors), session.py, handbooks.py, watch.py, personas.py (evaluation),
-                previews.py (map previews), tables.py (table joins), downloads.py, janitor.py, websearch.py, geolibre.py
+                previews.py (map previews), tables.py (table joins), downloads.py, janitor.py, websearch.py, geolibre.py,
+                browser.py (Y-finder's own browser), explore.py (exploring the previews)
 yfinder/data/   curated.json, catalog.json (built), demo_cases.json
 static/         index.html, app.css, app.js, demos/ (recorded demo cases)
 handbooks/      <source>/SKILL.md access handbooks

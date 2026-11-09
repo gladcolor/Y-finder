@@ -8,3 +8,4 @@ openpyxl>=3.1
 python-docx>=1.1
 pytest>=8.0
 playwright==1.62.0          # Y-finder's own browser (yfinder/browser.py); Chromium lives in /opt/yfinder-browsers
+numpy>=1.26                 # data exploration of the previews (yfinder/explore.py)

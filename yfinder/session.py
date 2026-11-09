@@ -41,6 +41,8 @@ class Session:
     previews: dict = field(default_factory=dict)    # ref -> map preview of a recommended dataset (previews.py)
     preview_running: bool = False
     browser_tries: int = 0                          # pages handed to Y-finder's browser (previews.MAX_BROWSER)
+    explore: object = None                          # the data exploration run (explore.Run), started once previews are ready
+    explore_runs: int = 0                           # exploration runs started (explore.MAX_RUNS per session)
     plock: threading.Lock = field(default_factory=threading.Lock)
     lock: threading.Lock = field(default_factory=threading.Lock)
 
