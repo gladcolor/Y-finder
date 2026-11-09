@@ -347,6 +347,13 @@ body.collapsed .layers-box { left: 12px; }
 .maplibregl-popup-content table { border-collapse: collapse; }
 .maplibregl-popup-content td { padding: 1px 6px 1px 0; vertical-align: top; }
 .maplibregl-popup-content td:first-child { color: var(--muted); }
+.yf-pop .maplibregl-popup-content { padding: 10px 12px 8px; max-height: 280px; }
+.pp-head { display: flex; align-items: center; gap: 6px; margin: 0 14px 6px 0; }
+.pp-head .sw { width: 10px; height: 10px; border-radius: 3px; flex: none; }
+.pp-head b { flex: 1; min-width: 0; line-height: 1.25; }
+.pp-nav { display: inline-flex; align-items: center; gap: 2px; font-size: 11px; color: var(--muted); white-space: nowrap; }
+.pp-nav button { border: 1px solid var(--line); background: #fff; border-radius: 6px; width: 20px; height: 20px; padding: 0; line-height: 1; color: var(--navy-2); cursor: pointer; }
+.pp-nav button:hover { background: var(--soft); }
 .maplibregl-ctrl-bottom-right { bottom: 8px; }
 
 

@@ -164,7 +164,6 @@
           map.addLayer({ id: 'P-' + d.id, type: 'circle', source: src, filter: IS_POINT,
             paint: { 'circle-radius': Math.max(2.5, Math.min(7, (P.radius || 6) * 0.7)), 'circle-color': c, 'circle-opacity': 0.9, 'circle-stroke-color': edge, 'circle-stroke-width': 0.6 } });
           entry.ids.push('F-' + d.id, 'S-' + d.id, 'P-' + d.id);
-          ['F-', 'P-', 'S-'].forEach((p) => map.on('click', p + d.id, (e) => popup(e, d)));
           ['F-', 'P-'].forEach((p) => { map.on('mouseenter', p + d.id, () => { map.getCanvas().style.cursor = 'pointer'; }); map.on('mouseleave', p + d.id, () => { map.getCanvas().style.cursor = ''; }); });
         } else {
           const fillOp = d.style === 'boundary' ? 0.02 : d.style === 'footprint' ? 0 : 0.33;  // footprints: outline only
@@ -174,7 +173,6 @@
           map.addLayer({ id: 'P-' + d.id, type: 'circle', source: src, filter: IS_POINT,
             paint: { 'circle-radius': 4.5, 'circle-color': color, 'circle-stroke-color': '#fff', 'circle-stroke-width': 1.3 } });
           entry.ids.push('F-' + d.id, 'S-' + d.id, 'P-' + d.id);
-          ['F-', 'P-', 'S-'].forEach((p) => map.on('click', p + d.id, (e) => popup(e, d)));
           ['F-', 'P-'].forEach((p) => { map.on('mouseenter', p + d.id, () => { map.getCanvas().style.cursor = 'pointer'; }); map.on('mouseleave', p + d.id, () => { map.getCanvas().style.cursor = ''; }); });
         }
       }
@@ -192,11 +190,37 @@
     renderLayerList();
     return entry;
   }
-  function popup(e, d) {
-    const f = e.features && e.features[0]; if (!f) return;
-    const rows = Object.entries(f.properties || {}).slice(0, 14).map(([k, v]) => `<tr><td>${esc(k)}</td><td>${esc(String(v).slice(0, 120))}</td></tr>`).join('');
-    new maplibregl.Popup({ maxWidth: '320px' }).setLngLat(e.lngLat).setHTML(`<b>${esc(d.title)}</b><table>${rows || '<tr><td>No attributes</td></tr>'}</table>`).addTo(map);
+  // One popup per click: every Y-finder layer under the pointer, top-most first, with arrows to step through them
+  // (one handler per layer used to open a popup each, stacked on top of one another).
+  const HIDE_FIELD = /^(objectid|fid|oid|shape.*|mtfcc|funcstat|lsadc|lsad|aland|awater|globalid|intptlat|intptlon|centlat|centlon|basename|stgeometry.*)$/i;
+  function fmtVal(v) {
+    if (typeof v === 'number') return Number.isInteger(v) ? v.toLocaleString() : (Math.abs(v) < 1000 ? +v.toFixed(3) : Math.round(v).toLocaleString()).toString();
+    return String(v).slice(0, 140);
   }
+  function popupHTML(hits, i) {
+    const { entry, f } = hits[i]; const props = Object.entries(f.properties || {}).filter(([k, v]) => !HIDE_FIELD.test(k) && v !== null && v !== '');
+    const rows = props.slice(0, 16).map(([k, v]) => `<tr><td>${esc(k.replace(/_/g, ' '))}</td><td>${esc(fmtVal(v))}</td></tr>`).join('');
+    const nav = hits.length > 1 ? `<span class="pp-nav"><button data-pp="-1" aria-label="Previous layer">&#8249;</button>${i + 1} of ${hits.length}<button data-pp="1" aria-label="Next layer">&#8250;</button></span>` : '';
+    return `<div class="pp-head"><span class="sw" style="background:${entry.color}"></span><b>${esc(entry.d.title)}</b>${nav}</div>
+      <table>${rows || '<tr><td>No attributes</td></tr>'}</table>${props.length > 16 ? `<div class="muted small">${props.length - 16} more fields</div>` : ''}`;
+  }
+  map.on('click', (e) => {
+    const owner = {};
+    for (const entry of state.layers.values()) if (entry.visible && entry.d.style !== 'scope') entry.ids.forEach((id) => { if (/^[FPS]-/.test(id) && map.getLayer(id)) owner[id] = entry; });
+    const ids = Object.keys(owner); if (!ids.length) return;
+    const seen = new Set(); const hits = [];
+    for (const f of map.queryRenderedFeatures(e.point, { layers: ids })) { // already ordered top-most first
+      const entry = owner[f.layer.id]; if (!entry || seen.has(entry.d.id)) continue;
+      seen.add(entry.d.id); hits.push({ entry, f });
+    }
+    if (!hits.length) return;
+    if (state.popup) state.popup.remove();
+    let i = 0; const pp = state.popup = new maplibregl.Popup({ maxWidth: '340px', className: 'yf-pop' }).setLngLat(e.lngLat).setHTML(popupHTML(hits, i)).addTo(map);
+    const wire = () => $$('[data-pp]', pp.getElement()).forEach((b) => { b.onclick = (ev) => {
+      ev.stopPropagation(); i = (i + Number(b.dataset.pp) + hits.length) % hits.length; pp.setHTML(popupHTML(hits, i)); wire();
+    }; });
+    wire();
+  });
   function removeLayer(id) {
     const e = state.layers.get(id); if (!e) return;
     e.ids.forEach((l) => { if (map.getLayer(l)) map.removeLayer(l); });
