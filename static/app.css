@@ -14,6 +14,12 @@ html, body { margin: 0; height: 100%; font-family: var(--font); color: var(--ink
 button { font: inherit; color: inherit; cursor: pointer; }
 a { color: var(--navy-2); }
 .muted { color: var(--muted); }
+/* keyboard users see where they are; mouse clicks do not draw rings */
+button:focus-visible, a:focus-visible, input:focus-visible, select:focus-visible, textarea:focus-visible, summary:focus-visible {
+  outline: 2px solid var(--navy-2); outline-offset: 2px; border-radius: 6px; }
+@media (prefers-reduced-motion: reduce) {
+  *, *::before, *::after { animation-duration: .01ms !important; animation-iteration-count: 1 !important; transition-duration: .01ms !important; }
+}
 .small { font-size: 12px; }
 
 /* Desktop: the map starts right of the chat panel, so nothing hides behind it and zooms center in the visible part. */

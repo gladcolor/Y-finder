@@ -608,7 +608,8 @@
       });
       cy.on('tap', (e) => { if (e.target === cy) { clear(); cy.elements().unselect(); $('#nodeInfo').hidden = true; } });
       // the gentle pulse on the outcome (the research target), only while the Frame tab is open
-      state.cyPulse = setInterval(() => {
+      const calm = window.matchMedia && matchMedia('(prefers-reduced-motion: reduce)').matches; // no pulse for reduced motion
+      state.cyPulse = calm ? null : setInterval(() => {
         if (cy.destroyed() || !$('#tab-frame').classList.contains('on')) return;
         const t = cy.$('node[?target]').not('.anchor'); if (!t.length) return;
         t.animate({ style: { 'overlay-opacity': 0.16, 'overlay-padding': 7 } }, { duration: 700, easing: 'ease-out',
