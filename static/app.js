@@ -1132,6 +1132,7 @@
     if (!c || !c.type) return '';
     const W = 300, H = 118, L = 40, R = 10, T = 10, B = 26;
     const f = (v) => fmtNum(+v);
+    const cut = (t, n) => (String(t).length > n ? String(t).slice(0, n - 1).trimEnd() + '…' : String(t));
     const frame = (inner, label) => `<figure class="xchart"><svg viewBox="0 0 ${W} ${H}" role="img" aria-label="${esc(label)}">${inner}</svg></figure>`;
     const axis = `<line x1="${L}" y1="${H - B}" x2="${W - R}" y2="${H - B}" class="ax"/><line x1="${L}" y1="${T}" x2="${L}" y2="${H - B}" class="ax"/>`;
     const sx = (lo, hi) => (v) => L + ((v - lo) / Math.max(1e-12, hi - lo)) * (W - L - R);
@@ -1152,8 +1153,8 @@
       return frame(`${axis2}<g class="dots">${dots}</g>
         <text x="${L}" y="${H - B + 11}" class="tk">${esc(f(inv(mx, x0)))}</text><text x="${W - R}" y="${H - B + 11}" class="tk" text-anchor="end">${esc(f(inv(mx, x1)))}</text>
         <text x="${L - 4}" y="${H - B}" class="tk" text-anchor="end">${esc(f(inv(my, y0)))}</text><text x="${L - 4}" y="${T2 + 6}" class="tk" text-anchor="end">${esc(f(inv(my, y1)))}</text>
-        <text x="${(L + W - R) / 2}" y="${H - 3}" class="al" text-anchor="middle">${esc(c.xl)}${note(mx)}</text>
-        <text x="${L}" y="${T + 1}" class="al">↑ ${esc(c.yl)}${note(my)}</text>`, `Scatter plot of ${c.yl} against ${c.xl}`);
+        <text x="${(L + W - R) / 2}" y="${H - 3}" class="al" text-anchor="middle">${esc(cut(c.xl + note(mx), 62))}</text>
+        <text x="${L}" y="${T + 1}" class="al">↑ ${esc(cut(c.yl + note(my), 58))}</text>`, `Scatter plot of ${c.yl} against ${c.xl}`);
     }
     if (c.type === 'hist' || c.type === 'bars') {
       const items = c.type === 'hist' ? (c.bins || []).map((b) => [b[0], b[2], b[1]]) : (c.items || []);

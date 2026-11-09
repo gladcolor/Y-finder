@@ -886,7 +886,7 @@ def _measure(v: dict, s, subsets: bool = True) -> tuple[str, np.ndarray | None, 
     if v["type"] == "point" and not v["valued"]:
         sub = g.subset
         if subsets and sub and sub[2].sum() >= 30:
-            return f"matching records of {g.title} per km²", g.x[sub[2]], g.y[sub[2]]
+            return "matching records per km²", g.x[sub[2]], g.y[sub[2]]
         return f"{g.title} per km²", g.x, g.y
     return _vname(v), None, None
 
