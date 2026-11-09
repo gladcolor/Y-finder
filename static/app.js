@@ -1002,7 +1002,13 @@
     const p = new URLSearchParams(); let skipped = 0;
     for (const e of state.layers.values()) {
       if (!e.visible) continue;
-      if (e.d.kind === 'geojson') p.append('data', new URL(e.d.url, location.href).href); else skipped++;
+      if (e.d.kind !== 'geojson') { skipped++; continue; }
+      // a readable file name, since GeoLibre names each layer after its file
+      const nice = String(e.d.title || 'layer').replace(/[^A-Za-z0-9]+/g, '-').replace(/^-|-$/g, '').slice(0, 60) || 'layer';
+      p.append('data', new URL(String(e.d.url).replace(/\.geojson$/, '') + '/' + nice + '.geojson', location.href).href);
+    }
+    if (state.mapReady) { // open GeoLibre where Y-finder is looking
+      const c = map.getCenter(); p.set('lat', c.lat.toFixed(4)); p.set('lon', c.lng.toFixed(4)); p.set('zoom', map.getZoom().toFixed(2));
     }
     if (!state.gisFull) { p.set('layout', 'compact'); p.set('panels', 'collapsed'); }
     p.set('welcome', '0');

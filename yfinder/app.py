@@ -355,7 +355,8 @@ def create_app() -> Flask:
                         headers={"Content-Disposition": "attachment; filename=yfinder_influence_graph.graphml"})
 
     @app.get("/api/layers/<lid>.geojson")
-    def layer(lid):
+    @app.get("/api/layers/<lid>/<name>.geojson")  # same file under a readable name: GeoLibre names layers by file
+    def layer(lid, name=None):
         p = session.layer_path(lid)
         if not p:
             abort(404)

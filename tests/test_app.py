@@ -138,3 +138,15 @@ def test_stopped_watch_is_not_resurrected(client):
     assert w and watch._claim(tok) is None          # second runner cannot claim the same round
     client.post(f"/api/watch/{tok}/stop")
     assert watch.load(tok)["status"] == "stopped"
+
+
+def test_layer_files_also_load_under_a_readable_name(tmp_path):
+    from yfinder import session as _s
+    _s.LAYER_DIR = tmp_path
+    lay = _s.save_layer({"type": "FeatureCollection", "features": []}, "EPI Air Quality", "test")
+    from yfinder.app import create_app
+    c = create_app().test_client()
+    a = c.get("/" + lay["url"])
+    b = c.get("/" + lay["url"].replace(".geojson", "") + "/EPI-Air-Quality.geojson")
+    assert a.status_code == b.status_code == 200 and a.data == b.data and b.headers["Access-Control-Allow-Origin"] == "*"
+    assert c.get("/api/layers/notanid/x.geojson").status_code == 404
