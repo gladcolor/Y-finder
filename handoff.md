@@ -107,4 +107,4 @@ See `git log --oneline`. Add a line here for any commit that changes behavior us
 - `8e58c88` (2026-11-08) First prototype: agent, catalog, fit rules, UI, handbooks, watches, tests, deploy files.
 - `98b1d85` (2026-11-08) Demo cases, UI pass (stepper, quick replies, fit matrix, time bars), Codex-review and persona fixes, cache-busting.
 - `cfe44ee` (2026-11-08) Concise UI: shorter answers, status line, result pills, one-line data cards.
-- `5c6d181` (2026-11-08) ChatGPT-style large chat, conversation history in the browser, session restore endpoint.
+- `c188b01` (2026-11-08) ChatGPT-style large chat, conversation history in the browser, session restore endpoint.
