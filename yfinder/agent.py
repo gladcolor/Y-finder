@@ -138,7 +138,7 @@ TOOLS = [
     _tool("map_feature_service", "Fetch features from an ArcGIS FeatureServer or MapServer layer URL inside the study area and map them.", {
         "url": {"type": "string", "description": "service URL from a search result, e.g. https://.../FeatureServer/0"},
         "title": S}),
-    _tool("map_catalog_layer", "Draw a GeoLibre gallery map (ref gl:...) or GeoLibre web service (ref gls:...) from search_catalog on the map, in GeoLibre's colors. Large layers are cut to the study area.", {
+    _tool("map_catalog_layer", "Draw a catalog item marked \"map\": true on the map: a GeoLibre gallery map (gl:...) in GeoLibre's colors, a GeoLibre web service (gls:...), or a curated card with a public map service (e.g. FEMA flood zones). Large layers are cut to the study area.", {
         "ref": {"type": "string", "description": "catalog id from search_catalog, e.g. gl:us-adult-asthma-copd-by-county or gls:nlcd-2021-wms"}}),
     _tool("download_data", "Download a public data file to the Y-finder server for this conversation and draw it on the map: GeoJSON, CSV with latitude/longitude columns, KML/KMZ, or a zipped shapefile (any coordinate system), up to 50 MB. Needs a direct https file link, not a web page. Large layers are cut to the study area. The file is deleted when the session ends.", {
         "url": {"type": "string", "description": "direct https link to the file"},
@@ -476,8 +476,8 @@ def h_map_catalog_layer(s: Session, a: dict):
     ref = str(a.get("ref") or "").strip()
     it = catalog_mod.load().get(ref)
     if not it or not mappable(it):
-        raise ToolError("Only GeoLibre gallery maps (gl:...) and GeoLibre services (gls:...) marked \"map\": true "
-                        "in search_catalog can be drawn this way")
+        raise ToolError("Only catalog items marked \"map\": true in search_catalog (GeoLibre maps and services, "
+                        "curated cards with a map service) can be drawn this way")
     s.seen[ref] = it
     sb = s.scope.get("bbox")
     if it.get("service"):
@@ -663,6 +663,8 @@ def h_recommend_data(s: Session, a: dict):
     if s.graph:
         ev.append({"type": "graph", "graph": s.graph})
     good = sum(p["fit"]["overall"] == "good" for p in new)
+    from . import previews  # map previews of the picks are built in the background (previews.py)
+    previews.start(s, [p["ref"] for p in new])
     return res, ev, f"{len(new)} datasets checked, {good} fit well"
 
 

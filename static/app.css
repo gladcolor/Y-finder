@@ -321,6 +321,13 @@ body.collapsed .layers-box { left: 12px; }
 .dl-form { display: flex; gap: 6px; margin-top: 10px; padding-top: 8px; border-top: 1px solid var(--line); }
 .dl-form input { flex: 1; min-width: 0; border: 1px solid var(--line); border-radius: 8px; padding: 5px 8px; font: inherit; font-size: 12.5px; }
 .dl-note { font-size: 11px; margin-top: 4px; }
+.dcard .pv { display: flex; align-items: center; gap: 4px; flex-wrap: wrap; font-size: 12px; margin-top: 3px; }
+.dcard .pv:empty { display: none; }
+.pv-dot { width: 7px; height: 7px; border-radius: 50%; background: #cbd5e1; flex: none; }
+.pv-dot.ok { background: #16a34a; }
+.pv-dot.run { background: #f59e0b; animation: pvblink 1s ease-in-out infinite; }
+@keyframes pvblink { 50% { opacity: .35; } }
+.pv-a { border: 0; background: none; color: var(--navy-2); font-size: 12px; padding: 0 2px; cursor: pointer; text-decoration: underline; }
 .dlg { border: 0; border-radius: 14px; box-shadow: var(--shadow); padding: 0; width: min(760px, 94vw); max-height: 86vh; }
 .dlg::backdrop { background: rgba(15, 25, 45, .35); }
 .dlg-head { display: flex; justify-content: space-between; align-items: center; padding: 10px 14px; border-bottom: 1px solid var(--line); position: sticky; top: 0; background: #fff; }

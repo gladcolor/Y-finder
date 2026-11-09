@@ -121,9 +121,10 @@ def _http_get(url: str):
     return requests.get(url, headers=UA, stream=True, timeout=(15, 60), allow_redirects=False)
 
 
-def fetch(url: str, dest: Path) -> dict:
+def fetch(url: str, dest: Path, max_bytes: int | None = None) -> dict:
     """Stream a public https file to dest, checking every redirect hop and the size as it arrives."""
     started = time.time()
+    cap = max_bytes or MAX_FILE_BYTES
     for _hop in range(6):
         if not sources.safe_url(url):
             raise DownloadError("Only public https links can be downloaded")
@@ -139,16 +140,16 @@ def fetch(url: str, dest: Path) -> dict:
             r.close()
             raise DownloadError(f"The server answered {r.status_code}")
         size = int(r.headers.get("Content-Length") or 0)
-        if size > MAX_FILE_BYTES:
+        if size > cap:
             r.close()
-            raise DownloadError(f"The file is {size / 1e6:.0f} MB; the limit is {MAX_FILE_BYTES // 2**20} MB")
+            raise DownloadError(f"The file is {size / 1e6:.0f} MB; the limit is {cap // 2**20} MB")
         n = 0
         try:
             with open(dest, "wb") as fh:
                 for chunk in r.iter_content(1 << 16):
                     n += len(chunk)
-                    if n > MAX_FILE_BYTES:
-                        raise DownloadError(f"The file is larger than {MAX_FILE_BYTES // 2**20} MB")
+                    if n > cap:
+                        raise DownloadError(f"The file is larger than {cap // 2**20} MB")
                     if time.time() - started > FETCH_SECONDS:
                         raise DownloadError("The download took too long")
                     fh.write(chunk)
@@ -436,7 +437,46 @@ def read_layers(path: Path, fmt: str, name: str) -> list[tuple[str, list[dict]]]
 
 
 # ---------------------------------------------------------------------------- one download for one session
-def add(s, url: str, title: str | None = None) -> dict:
+def track(s, layers: list[dict], label: str) -> None:
+    """Record layers made for this session (map previews) so they are deleted when the session ends."""
+    if not layers:
+        return
+    d = session_dir(s.sid)
+    with _dir_lock:
+        d.mkdir(parents=True, exist_ok=True)
+        m = read_manifest(d)
+        m["sid"] = s.sid
+        m.setdefault("files", []).append({"name": label[:120], "layers": [l["id"] for l in layers], "at": time.time()})
+        _write_manifest(d, m)
+    for l in layers:
+        l["session_only"] = True
+
+
+_SAMPLE = re.compile(r"^[a-z0-9_-]{1,60}\.csv$")
+
+
+def save_sample(s, name: str, text: str) -> str:
+    """A small CSV slice kept in the session folder (deleted with it). Returns the file name."""
+    if not _SAMPLE.fullmatch(name):
+        raise DownloadError("Bad sample name")
+    d = session_dir(s.sid)
+    with _dir_lock:
+        d.mkdir(parents=True, exist_ok=True)
+        (d / name).write_text(text, encoding="utf-8")
+    return name
+
+
+def sample_path(sid: str, name: str) -> Path | None:
+    if not _SAMPLE.fullmatch(name or ""):
+        return None
+    try:
+        p = session_dir(sid) / name
+    except DownloadError:
+        return None
+    return p if p.is_file() else None
+
+
+def add(s, url: str, title: str | None = None, max_bytes: int | None = None) -> dict:
     """Download url for session s, turn it into map layers and record it. Caller holds the session lock."""
     url = (url or "").strip()
     if not url.lower().startswith("https://"):
@@ -455,7 +495,7 @@ def add(s, url: str, title: str | None = None) -> dict:
         d.mkdir(parents=True, exist_ok=True)
     token = secrets.token_hex(6)
     raw_path = d / f"{token}.bin"
-    info = fetch(url, raw_path)
+    info = fetch(url, raw_path, max_bytes)
     try:
         with open(raw_path, "rb") as fh:
             head = fh.read(4096)

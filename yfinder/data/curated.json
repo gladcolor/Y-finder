@@ -473,7 +473,11 @@
    "unit": "County, tract",
    "res_m": null,
    "type": "Table + vector",
-   "yale_note": ""
+   "yale_note": "",
+   "service": {
+    "kind": "arcgis",
+    "url": "https://services.arcgis.com/XG15cJAlne2vxtgt/arcgis/rest/services/National_Risk_Index_Census_Tracts/FeatureServer/0"
+   }
   },
   {
    "id": "cur:nfhl",
@@ -492,7 +496,11 @@
    "unit": "Polygon",
    "res_m": null,
    "type": "Vector",
-   "yale_note": ""
+   "yale_note": "",
+   "service": {
+    "kind": "arcgis-map",
+    "url": "https://hazards.fema.gov/arcgis/rest/services/public/NFHL/MapServer"
+   }
   },
   {
    "id": "cur:slr",
@@ -549,7 +557,11 @@
    "unit": "Line, polygon",
    "res_m": null,
    "type": "Vector",
-   "yale_note": ""
+   "yale_note": "",
+   "service": {
+    "kind": "arcgis-map",
+    "url": "https://hydro.nationalmap.gov/arcgis/rest/services/nhd/MapServer"
+   }
   },
   {
    "id": "cur:cteco",
@@ -720,7 +732,12 @@
    "unit": "Point",
    "res_m": null,
    "type": "Table",
-   "yale_note": ""
+   "yale_note": "",
+   "service": {
+    "kind": "xyz",
+    "tiles": "https://api.gbif.org/v2/map/occurrence/density/{z}/{x}/{y}@1x.png?style=classic.point",
+    "maxzoom": 14
+   }
   },
   {
    "id": "cur:landscan",

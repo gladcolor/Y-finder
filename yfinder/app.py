@@ -18,7 +18,7 @@ from xml.sax.saxutils import escape
 
 from flask import Flask, Response, abort, jsonify, request, send_file, send_from_directory, stream_with_context
 
-from . import agent, catalog, fit, handbooks, janitor, session, watch
+from . import agent, catalog, downloads, fit, handbooks, janitor, previews, session, watch
 from .config import (ACCESS_CODE, DAILY_CAP, DEFAULT_MODEL, MODEL_IDS, MODELS, RATE_PER_HOUR, STATIC_DIR,
                      UPLOAD_MAX_BYTES, openai_key)
 
@@ -258,6 +258,25 @@ def create_app() -> Flask:
             s.lock.release()
         return jsonify(sid=s.sid, events=events, summary=summary, result=res)
 
+    @app.route("/api/session/<sid>/previews", methods=["GET", "POST"])
+    def session_previews(sid):
+        """Map previews of the recommended datasets (POST starts any that are missing, e.g. after a demo loads)."""
+        s = session.peek(sid)
+        if not s:
+            return jsonify(error="Not found"), 404
+        if request.method == "POST":
+            _check_code()
+            previews.start(s)
+        return jsonify(previews.public(s))
+
+    @app.get("/api/session/<sid>/sample/<name>")
+    def session_sample(sid, name):
+        """A small CSV slice made for a preview (kept only for this session)."""
+        p = downloads.sample_path(sid, name) if session.peek(sid) else None
+        if not p:
+            return jsonify(error="Not found"), 404
+        return send_file(p, mimetype="text/csv", as_attachment=True, download_name=name, max_age=0)
+
     @app.get("/api/session/<sid>")
     def session_state(sid):
         s = session.peek(sid)
@@ -297,6 +316,7 @@ def create_app() -> Flask:
         for p in s.picks:
             p["fit"] = fit.assess(p["meta"], s.scope)
         agent._coverage(s)
+        previews.start(s)  # the study area or window changed: previews follow
         return jsonify(scope=s.scope, picks=agent._ui_picks(s), graph=s.graph)
 
     @app.post("/api/session/restore")

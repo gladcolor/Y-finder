@@ -226,10 +226,15 @@ def map_layers(project: dict, study_bbox=None, study_year: int | None = None) ->
 
 
 def service_layer(svc: dict) -> dict:
-    """Tile template for a GeoLibre web-service preset (WMS, WMTS or XYZ)."""
+    """Tile template for a web-service preset (WMS, WMTS, XYZ, or an ArcGIS MapServer / ImageServer)."""
     kind = svc.get("kind")
     if kind in ("xyz", "wmts"):
         tiles = [svc["tiles"]]
+    elif kind in ("arcgis-map", "arcgis-image"):  # an ArcGIS MapServer or ImageServer drawn as 256 px tiles
+        root = svc["url"].rstrip("/")
+        op = "export" if kind == "arcgis-map" else "exportImage"
+        extra = "&transparent=true&format=png32" if kind == "arcgis-map" else "&format=png"
+        tiles = [f"{root}/{op}?bbox={{bbox-epsg-3857}}&bboxSR=3857&imageSR=3857&size=256,256{extra}&f=image"]
     elif kind == "wms":
         v = svc.get("version") or "1.1.1"
         q = {"SERVICE": "WMS", "REQUEST": "GetMap", "VERSION": v, "LAYERS": svc["layers"], "STYLES": "",

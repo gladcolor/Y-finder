@@ -175,8 +175,10 @@
       }
     } catch (err) {
       console.warn('layer failed', d, err); state.layers.delete(d.id);
-      toast(err.message === 'gone' ? `"${d.title}" was a downloaded file; it was deleted when its session ended.`
-        : err.message === 'missing' ? `"${d.title}" is no longer on the server.` : 'Could not draw layer: ' + (d.title || d.id));
+      if (err.message === 'gone' || err.message === 'missing') {
+        state.goneN = (state.goneN || 0) + 1; clearTimeout(state.goneT);
+        state.goneT = setTimeout(() => { toast(`${state.goneN} layer${state.goneN > 1 ? 's were' : ' was'} kept only for an earlier session and ${state.goneN > 1 ? 'have' : 'has'} been deleted.`); state.goneN = 0; }, 600);
+      } else toast('Could not draw layer: ' + (d.title || d.id));
       return null;
     }
     if (d.hidden) { // hidden at first in the original GeoLibre map; Show in Layers turns it on
@@ -310,7 +312,7 @@
         let i;
         while ((i = buf.indexOf('\n\n')) >= 0) {
           const chunk = buf.slice(0, i); buf = buf.slice(i + 2);
-          chunk.split('\n').forEach((line) => { if (line.startsWith('data: ')) { try { const ev = JSON.parse(line.slice(6)); convRecord(turn, ev); handle(ev, m); } catch (err) { console.warn(err); } } });
+          chunk.split('\n').forEach((line) => { if (line.startsWith('data: ')) { try { const ev = JSON.parse(line.slice(6)); convRecord(turn, ev); handle(ev, m); if (ev.type === 'recommendations') m.recs = true; } catch (err) { console.warn(err); } } });
         }
       }
     } catch (err) {
@@ -318,6 +320,7 @@
       convRecord(turn, { type: 'error', message: String(err.message || err) });
     } finally {
       m.thinking.remove(); state.busy = false; $('#btnSend').disabled = false; scrollChat(); convSave();
+      if (m.recs) watchPreviews(false);
     }
   }
 
@@ -550,6 +553,7 @@
           time_start: $('#sc_t0').value, time_end: $('#sc_t1').value, spatial_resolution_m: $('#sc_res').value, unit_of_analysis: $('#sc_unit').value }) });
         const j = await r.json(); if (!r.ok) throw new Error(j.error);
         state.scope = j.scope; state.picks = j.picks; state.graph = j.graph; renderScope(); renderData(); renderGraph(); toast('Scope updated. Fit labels re-checked.');
+        watchPreviews(false);
         if (state.conv) {
           const t = convTurn(null);
           [{ type: 'scope', scope: j.scope }, j.graph && { type: 'graph', graph: j.graph }, { type: 'recommendations', picks: j.picks, methods: state.methods, next_steps: state.nextSteps }]
@@ -623,6 +627,7 @@
           <div class="t"><span class="fitdot ${esc(p.fit.overall)}"></span><span class="tt">${esc(p.title)}</span>${acc !== 'open' && acc !== 'unknown' ? badge(acc, accessLabel[acc], p.fit.access?.reason) : ''}${p.verified === 'unverified' ? badge('poor', 'Not verified', verifiedText.unverified) : ''}<span class="chev">›</span></div>
           <div class="src">${esc([p.source, p.resolution, p.time].filter(Boolean).join(' · '))}</div>
           <div class="one ${esc(worst ? worst.label : unknown.length ? 'unknown' : p.fit.overall)}">${esc(one)}</div>
+          <div class="pv" data-pv="${esc(p.ref)}">${pvLine(p.ref)}</div>
           <div class="more" hidden>
             ${timeBar(p)}
             ${reasons ? `<ul class="reasons">${reasons}</ul>` : ''}
@@ -630,7 +635,7 @@
             ${p.limitations ? `<div class="lim"><b>Limits:</b> ${esc(p.limitations)}</div>` : ''}
             ${p.yale_note ? `<div class="yale-note">${esc(p.yale_note)}</div>` : ''}
             ${p.factors && p.factors.length ? `<div class="factors">${p.factors.map((f) => `<span>${esc(nodeLabel(f))}</span>`).join('')}</div>` : ''}
-            <div class="row">${url ? `<a class="btn" href="${esc(url)}" target="_blank" rel="noopener">Source</a>` : ''}<button class="btn" data-act="hb">How to access</button><button class="btn" data-act="cov">Coverage</button>${p.stac_collection ? '<button class="btn" data-act="preview">Preview</button>' : ''}${p.map ? '<button class="btn" data-act="map" title="Draw its layers on the map">Map</button>' : ''}<button class="btn" data-act="ask">Ask</button>
+            <div class="row">${url ? `<a class="btn" href="${esc(url)}" target="_blank" rel="noopener">Source</a>` : ''}<button class="btn" data-act="hb">How to access</button><button class="btn" data-act="cov">Coverage</button>${p.stac_collection ? '<button class="btn" data-act="preview">Preview</button>' : ''}${p.map && (state.previews[p.ref] || {}).status !== 'ready' ? '<button class="btn" data-act="map" title="Draw its layers on the map">Map</button>' : ''}<button class="btn" data-act="ask">Ask</button>
               <span class="verified">${esc(verifiedText[p.verified] || '')}</span></div>
           </div></div>`;
       });
@@ -645,6 +650,7 @@
       const mb = c.querySelector('[data-act=map]'); if (mb) mb.onclick = () => mapItem(p.ref, mb);
       c.querySelector('[data-act=ask]').onclick = () => { $('#q').value = `About ${p.title}: `; switchTab('chat'); $('#q').focus(); autosize(); };
     });
+    bindPreviewButtons();
     const ms = state.methods || [];
     $('#methods').innerHTML = (ms.length ? '<div class="group-h">Methods</div><ul class="mlist">' + ms.map((x) => `<li title="${esc(x.why)}"><b>${esc(x.name)}</b> <span class="muted">${esc(x.tools)}</span></li>`).join('') + '</ul>' : '') +
       ((state.nextSteps || []).length ? '<div class="group-h">Next steps</div><ol class="mlist small">' + state.nextSteps.slice(0, 3).map((s) => `<li>${esc(s)}</li>`).join('') + '</ol>' : '') +
@@ -765,6 +771,59 @@
       $('#layerPanel').hidden = false;
     } catch (err) { toast(err.message); }
     finally { if (btn) { btn.disabled = false; btn.textContent = 'Map'; } }
+  }
+
+  // ------------------------------------------------------------------ map previews of the recommended datasets
+  // The server builds them in the background (previews.py): online services are drawn directly; open data
+  // without a service is downloaded in a small slice for this session. Core datasets show, the rest wait hidden.
+  state.previews = {};
+  function pvLine(ref) {
+    const it = state.previews[ref]; if (!it) return '';
+    if (it.status === 'pending') return '<span class="pv-dot run"></span><span class="muted">Preparing a map preview...</span>';
+    if (it.status !== 'ready') return `<span class="pv-dot"></span><span class="muted">No map preview: ${esc(it.note || '')}</span>`;
+    const ids = (it.layers || []).map((l) => l.id); const vis = ids.some((id) => state.layers.get(id)?.visible);
+    const csv = it.csv ? ` <a class="pv-a" href="api/session/${encodeURIComponent(state.sid)}/sample/${encodeURIComponent(it.csv)}" download>CSV</a>` : '';
+    return `<span class="pv-dot ok"></span><span>${it.kind === 'slice' ? 'Sample on map' : 'On map'}</span><span class="muted"> · ${esc(it.note || '')}</span>
+      <button class="pv-a" data-pvact="toggle" data-ref="${esc(ref)}">${vis ? 'Hide' : 'Show'}</button>${csv}`;
+  }
+  function refreshPreviewLines() {
+    $$('.pv[data-pv]').forEach((el) => { el.innerHTML = pvLine(el.dataset.pv); });
+    bindPreviewButtons();
+  }
+  function bindPreviewButtons() {
+    $$('[data-pvact=toggle]').forEach((b) => { b.onclick = (e) => {
+      e.stopPropagation(); const it = state.previews[b.dataset.ref]; if (!it) return;
+      const ids = (it.layers || []).map((l) => l.id).filter((id) => state.layers.has(id));
+      const show = !ids.some((id) => state.layers.get(id).visible);
+      ids.forEach((id) => { if (state.layers.get(id).visible !== show) toggleLayer(id); });
+      if (show && it.layers[0] && it.layers[0].bbox) fit(state.scope?.bbox || it.layers[0].bbox);
+      refreshPreviewLines();
+    }; });
+  }
+  async function watchPreviews(start) {
+    if (!state.sid) return;
+    clearTimeout(state.pvTimer); const gen = state.pvGen = (state.pvGen || 0) + 1; const t0 = Date.now();
+    const applied = new Set([...state.layers.keys()]);
+    const tick = async (first) => {
+      if (gen !== state.pvGen) return;
+      let j;
+      try { j = await (await fetch(`api/session/${encodeURIComponent(state.sid)}/previews`, { method: first && start ? 'POST' : 'GET', headers: headers() })).json(); }
+      catch { j = null; }
+      if (gen !== state.pvGen || !j || !j.items) return;
+      const fresh = [];
+      Object.entries(j.items).forEach(([ref, it]) => {
+        state.previews[ref] = it;
+        (it.layers || []).forEach((l) => { if (!applied.has(l.id)) { applied.add(l.id); fresh.push(l); } });
+      });
+      if (fresh.length) {
+        const t = state.conv ? convTurn(null) : null; // kept with the conversation, so reopening shows them
+        fresh.forEach((l) => { const ev = { type: 'layer', layer: l }; if (t) convRecord(t, ev); addLayer(l).then(refreshPreviewLines); });
+        if (t) convSave();
+      }
+      refreshPreviewLines();
+      if (j.running && Date.now() - t0 < 150000) state.pvTimer = setTimeout(() => tick(false), 2500);
+    };
+    tick(true);
   }
 
   // ------------------------------------------------------------------ data files from a link, kept on the server for this session
@@ -898,7 +957,8 @@
   function clearView() {
     state.pending.length = 0;
     [...state.layers.keys()].forEach(removeLayer);
-    Object.assign(state, { graph: null, scope: null, picks: [], methods: [], nextSteps: [], conv: null });
+    Object.assign(state, { graph: null, scope: null, picks: [], methods: [], nextSteps: [], conv: null, previews: {} });
+    clearTimeout(state.pvTimer); state.pvGen = (state.pvGen || 0) + 1;
     destroyGraph();
     msgs.innerHTML = ''; $('#welcome').hidden = false; $('#nodeInfo').hidden = true; $('#attachInfo').hidden = true;
     STEPS.forEach((s) => step(s, null));
@@ -1121,6 +1181,7 @@
       end.textContent = state.demo.stop ? 'Demo stopped. Keep asking from here.' : 'Demo done. Ask a follow-up; it continues live.';
       msgs.appendChild(end); scrollChat();
       state.demo = null; state.busy = false; $('#btnSend').disabled = false; convSave();
+      if (!state.demo && state.picks && state.picks.length) watchPreviews(true);
     }
   }
   loadDemos();

@@ -17,6 +17,7 @@ import time
 
 ROOT = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
 sys.path.insert(0, ROOT)
+os.environ.setdefault("YFINDER_PREVIEWS", "0")  # recordings capture the agent only; previews run live in the app
 from yfinder import agent, fit, session  # noqa: E402
 from yfinder.config import DATA_DIR  # noqa: E402
 from yfinder.personas import evaluate, record_from_events  # noqa: E402

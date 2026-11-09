@@ -14,6 +14,7 @@ import traceback
 
 ROOT = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
 sys.path.insert(0, ROOT)
+os.environ.setdefault("YFINDER_PREVIEWS", "0")  # recordings capture the agent only; previews run live in the app
 from yfinder.personas import run_persona  # noqa: E402
 
 ap = argparse.ArgumentParser()

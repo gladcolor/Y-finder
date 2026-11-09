@@ -38,6 +38,9 @@ class Session:
     layers: list = field(default_factory=list)      # layer descriptors sent to the UI
     proposal: dict | None = None                    # {"name", "text", "used"}
     downloads: list = field(default_factory=list)   # files downloaded for this session (deleted when it ends)
+    previews: dict = field(default_factory=dict)    # ref -> map preview of a recommended dataset (previews.py)
+    preview_running: bool = False
+    plock: threading.Lock = field(default_factory=threading.Lock)
     lock: threading.Lock = field(default_factory=threading.Lock)
 
     def remember(self, results: list[dict]) -> None:

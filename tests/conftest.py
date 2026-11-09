@@ -6,6 +6,7 @@ import os
 import re
 
 os.environ.setdefault("YFINDER_JANITOR", "0")  # tests call janitor.sweep() themselves
+os.environ.setdefault("YFINDER_PREVIEWS", "0")  # no background network calls; tests run previews.build directly
 MUTANT = os.environ.get("YF_MUTANT")
 
 if MUTANT:
@@ -58,5 +59,8 @@ if MUTANT:
     elif MUTANT == "geolibre_any_url":
         from yfinder import geolibre
         geolibre.SLUG_RE = re.compile(r".+")
+    elif MUTANT == "previews_not_session_only":
+        from yfinder import downloads
+        downloads.track = lambda s, layers, label: None
     else:
         raise SystemExit(f"unknown mutant {MUTANT}")

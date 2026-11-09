@@ -10,7 +10,8 @@ import sys
 ROOT = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
 MUTANTS = ["resolution_always_good", "extent_ignored", "time_ignored", "overall_best_not_worst", "everything_verified",
            "no_url_safety", "tokenizer_drops_sensor_names", "no_synonyms", "graph_keeps_bad_edges",
-           "downloads_kept_after_session", "download_follows_redirects", "geolibre_any_url"]
+           "downloads_kept_after_session", "download_follows_redirects", "geolibre_any_url",
+           "previews_not_session_only"]
 
 
 def run(mutant=None):
