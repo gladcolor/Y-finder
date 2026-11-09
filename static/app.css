@@ -101,7 +101,8 @@ body.wide .demo-grid { grid-template-columns: 1fr 1fr 1fr; }
 .demo-card { text-align: left; border: 1px solid var(--card-line); border-left: 3px solid var(--navy); background: #fff; border-radius: 9px; padding: 8px 10px; min-height: 52px; box-shadow: var(--lift-1); }
 .demo-card { transition: transform .12s ease, box-shadow .12s ease, background .12s ease; }
 .demo-card:hover { background: #fff; border-color: var(--navy-2); transform: translateY(-1px); box-shadow: 0 4px 14px rgba(20, 30, 50, .09); }
-.demo-card .field { font-size: 10.5px; text-transform: uppercase; letter-spacing: .05em; color: var(--navy-2); font-weight: 700; }
+.demo-card .field { font-size: 10.5px; text-transform: uppercase; letter-spacing: .05em; color: var(--navy-2); font-weight: 700;
+  white-space: nowrap; overflow: hidden; text-overflow: ellipsis; } /* one line; the full program name is in the tooltip */
 .demo-card .title { font-weight: 600; font-size: 13px; margin-top: 1px; line-height: 1.25; }
 .examples { flex-direction: row !important; flex-wrap: wrap; gap: 6px !important; }
 .example { border-radius: 16px !important; padding: 5px 11px !important; font-size: 12.5px; }
