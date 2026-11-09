@@ -599,4 +599,6 @@ body.wide.hist-open .hist { display: flex; }
   .maplibregl-ctrl-top-right, .maplibregl-ctrl-bottom-left, .maplibregl-ctrl-bottom-right { zoom: var(--ui); }
   .xpill { left: calc((var(--panel-w) + 36px) / var(--ui)); }
   .layers-box { left: calc((var(--panel-w) + 24px) / var(--ui)); }
+  #graph { height: calc(380px * var(--ui)); }  /* a taller canvas: fitting the graph to it enlarges nodes and labels */
+  body.wide #graph { height: calc(520px * var(--ui)); }
 }
