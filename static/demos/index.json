@@ -86,6 +86,114 @@
    ],
    "recorded": "2026-11-08",
    "model": "gpt-6.1-terra"
+  },
+  {
+   "id": "yale_trees",
+   "title": "Where should New Haven plant street trees next?",
+   "field": "Urban ecology",
+   "who": "Priya (fictional), YSE master's student working with URI.",
+   "shows": [
+    "Heat at 1 km, 30 m and 1 m compared",
+    "URI's tree inventory and the YCGS heat island explorer",
+    "Block-group scope with ACS and CDC PLACES",
+    "Block groups on the map"
+   ],
+   "recorded": "2026-11-08",
+   "model": "gpt-6.1-terra",
+   "group": "yale",
+   "program": "Urban Resources Initiative (YSE)",
+   "program_url": "https://uri.yale.edu/",
+   "based_on": "URI plants street trees with the City of New Haven; YSE work maps heat and canopy to guide planting"
+  },
+  {
+   "id": "yale_atlas",
+   "title": "Filled shoreline, redlining and flood risk",
+   "field": "Environmental humanities",
+   "who": "Leo (fictional), history PhD student.",
+   "shows": [
+    "Yale's Digital Atlas and Beinecke maps found",
+    "1937 HOLC map with FEMA flood zones",
+    "Georeferencing old maps as a method",
+    "A window from 1846 to today"
+   ],
+   "recorded": "2026-11-08",
+   "model": "gpt-6.1-terra",
+   "group": "yale",
+   "program": "New Haven Digital Atlas (YCGS app)",
+   "program_url": "https://news.yale.edu/2026/05/29/building-maps-connect-new-havens-past-present",
+   "based_on": "Yale Environmental Humanities and YCGS compare the 1846 harbor survey with today's city"
+  },
+  {
+   "id": "yale_forest",
+   "title": "Forest carbon at Yale-Myers Forest",
+   "field": "Forestry",
+   "who": "Ana (fictional), YSE forestry student.",
+   "shows": [
+    "Statewide lidar from 2016 and 2023",
+    "Field plots and GEDI to calibrate biomass",
+    "YCGS drone lidar to check 2026",
+    "Aerial imagery of the forest"
+   ],
+   "recorded": "2026-11-08",
+   "model": "gpt-6.1-terra",
+   "group": "yale",
+   "program": "YCGS lidar biomass project",
+   "program_url": "https://geospatial.yale.edu/high-resolution-lidar-for-biomass-estimation-a-deep-dive-into-connecticuts-forest-carbon-stock",
+   "based_on": "YCGS compared 2016 and 2023 Connecticut lidar for forest carbon; its drone workshop flies Yale-Myers Forest"
+  },
+  {
+   "id": "yale_epi",
+   "title": "Behind Pakistan's air quality score",
+   "field": "Environmental policy",
+   "who": "Omar (fictional), Jackson School MPP student.",
+   "shows": [
+    "From one national score to province maps",
+    "EPI flagged as national only",
+    "Sentinel-5P NO2 and satellite PM2.5",
+    "Province boundaries for zonal statistics"
+   ],
+   "recorded": "2026-11-08",
+   "model": "gpt-6.1-terra",
+   "group": "yale",
+   "program": "Environmental Performance Index",
+   "program_url": "https://epi.yale.edu/",
+   "based_on": "The 2026 EPI (Yale Center for Environmental Law & Policy, supported by YCGS) ranks 177 countries"
+  },
+  {
+   "id": "yale_opinion",
+   "title": "Climate worry versus extreme heat in Connecticut",
+   "field": "Climate communication",
+   "who": "Grace (fictional), Yale College senior writing a thesis.",
+   "shows": [
+    "Modeled opinion estimates with error margins",
+    "Heat days from NOAA and CDC",
+    "Connecticut counties versus planning regions",
+    "Scope set to the whole state"
+   ],
+   "recorded": "2026-11-08",
+   "model": "gpt-6.1-terra",
+   "group": "yale",
+   "program": "Yale Climate Opinion Maps",
+   "program_url": "https://climatecommunication.yale.edu/visualizations-data/ycom-us/",
+   "based_on": "The Yale Program on Climate Change Communication models opinion for states, districts and counties"
+  },
+  {
+   "id": "yale_steel",
+   "title": "Tracking steel output from space",
+   "field": "Economics",
+   "who": "Wei (fictional), economics PhD student.",
+   "shows": [
+    "Plant locations matched to pollution plumes",
+    "Sentinel-5P NO2 and VIIRS night lights",
+    "Yale's Planet license for plant-level imagery",
+    "Monthly panel design"
+   ],
+   "recorded": "2026-11-08",
+   "model": "gpt-6.1-terra",
+   "group": "yale",
+   "program": "Geospatial measurement of economic activity",
+   "program_url": "https://www.nber.org/papers/w33619",
+   "based_on": "Yale economists use pollution, night light and heat data to estimate plant output; featured by YCGS"
   }
  ]
 }

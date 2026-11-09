@@ -1035,8 +1035,14 @@
   async function loadDemos() {
     try {
       const j = await getJSON('static/demos/index.json?v=' + (window.YF_VERSION || '')); if (!j.cases || !j.cases.length) return;
-      $('#demos').innerHTML = j.cases.map((c) => `<button class="demo-card" data-id="${esc(c.id)}" title="${esc(c.who + '\nShows: ' + c.shows.join('; '))}">
-        <div class="field">${esc(c.field)}</div><div class="title">${esc(c.title)}</div></button>`).join('');
+      const card = (c) => `<button class="demo-card" data-id="${esc(c.id)}" title="${esc(c.who + (c.program ? '\nBased on: ' + c.program : '') + '\nShows: ' + c.shows.join('; '))}">
+        <div class="field">${esc(c.program ? c.program : c.field)}</div><div class="title">${esc(c.title)}</div></button>`;
+      const yale = j.cases.filter((c) => c.group === 'yale'), rest = j.cases.filter((c) => c.group !== 'yale');
+      // Yale research cases first; the earlier general demos stay one click away
+      $('#demos').innerHTML = yale.length
+        ? `<div class="demo-grid">${yale.map(card).join('')}</div>${rest.length ? `<details class="more-demos"><summary>More demos (${rest.length})</summary><div class="demo-grid">${rest.map(card).join('')}</div></details>` : ''}`
+        : `<div class="demo-grid">${rest.map(card).join('')}</div>`;
+      if (yale.length) $('#demoWrap .sec-h').textContent = 'Watch a demo: Yale research cases';
       $$('.demo-card').forEach((b) => { b.onclick = () => playDemo(b.dataset.id); });
       $('#demoWrap').hidden = false;
     } catch { /* no recorded demos on this server */ }
@@ -1061,7 +1067,8 @@
     state.busy = true; $('#btnSend').disabled = true; $('#welcome').hidden = true;
     state.demo = { stop: false, speed: +(store.get('yf_demo_speed') || 2) };
     const head = document.createElement('div'); head.className = 'demo-head';
-    head.innerHTML = `<div class="field">Demo · ${esc(demo.field)}</div><h3>${esc(demo.title)}</h3><div class="who">${esc(demo.who)}</div>
+    const based = demo.program && safeUrl(demo.program_url) ? `<div class="based">Based on <a href="${esc(safeUrl(demo.program_url))}" target="_blank" rel="noopener">${esc(demo.program)}</a>${demo.based_on ? ': ' + esc(demo.based_on) : ''}</div>` : '';
+    head.innerHTML = `<div class="field">Demo · ${esc(demo.field)}</div><h3>${esc(demo.title)}</h3><div class="who">${esc(demo.who)}</div>${based}
       <div class="demo-ctl" title="Recorded ${esc(demo.recorded)} with ${esc(demo.model)}"><span class="seg">${[1, 2, 4, 100].map((v) => `<button data-sp="${v}" class="${v === state.demo.speed ? 'on' : ''}">${v === 100 ? 'Skip' : v + 'x'}</button>`).join('')}</span>
         <button class="btn" id="demoStop">Stop</button></div>`;
     msgs.appendChild(head);

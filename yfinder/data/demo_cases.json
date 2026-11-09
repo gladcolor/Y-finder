@@ -1,5 +1,5 @@
 {
- "_note": "Demo cases shown on the Y-finder welcome screen. People are fictional; questions, places, data and Yale access routes are real. scripts/record_demos.py runs each script against the live agent and saves the event stream to static/demos/<id>.json so the app can replay it quickly and reliably, then continue live.",
+ "_note": "Demo cases shown on the Y-finder welcome screen. People are fictional; questions, places, data and Yale access routes are real. scripts/record_demos.py runs each script against the live agent and saves the event stream to static/demos/<id>.json so the app can replay it quickly and reliably, then continue live. Cases with group \"yale\" are grounded in real YCGS projects and Yale programs (program and program_url name the source); their people are fictional too.",
  "cases": [
   {
    "id": "habitat",
@@ -324,6 +324,356 @@
      "dynamic"
     ],
     "tool_used": "map_stac_preview"
+   }
+  },
+  {
+   "id": "yale_trees",
+   "group": "yale",
+   "title": "Where should New Haven plant street trees next?",
+   "field": "Urban ecology",
+   "program": "Urban Resources Initiative (YSE)",
+   "program_url": "https://uri.yale.edu/",
+   "based_on": "URI plants street trees with the City of New Haven; YSE work maps heat and canopy to guide planting",
+   "who": "Priya (fictional), YSE master's student working with URI.",
+   "shows": [
+    "Heat at 1 km, 30 m and 1 m compared",
+    "URI's tree inventory and the YCGS heat island explorer",
+    "Block-group scope with ACS and CDC PLACES",
+    "Block groups on the map"
+   ],
+   "steps": [
+    {
+     "type": "turn",
+     "message": "I work with Yale's Urban Resources Initiative. Which block groups in Fair Haven, the Hill, Dixwell and Dwight should get street trees first in 2027, based on summer surface heat from 2015 to 2025 and gaps in tree canopy?"
+    },
+    {
+     "type": "ui",
+     "action": "tab",
+     "tab": "data",
+     "note": "Five grains meet here: 1 km heat, 30 m Landsat, 1 m canopy, single trees, block groups."
+    },
+    {
+     "type": "turn",
+     "message": "Map the census block groups for these neighborhoods."
+    },
+    {
+     "type": "ui",
+     "action": "map",
+     "note": "Block groups across the four neighborhoods."
+    }
+   ],
+   "checks": {
+    "graph_min_nodes": 6,
+    "scope_contains": [
+     41.3,
+     -72.93
+    ],
+    "scope_unit_any": [
+     "block group",
+     "tract"
+    ],
+    "picks_min": 3,
+    "no_unverified": true,
+    "picks_any": [
+     "cur:uri_trees",
+     "cur:yale_uhi",
+     "cur:cteco"
+    ],
+    "picks_any_2": [
+     "landsat",
+     "ecostress",
+     "cur:acs",
+     "cur:places"
+    ],
+    "tool_used": "map_census_boundaries"
+   }
+  },
+  {
+   "id": "yale_atlas",
+   "group": "yale",
+   "title": "Filled shoreline, redlining and flood risk",
+   "field": "Environmental humanities",
+   "program": "New Haven Digital Atlas (YCGS app)",
+   "program_url": "https://news.yale.edu/2026/05/29/building-maps-connect-new-havens-past-present",
+   "based_on": "Yale Environmental Humanities and YCGS compare the 1846 harbor survey with today's city",
+   "who": "Leo (fictional), history PhD student.",
+   "shows": [
+    "Yale's Digital Atlas and Beinecke maps found",
+    "1937 HOLC map with FEMA flood zones",
+    "Georeferencing old maps as a method",
+    "A window from 1846 to today"
+   ],
+   "steps": [
+    {
+     "type": "turn",
+     "message": "How much of New Haven's shoreline near Long Wharf and City Point was filled between 1846 and today, and do the filled land and the lower-graded areas of the 1937 HOLC map now fall inside FEMA flood zones?"
+    },
+    {
+     "type": "ui",
+     "action": "tab",
+     "tab": "frame",
+     "note": "History, housing policy and flood risk in one graph."
+    },
+    {
+     "type": "ui",
+     "action": "tab",
+     "tab": "data",
+     "note": "Yale holdings sit next to open federal layers."
+    }
+   ],
+   "checks": {
+    "graph_min_nodes": 5,
+    "scope_contains": [
+     41.29,
+     -72.92
+    ],
+    "scope_time_start_max": 1850,
+    "picks_min": 3,
+    "no_unverified": true,
+    "picks_any": [
+     "cur:nh_atlas",
+     "cur:beinecke_nhv",
+     "cur:yale_geoblacklight"
+    ],
+    "picks_any_2": [
+     "cur:holc",
+     "cur:nfhl"
+    ],
+    "methods_any": [
+     "georef",
+     "overlay",
+     "digitiz",
+     "rectif"
+    ]
+   }
+  },
+  {
+   "id": "yale_forest",
+   "group": "yale",
+   "title": "Forest carbon at Yale-Myers Forest",
+   "field": "Forestry",
+   "program": "YCGS lidar biomass project",
+   "program_url": "https://geospatial.yale.edu/high-resolution-lidar-for-biomass-estimation-a-deep-dive-into-connecticuts-forest-carbon-stock",
+   "based_on": "YCGS compared 2016 and 2023 Connecticut lidar for forest carbon; its drone workshop flies Yale-Myers Forest",
+   "who": "Ana (fictional), YSE forestry student.",
+   "shows": [
+    "Statewide lidar from 2016 and 2023",
+    "Field plots and GEDI to calibrate biomass",
+    "YCGS drone lidar to check 2026",
+    "Aerial imagery of the forest"
+   ],
+   "steps": [
+    {
+     "type": "turn",
+     "message": "How did aboveground biomass change across Yale-Myers Forest in northeastern Connecticut between 2016 and 2023, and how could a YCGS drone lidar flight in 2026 check it?"
+    },
+    {
+     "type": "ui",
+     "action": "tab",
+     "tab": "data",
+     "note": "Three scales: field plots, airborne lidar, drone lidar. YCGS rental rules bar DJI drones on federally funded projects."
+    },
+    {
+     "type": "turn",
+     "message": "Show me recent aerial imagery of the forest."
+    },
+    {
+     "type": "ui",
+     "action": "map",
+     "note": "Recent aerial imagery of Yale-Myers Forest."
+    }
+   ],
+   "checks": {
+    "graph_min_nodes": 5,
+    "scope_contains": [
+     41.956,
+     -72.14
+    ],
+    "scope_time_start_max": 2016,
+    "picks_min": 3,
+    "no_unverified": true,
+    "picks_any": [
+     "cur:cteco",
+     "3dep"
+    ],
+    "picks_any_2": [
+     "cur:ycgs_drone",
+     "cur:fia",
+     "gedi"
+    ],
+    "tool_used": "map_stac_preview"
+   }
+  },
+  {
+   "id": "yale_epi",
+   "group": "yale",
+   "title": "Behind Pakistan's air quality score",
+   "field": "Environmental policy",
+   "program": "Environmental Performance Index",
+   "program_url": "https://epi.yale.edu/",
+   "based_on": "The 2026 EPI (Yale Center for Environmental Law & Policy, supported by YCGS) ranks 177 countries",
+   "who": "Omar (fictional), Jackson School MPP student.",
+   "shows": [
+    "From one national score to province maps",
+    "EPI flagged as national only",
+    "Sentinel-5P NO2 and satellite PM2.5",
+    "Province boundaries for zonal statistics"
+   ],
+   "steps": [
+    {
+     "type": "turn",
+     "message": "Pakistan moved up in the 2026 Environmental Performance Index, but its air quality scores are still low. Starting from the EPI, where within Pakistan did NO2 and PM2.5 change most between 2019 and 2024?"
+    },
+    {
+     "type": "ui",
+     "action": "tab",
+     "tab": "data",
+     "note": "The EPI is a country score; the answer needs the rasters underneath it."
+    }
+   ],
+   "checks": {
+    "graph_min_nodes": 5,
+    "scope_contains": [
+     30.0,
+     70.0
+    ],
+    "scope_time_start_max": 2019,
+    "picks_min": 3,
+    "no_unverified": true,
+    "picks_any": [
+     "cur:epi"
+    ],
+    "picks_any_2": [
+     "s5p",
+     "cur:acag",
+     "sentinel-5p"
+    ],
+    "methods_any": [
+     "zonal",
+     "population-weight",
+     "population weight",
+     "trend",
+     "difference",
+     "change"
+    ]
+   }
+  },
+  {
+   "id": "yale_opinion",
+   "group": "yale",
+   "title": "Climate worry versus extreme heat in Connecticut",
+   "field": "Climate communication",
+   "program": "Yale Climate Opinion Maps",
+   "program_url": "https://climatecommunication.yale.edu/visualizations-data/ycom-us/",
+   "based_on": "The Yale Program on Climate Change Communication models opinion for states, districts and counties",
+   "who": "Grace (fictional), Yale College senior writing a thesis.",
+   "shows": [
+    "Modeled opinion estimates with error margins",
+    "Heat days from NOAA and CDC",
+    "Connecticut counties versus planning regions",
+    "Scope set to the whole state"
+   ],
+   "steps": [
+    {
+     "type": "turn",
+     "message": "Where in Connecticut is worry about climate change lowest compared with how many extreme heat days people had from 2015 to 2024, and how far can I trust county-level differences?"
+    },
+    {
+     "type": "ui",
+     "action": "tab",
+     "tab": "data",
+     "note": "Opinion values are modeled estimates, so differences between nearby counties can be noise."
+    }
+   ],
+   "checks": {
+    "graph_min_nodes": 5,
+    "scope_contains": [
+     41.6,
+     -72.7
+    ],
+    "scope_unit_any": [
+     "county",
+     "region",
+     "town"
+    ],
+    "picks_min": 3,
+    "no_unverified": true,
+    "picks_any": [
+     "cur:ycom"
+    ],
+    "picks_any_2": [
+     "cur:nclimgrid",
+     "cur:cdc_heat",
+     "gridmet",
+     "prism"
+    ],
+    "text_contains_any": [
+     "error",
+     "margin",
+     "uncertain",
+     "planning region",
+     "modeled",
+     "model"
+    ]
+   }
+  },
+  {
+   "id": "yale_steel",
+   "group": "yale",
+   "title": "Tracking steel output from space",
+   "field": "Economics",
+   "program": "Geospatial measurement of economic activity",
+   "program_url": "https://www.nber.org/papers/w33619",
+   "based_on": "Yale economists use pollution, night light and heat data to estimate plant output; featured by YCGS",
+   "who": "Wei (fictional), economics PhD student.",
+   "shows": [
+    "Plant locations matched to pollution plumes",
+    "Sentinel-5P NO2 and VIIRS night lights",
+    "Yale's Planet license for plant-level imagery",
+    "Monthly panel design"
+   ],
+   "steps": [
+    {
+     "type": "turn",
+     "message": "Can satellite NO2 and night lights track monthly output at India's large steel plants from 2019 to 2025?"
+    },
+    {
+     "type": "ui",
+     "action": "tab",
+     "tab": "frame",
+     "note": "Output is hidden; emissions, lights and heat are what satellites see."
+    },
+    {
+     "type": "ui",
+     "action": "tab",
+     "tab": "data",
+     "note": "Plant points come from a tracker; the signals are gridded."
+    }
+   ],
+   "checks": {
+    "graph_min_nodes": 5,
+    "scope_contains": [
+     22.0,
+     79.0
+    ],
+    "scope_time_start_max": 2019,
+    "picks_min": 3,
+    "no_unverified": true,
+    "picks_any": [
+     "cur:gem_steel"
+    ],
+    "picks_any_2": [
+     "s5p",
+     "viirs"
+    ],
+    "methods_any": [
+     "panel",
+     "regression",
+     "machine",
+     "buffer",
+     "validat",
+     "fixed effect"
+    ]
    }
   }
  ]

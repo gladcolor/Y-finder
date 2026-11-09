@@ -115,6 +115,7 @@ def record(case, model):
              "next_steps": getattr(s, "next_steps", []), "prev_response_id": s.prev_response_id, "model": model,
              "layers": s.layers}
     demo = {k: case[k] for k in ("id", "title", "field", "who", "shows")}
+    demo.update({k: case[k] for k in ("group", "program", "program_url", "based_on") if case.get(k)})  # Yale research cases name their real program
     demo.update({"recorded": dt.date.today().isoformat(), "model": model, "seconds": round(time.time() - t0),
                  "steps": steps, "layers": layers, "final_state": final, "eval": rec["eval"]})
     path = os.path.join(OUT, case["id"] + ".json")
@@ -171,7 +172,9 @@ def main():
         p = os.path.join(OUT, c["id"] + ".json")
         if os.path.exists(p):
             d = json.load(open(p, encoding="utf-8"))
-            index.append({k: d[k] for k in ("id", "title", "field", "who", "shows", "recorded", "model")})
+            # program details come from demo_cases.json, so they can be corrected without re-recording
+            index.append({**{k: d[k] for k in ("id", "title", "field", "who", "shows", "recorded", "model")},
+                          **{k: c[k] for k in ("group", "program", "program_url", "based_on") if c.get(k)}})
     json.dump({"cases": index}, open(os.path.join(OUT, "index.json"), "w", encoding="utf-8"), ensure_ascii=False, indent=1)
     print("index:", [c["id"] for c in index])
 
