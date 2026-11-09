@@ -2,7 +2,7 @@
 
 **A conversational geospatial data guide.** Describe a research question; Y-finder maps the factors behind it, agrees a study scope with you, then finds datasets, tools and methods and labels how well each one fits that scope.
 
-Live prototype: **https://app.researcharchitect.ai/y-finder/**
+Live prototype: **https://researcharchitect.ai/y** (short link; it opens https://app.researcharchitect.ai/y-finder/)
 
 Y-finder is an independent prototype by Huan Ning, prepared for the Yale Center for Geospatial Solutions (YCGS). It is not an official Yale or YCGS service.
 
