@@ -149,3 +149,41 @@ def test_previews_are_off_when_disabled(s, monkeypatch):
     monkeypatch.setenv("YFINDER_PREVIEWS", "0")
     s.picks = [_pick("cur:nfhl")]
     assert previews.start(s, sync=True) is False and s.previews == {}
+
+
+def test_arcgis_query_pages_past_the_server_cap(monkeypatch):
+    calls = []
+
+    class R:
+        is_redirect = False
+
+        def __init__(self, body):
+            self.body = body
+
+        def raise_for_status(self):
+            pass
+
+        def json(self):
+            return self.body
+
+    def get(url, params=None, **kw):
+        off = (params or {}).get("resultOffset", 0)
+        calls.append(off)
+        feats = [{"type": "Feature", "properties": {"i": off + k}, "geometry": None} for k in range(1000 if off < 2000 else 300)]
+        return R({"type": "FeatureCollection", "features": feats, "properties": {"exceededTransferLimit": off < 2000}})
+    monkeypatch.setattr(sources.requests, "get", get)
+    monkeypatch.setattr(sources, "safe_url", lambda u: True)
+    fc = sources.arcgis_query("https://x.example/arcgis/rest/services/A/FeatureServer/2", NEW_HAVEN, max_features=3000)
+    assert calls == [0, 1000, 2000] and len(fc["features"]) == 2300 and fc["features"][-1]["properties"]["i"] == 2299
+    calls.clear()  # a server that ignores offsets returns the same page: stop instead of looping
+    monkeypatch.setattr(sources.requests, "get", lambda url, params=None, **kw: calls.append(1) or R(
+        {"features": [{"type": "Feature", "properties": {"i": 0}, "geometry": None}] * 5, "exceededTransferLimit": True}))
+    assert len(sources.arcgis_query("https://x.example/arcgis/rest/services/A/FeatureServer/2", NEW_HAVEN)["features"]) == 5 and len(calls) == 2
+
+
+def test_nclimgrid_month_rule():
+    assert previews._months({"time_start": "2015-01-01", "time_end": "2024-12-31"})[0] == (2024, 7)   # long window: July
+    assert previews._months({"time_start": "2024-01", "time_end": "2024-03"})[0] == (2024, 3)         # short window: its last month
+    import datetime as dt
+    t = dt.date.today()
+    assert previews._months({"time_start": "2020", "time_end": str(t.year + 1)})[0] == (t.year, t.month)  # reaches today: latest

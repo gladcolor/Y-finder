@@ -310,18 +310,36 @@ def arcgis_query(url: str, bbox, where: str = "1=1", max_features: int = 2000, s
                        "inSR": 4326, "spatialRel": "esriSpatialRelIntersects"})
     if simplify_deg:  # server-side generalization keeps big boundary layers light for the browser
         params.update({"maxAllowableOffset": simplify_deg, "geometryPrecision": 5})
-    r = requests.get(layer + "/query", params=params, headers=HEADERS, timeout=45, allow_redirects=False)
-    hops = 0
-    while r.is_redirect and hops < 3:  # follow redirects only to hosts that pass the same public-HTTPS check
-        nxt = requests.compat.urljoin(r.url, r.headers.get("Location", ""))
-        if not safe_url(nxt):
-            raise ValueError("Service redirected to a host that is not allowed")
-        r = requests.get(nxt, headers=HEADERS, timeout=45, allow_redirects=False)
-        hops += 1
-    r.raise_for_status()
-    fc = r.json()
-    if "error" in fc:
-        raise ValueError(str(fc["error"].get("message", "ArcGIS error")))
+    def page(offset: int) -> dict:
+        q = dict(params, resultOffset=offset) if offset else params
+        r = requests.get(layer + "/query", params=q, headers=HEADERS, timeout=45, allow_redirects=False)
+        hops = 0
+        while r.is_redirect and hops < 3:  # follow redirects only to hosts that pass the same public-HTTPS check
+            nxt = requests.compat.urljoin(r.url, r.headers.get("Location", ""))
+            if not safe_url(nxt):
+                raise ValueError("Service redirected to a host that is not allowed")
+            r = requests.get(nxt, headers=HEADERS, timeout=45, allow_redirects=False)
+            hops += 1
+        r.raise_for_status()
+        out = r.json()
+        if "error" in out:
+            raise ValueError(str(out["error"].get("message", "ArcGIS error")))
+        return out
+
+    # Servers cap each answer (often 1,000 or 2,000 features); keep asking with an offset until max_features.
+    fc = page(0)
+    feats = list(fc.get("features", []))
+    for _ in range(10):
+        more = fc.get("exceededTransferLimit") or (fc.get("properties") or {}).get("exceededTransferLimit")
+        if not more or len(feats) >= max_features or not fc.get("features"):
+            break
+        first = fc["features"][0]
+        fc = page(len(feats))
+        if not fc.get("features") or fc["features"][0] == first:  # the server ignores offsets
+            break
+        feats += fc["features"]
+    feats = feats[:max_features]
+    fc = {"features": feats}
     feats = fc.get("features", [])
     for f in feats:  # keep popups readable and payloads small
         props = f.get("properties") or {}

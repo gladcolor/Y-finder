@@ -261,10 +261,11 @@ def _tiger(s, pick, meta):
     level = ("block_group" if "block" in unit else "tract" if "tract" in unit else "town" if "town" in unit
              else "county" if "county" in unit or w * h > 40000 else "tract")
     fc = _retry(lambda: sources.census_boundaries(level, sb))
-    layer, note = _vector_layer(s, pick, fc.get("features", []), f"Census {level.replace('_', ' ')}s", "U.S. Census Bureau TIGERweb")
+    plural = {"county": "counties", "block_group": "block groups"}.get(level, level + "s")
+    layer, note = _vector_layer(s, pick, fc.get("features", []), f"Census {plural}", "U.S. Census Bureau TIGERweb")
     if not layer:
         return {"status": "none", "note": note or "No boundaries found"}
-    return {"status": "ready", "kind": "service", "layers": [layer], "note": f"{layer['n']} {level.replace('_', ' ')}s"}
+    return {"status": "ready", "kind": "service", "layers": [layer], "note": f"{layer['n']} {plural}"}
 
 
 # ---------------------------------------------------------------------------- small downloads (no service)
@@ -279,14 +280,18 @@ def _csv(s, pick, rows: list[list]) -> str | None:
 
 
 def _months(scope: dict) -> list[tuple[int, int]]:
-    """Months to try for nClimGrid: July of the study's last year when it is in the past, else the latest month."""
+    """Months to try for nClimGrid. A window of a year or more previews July (the summer peak) of its last year;
+    a shorter window previews its last month; a window reaching today starts from the latest month."""
     today = dt.date.today()
     y = _study_year(scope)
-    m2 = re.match(r"\d{4}-(\d{2})", str(scope.get("time_end") or ""))
-    if y and (y, int(m2.group(1)) if m2 else 7) < (today.year, today.month):
-        start = (y, int(m2.group(1)) if m2 else 7)
-    else:
-        start = (today.year, today.month)
+    a = re.match(r"(\d{4})(?:-(\d{2}))?", str(scope.get("time_start") or ""))
+    b = re.match(r"(\d{4})(?:-(\d{2}))?", str(scope.get("time_end") or ""))
+    start = (today.year, today.month)
+    if y and b:
+        months = (int(b.group(1)) * 12 + int(b.group(2) or 12)) - ((int(a.group(1)) * 12 + int(a.group(2) or 1)) if a else 0)
+        want = (y, 7) if (not a or months >= 11) else (y, int(b.group(2) or 7))
+        if want < (today.year, today.month):
+            start = want
     out, (yy, mm) = [], start
     for _ in range(8):
         out.append((yy, mm))
