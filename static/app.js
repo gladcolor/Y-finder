@@ -328,32 +328,117 @@
   }
 
   // ------------------------------------------------------------------ frame tab
+  // Influence graph in Research Architect's style (app_v2/static/app_v2.js): node colour by graph role
+  // (source green, internal sky blue, sink violet), labels below on white chips, springy edges, data
+  // coverage as transparency, dagre top-down layout, hover and tap-to-focus, a pulse on the outcome.
+  // One change: coverage fades the circle, not the label, so factors without data stay readable.
+  try { if (window.cytoscapeDagre && window.dagre) cytoscape.use(window.cytoscapeDagre); } catch { /* already registered */ }
+  const RA_STYLE = [
+    { selector: 'node', style: {
+      'background-color': '#93c5fd', 'background-opacity': 0.95, label: 'data(label)', color: '#0f172a',
+      'text-valign': 'bottom', 'text-halign': 'center', 'text-margin-y': 4, 'text-wrap': 'wrap', 'text-max-width': 110,
+      'text-background-color': '#ffffff', 'text-background-opacity': 0.78, 'text-background-padding': 3, 'text-background-shape': 'roundrectangle',
+      'font-size': 11, 'font-family': 'Inter, system-ui, sans-serif', 'font-weight': 600,
+      width: 'mapData(len, 0, 30, 16, 34)', height: 'mapData(len, 0, 30, 16, 34)',
+      'border-width': 2, 'border-color': '#fff', 'underlay-shape': 'ellipse', 'overlay-shape': 'ellipse', 'overlay-opacity': 0,
+      'transition-property': 'background-color, background-opacity, border-color, border-width, opacity, overlay-opacity, overlay-padding',
+      'transition-duration': '180ms', 'transition-timing-function': 'ease-out' } },
+    { selector: 'node[core = 1]', style: { 'border-color': '#334155' } },
+    { selector: 'node[role = "source"]', style: { 'background-color': '#6ee7b7' } },
+    { selector: 'node[role = "sink"]', style: { 'background-color': '#c4b5fd', 'border-color': '#a78bfa', 'border-width': 3, 'overlay-color': '#6d28d9' } },
+    { selector: 'node[?target]', style: { 'overlay-color': '#2563eb' } },
+    { selector: 'edge', style: {
+      'line-color': '#94a3b8', 'target-arrow-color': '#94a3b8', 'target-arrow-shape': 'triangle',
+      'curve-style': 'unbundled-bezier', 'control-point-distances': [-12, 12], 'control-point-weights': [0.25, 0.75],
+      width: 1.5, opacity: 0.65, 'arrow-scale': 0.95,
+      'transition-property': 'line-color, target-arrow-color, width, opacity', 'transition-duration': '140ms', 'transition-timing-function': 'ease-out' } },
+    // data coverage (Research Architect's opacities: covered 1, partial 0.5, uncovered 0.18)
+    { selector: 'node.cov-partial', style: { 'background-opacity': 0.5, 'border-opacity': 0.6 } },
+    { selector: 'node.cov-uncovered', style: { 'background-opacity': 0.18, 'border-opacity': 0.45, color: '#475569' } },
+    { selector: 'edge.cov-covered-edge', style: { opacity: 0.95 } },
+    { selector: 'edge.cov-partial-edge', style: { opacity: 0.66 } },
+    { selector: 'edge.cov-uncovered-edge', style: { opacity: 0.42 } },
+    // interaction states follow the analytical symbology, as in Research Architect
+    { selector: 'node.dim', style: { opacity: 0.25, 'background-color': '#cccccc' } },
+    { selector: 'edge.dim', style: { opacity: 0.15, 'line-color': '#dddddd', 'target-arrow-color': '#dddddd' } },
+    { selector: 'node.dim-strong', style: { opacity: 0.15, 'background-color': '#cccccc' } },
+    { selector: 'edge.dim-strong', style: { opacity: 0.10, 'line-color': '#dddddd', 'target-arrow-color': '#dddddd' } },
+    { selector: 'node.is-hover', style: { 'overlay-color': '#6366f1', 'overlay-opacity': 0.12, 'overlay-padding': 4 } },
+    { selector: 'node:selected, node.anchor', style: { 'overlay-color': '#e8590c', 'overlay-opacity': 0.22, 'overlay-padding': 7 } },
+    { selector: 'edge.is-hover', style: { 'line-color': '#6366f1', 'target-arrow-color': '#6366f1', width: 2.5, opacity: 1 } },
+    { selector: 'edge:selected, edge.anchor', style: { 'line-color': '#e8590c', 'target-arrow-color': '#e8590c', width: 4, opacity: 1 } },
+  ];
+  function graphElements(g, withCoverage) {
+    const indeg = {}, outdeg = {};
+    g.edges.forEach((e) => { outdeg[e.source] = (outdeg[e.source] || 0) + 1; indeg[e.target] = (indeg[e.target] || 0) + 1; });
+    const cov = Object.fromEntries(g.nodes.map((n) => [n.id, n.data_coverage || 'uncovered']));
+    const nodes = g.nodes.map((n) => {
+      const i = indeg[n.id] || 0, o = outdeg[n.id] || 0;
+      const role = i === 0 && o > 0 ? 'source' : o === 0 && i > 0 ? 'sink' : 'internal'; // Research Architect's tagNodeRoles
+      return { data: { id: n.id, label: n.label, len: String(n.label || '').length, role, kind: n.role, core: n.core ? 1 : 0,
+        target: n.role === 'outcome' || n.id === g.outcome }, classes: withCoverage ? 'cov-' + cov[n.id] : '' };
+    });
+    const edges = g.edges.map((e, i) => {
+      const a = cov[e.source], b = cov[e.target];
+      const cls = !withCoverage ? '' : a === 'uncovered' || b === 'uncovered' ? 'cov-uncovered-edge' : a === 'partial' || b === 'partial' ? 'cov-partial-edge' : 'cov-covered-edge';
+      return { data: { id: 'e' + i, source: e.source, target: e.target, note: e.note }, classes: cls };
+    });
+    return nodes.concat(edges);
+  }
+  function destroyGraph() { clearInterval(state.cyPulse); if (state.cy) { state.cy.destroy(); state.cy = null; } }
   function renderGraph() {
     const g = state.graph; const has = !!(g && g.nodes && g.nodes.length);
     $('#graphEmpty').hidden = has; $('#graph').hidden = !has; $('#graphLegend').hidden = !has; $('#frameActions').hidden = !has;
     if (!has) return;
     $('#btnGraphml').href = `api/session/${encodeURIComponent(state.sid)}/graph.graphml`;
-    const els = g.nodes.map((n) => ({ data: { id: n.id, label: n.label, cov: n.data_coverage || 'uncovered', role: n.role, core: n.core ? 1 : 0 } }))
-      .concat(g.edges.map((e, i) => ({ data: { id: 'e' + i, source: e.source, target: e.target, note: e.note } })));
+    const withCov = (state.picks || []).length > 0; // coverage is shown once datasets have been checked
+    const els = graphElements(g, withCov);
+    $('#covLegend').hidden = !withCov;
+    ['covered', 'partial', 'uncovered'].forEach((k) => { $(`#covLegend [data-c="${k}"]`).textContent = g.nodes.filter((n) => (n.data_coverage || 'uncovered') === k).length; });
     const draw = () => {
-      if (state.cy) state.cy.destroy();
-      state.cy = cytoscape({
-        container: $('#graph'), elements: els, wheelSensitivity: 0.25, minZoom: 0.3, maxZoom: 2.5,
-        style: [
-          { selector: 'node', style: { label: 'data(label)', 'font-size': 10, 'text-wrap': 'wrap', 'text-max-width': 92, 'text-valign': 'bottom', 'text-margin-y': 4, color: '#1d2433', width: 20, height: 20, 'background-color': '#cfd5df', 'border-width': 0 } },
-          { selector: 'node[cov = "covered"]', style: { 'background-color': '#2e9e57' } },
-          { selector: 'node[cov = "partial"]', style: { 'background-color': '#e0a030' } },
-          { selector: 'node[core = 1]', style: { 'border-width': 3, 'border-color': '#1d2433' } },
-          { selector: 'node[role = "outcome"]', style: { shape: 'diamond', width: 30, height: 30, 'background-color': '#1f3a68', 'font-weight': 700 } },
-          { selector: 'node:selected', style: { 'overlay-color': '#2b4f8a', 'overlay-opacity': 0.18 } },
-          { selector: 'edge', style: { width: 1.2, 'line-color': '#aab2c0', 'target-arrow-color': '#aab2c0', 'target-arrow-shape': 'triangle', 'curve-style': 'bezier', 'arrow-scale': 0.8 } },
-        ],
-        // Outcome in the center, core factors on the inner ring, the rest outside: readable in a narrow panel.
-        layout: { name: 'concentric', concentric: (n) => (n.data('role') === 'outcome' ? 3 : n.data('core') ? 2 : 1),
-          levelWidth: () => 1, minNodeSpacing: 34, padding: 18, avoidOverlap: true, startAngle: -Math.PI / 2 },
+      destroyGraph();
+      const cy = state.cy = cytoscape({ container: $('#graph'), elements: els, style: RA_STYLE, wheelSensitivity: 0.25, minZoom: 0.25, maxZoom: 3, layout: { name: 'preset' } });
+      try {
+        cy.layout({ name: 'dagre', rankDir: 'TB', ranker: 'tight-tree', nodeSep: 28, rankSep: 64, edgeSep: 14,
+          nodeDimensionsIncludeLabels: true, animate: false, fit: true, padding: 22 }).run();
+      } catch { // dagre did not load: outcome in the centre, core factors on the inner ring
+        cy.layout({ name: 'concentric', concentric: (n) => (n.data('target') ? 3 : n.data('core') ? 2 : 1), levelWidth: () => 1,
+          minNodeSpacing: 34, padding: 18, avoidOverlap: true, startAngle: -Math.PI / 2 }).run();
+      }
+      const clear = () => cy.elements().removeClass('dim dim-strong anchor');
+      cy.on('mouseover', 'node', (e) => { e.target.addClass('is-hover'); e.target.connectedEdges().addClass('is-hover'); });
+      cy.on('mouseout', 'node', (e) => { e.target.removeClass('is-hover'); e.target.connectedEdges().removeClass('is-hover'); });
+      cy.on('mouseover', 'edge', (e) => e.target.addClass('is-hover'));
+      cy.on('mouseout', 'edge', (e) => e.target.removeClass('is-hover'));
+      cy.on('tap', 'node', (e) => { // focus the node and its neighbours
+        const node = e.target; const keep = new Set(node.neighborhood('node').add(node).map((n) => n.id()));
+        cy.batch(() => {
+          clear(); node.removeStyle();
+          cy.nodes().forEach((n) => { if (!keep.has(n.id())) n.addClass('dim'); });
+          cy.edges().forEach((ed) => { if (!keep.has(ed.source().id()) || !keep.has(ed.target().id())) ed.addClass('dim'); });
+          node.addClass('anchor');
+        });
+        showNode(node.id());
       });
-      state.cy.on('tap', 'node', (e) => showNode(e.target.id()));
-      state.cy.on('tap', 'edge', (e) => { const d = e.target.data(); $('#nodeInfo').hidden = false; $('#nodeInfo').innerHTML = `<h4>${esc(d.source)} → ${esc(d.target)}</h4>${esc(d.note || '')}`; });
+      cy.on('tap', 'edge', (e) => {
+        const ed = e.target; const ends = new Set([ed.source().id(), ed.target().id()]);
+        cy.batch(() => {
+          clear();
+          cy.nodes().forEach((n) => { if (!ends.has(n.id())) n.addClass('dim-strong'); });
+          cy.edges().forEach((x) => { if (x.id() !== ed.id()) x.addClass('dim-strong'); });
+          ed.addClass('anchor');
+        });
+        const lab = (id) => (g.nodes.find((n) => n.id === id) || {}).label || id;
+        $('#nodeInfo').hidden = false; $('#nodeInfo').innerHTML = `<h4>${esc(lab(ed.data('source')))} → ${esc(lab(ed.data('target')))}</h4>${esc(ed.data('note') || '')}`;
+      });
+      cy.on('tap', (e) => { if (e.target === cy) { clear(); cy.elements().unselect(); $('#nodeInfo').hidden = true; } });
+      // the gentle pulse on the outcome (the research target), only while the Frame tab is open
+      state.cyPulse = setInterval(() => {
+        if (cy.destroyed() || !$('#tab-frame').classList.contains('on')) return;
+        const t = cy.$('node[?target]').not('.anchor'); if (!t.length) return;
+        t.animate({ style: { 'overlay-opacity': 0.16, 'overlay-padding': 7 } }, { duration: 700, easing: 'ease-out',
+          complete: () => t.animate({ style: { 'overlay-opacity': 0, 'overlay-padding': 0 } }, { duration: 1100, easing: 'ease-in' }) });
+      }, 2500);
     };
     if ($('#tab-frame').classList.contains('on')) draw(); else state.drawGraph = draw;
   }
@@ -687,7 +772,7 @@
     state.pending.length = 0;
     [...state.layers.keys()].forEach(removeLayer);
     Object.assign(state, { graph: null, scope: null, picks: [], methods: [], nextSteps: [], conv: null });
-    if (state.cy) { state.cy.destroy(); state.cy = null; }
+    destroyGraph();
     msgs.innerHTML = ''; $('#welcome').hidden = false; $('#nodeInfo').hidden = true; $('#attachInfo').hidden = true;
     STEPS.forEach((s) => step(s, null));
     if (state.mapReady && map.getSource('coverage')) map.getSource('coverage').setData({ type: 'FeatureCollection', features: [] });

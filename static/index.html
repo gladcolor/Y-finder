@@ -67,8 +67,18 @@
       <div class="tri"><span>Real world</span><i></i><span class="on">Influence graph</span><i></i><span class="on">Scope</span><i></i><span>Data</span></div>
       <div id="graphEmpty" class="empty">The factors behind your question appear here.</div>
       <div id="graph" hidden></div>
-      <div id="graphLegend" class="legend" hidden>
-        <span><b class="dot covered"></b>Data fits</span><span><b class="dot partial"></b>Partly</span><span><b class="dot uncovered"></b>No data yet</span><span><b class="dot outcome"></b>Outcome</span><span><b class="ring"></b>Core factor</span>
+      <div id="graphLegend" class="ra-legend" hidden>
+        <div class="ra-lg"><div class="ra-lt">Graph roles</div>
+          <span class="ra-li" title="Source: no incoming links, a starting factor"><i class="ra-n src"></i>Source</span>
+          <span class="ra-li" title="Internal: has incoming and outgoing links"><i class="ra-n"></i>Internal</span>
+          <span class="ra-li" title="Sink: no outgoing links. The pulsing node is the outcome."><i class="ra-n sink"></i>Sink</span>
+          <span class="ra-li" title="Core factor: needed to answer the question"><i class="ra-n core"></i>Core</span>
+        </div>
+        <div class="ra-lg" id="covLegend" hidden><div class="ra-lt">Data coverage · opacity</div>
+          <span class="ra-li" title="A dataset that fits your scope measures this factor"><i class="ra-n"></i>Covered <b data-c="covered"></b></span>
+          <span class="ra-li" title="Only partial data, or a proxy"><i class="ra-n" style="opacity:.5"></i>Partial <b data-c="partial"></b></span>
+          <span class="ra-li" title="No fitting data yet"><i class="ra-n" style="opacity:.18"></i>Uncovered <b data-c="uncovered"></b></span>
+        </div>
       </div>
       <div id="nodeInfo" class="node-info" hidden></div>
       <div id="scopeCard" class="scope-card" hidden></div>
@@ -167,6 +177,8 @@
 
 <script src="https://cdnjs.cloudflare.com/ajax/libs/maplibre-gl/4.7.1/maplibre-gl.min.js"></script>
 <script src="https://cdnjs.cloudflare.com/ajax/libs/cytoscape/3.30.2/cytoscape.min.js"></script>
+<script src="https://cdnjs.cloudflare.com/ajax/libs/dagre/0.8.5/dagre.min.js"></script>
+<script src="https://cdn.jsdelivr.net/npm/cytoscape-dagre@2.5.0/cytoscape-dagre.min.js"></script>
 <script src="https://cdnjs.cloudflare.com/ajax/libs/marked/12.0.2/marked.min.js"></script>
 <script src="https://cdnjs.cloudflare.com/ajax/libs/dompurify/3.1.6/purify.min.js"></script>
 <script src="static/app.js"></script>
