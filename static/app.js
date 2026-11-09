@@ -703,7 +703,7 @@
     let html = '';
     groups.forEach(([role, name]) => {
       const g = ps.filter((p) => (p.role || 'supporting') === role && !(hide && p.fit.overall === 'poor')); if (!g.length) return;
-      html += `<div class="group-h">${esc(name)}</div>`;
+      html += `<div class="group-h">${esc(name)}<span class="gcount">${g.length}</span></div>`;
       g.forEach((p) => {
         // one line that matters most: the first dimension that does not fit, else "fits"
         const worst = ['resolution', 'extent', 'time'].map((k) => p.fit[k]).find((x) => x && (x.label === 'poor' || x.label === 'partial'));
@@ -721,14 +721,14 @@
           <div class="src">${esc([p.source, p.resolution, p.time].filter(Boolean).join(' · '))}</div>
           <div class="one ${esc(worst ? worst.label : unknown.length ? 'unknown' : p.fit.overall)}">${esc(one)}</div>
           <div class="pv" data-pv="${esc(p.ref)}">${pvLine(p.ref)}</div>
-          <div class="more" hidden>
+          <div class="more" hidden><div class="well">
             ${timeBar(p)}
             ${reasons ? `<ul class="reasons">${reasons}</ul>` : ''}
             ${p.why ? `<div class="why">${esc(p.why)}</div>` : ''}
             ${p.limitations ? `<div class="lim"><b>Limits:</b> ${esc(p.limitations)}</div>` : ''}
             ${p.yale_note ? `<div class="yale-note">${esc(p.yale_note)}</div>` : ''}
             ${p.factors && p.factors.length ? `<div class="factors">${p.factors.map((f) => `<span>${esc(nodeLabel(f))}</span>`).join('')}</div>` : ''}
-            <div class="row">${url ? `<a class="btn" href="${esc(url)}" target="_blank" rel="noopener">Source</a>` : ''}<button class="btn" data-act="hb">How to access</button><button class="btn" data-act="cov">Coverage</button>${p.stac_collection ? '<button class="btn" data-act="preview">Preview</button>' : ''}${p.map && (state.previews[p.ref] || {}).status !== 'ready' ? '<button class="btn" data-act="map" title="Draw its layers on the map">Map</button>' : ''}<button class="btn" data-act="ask">Ask</button>
+            </div><div class="row">${url ? `<a class="btn" href="${esc(url)}" target="_blank" rel="noopener">Source</a>` : ''}<button class="btn" data-act="hb">How to access</button><button class="btn" data-act="cov">Coverage</button>${p.stac_collection ? '<button class="btn" data-act="preview">Preview</button>' : ''}${p.map && (state.previews[p.ref] || {}).status !== 'ready' ? '<button class="btn" data-act="map" title="Draw its layers on the map">Map</button>' : ''}<button class="btn" data-act="ask">Ask</button>
               <span class="verified">${esc(verifiedText[p.verified] || '')}</span></div>
           </div></div>`;
       });
