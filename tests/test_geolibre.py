@@ -262,3 +262,18 @@ def test_catalog_browse_by_source(client):
     assert len(res) == 111 and all(c["source"].startswith("GeoLibre") for c in res)
     assert [c["source"] for c in res[:6]] == ["GeoLibre services"] * 6  # the few services are listed first
     assert client.get("/api/catalog/search?q=&source=evil").json["results"] == []
+
+
+def test_heavy_point_layers_are_sampled_not_snapped_to_a_grid():
+    """50,000 arrest points with 25 columns: a sample at about 10 m precision, never rounded to 0.01 degree (a visible
+    lattice that moves points by hundreds of meters)."""
+    import random
+    from yfinder import vector
+    rnd = random.Random(7)
+    feats = [{"type": "Feature", "geometry": {"type": "Point", "coordinates": [-118.5 + rnd.random() * 0.5, 33.8 + rnd.random() * 0.5]},
+              "properties": {f"c{i}": "x" * 12 for i in range(25)}} for _ in range(50000)]
+    fc, note, total = vector.slim(feats, [-118.7, 33.7, -117.9, 34.4])
+    xs = [f["geometry"]["coordinates"][0] for f in fc["features"][:300]]
+    assert total == 50000 and "a sample of" in note and len(fc["features"]) < 50000
+    assert sum(len(repr(x).split(".")[1]) >= 3 for x in xs) > 250          # not snapped to two decimals
+    assert len(fc["features"][0]["properties"]) <= vector.MAX_PROPS

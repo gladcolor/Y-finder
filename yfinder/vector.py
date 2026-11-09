@@ -22,10 +22,15 @@ def _intersects(a, b) -> bool:
     return not (a[2] < b[0] or a[0] > b[2] or a[3] < b[1] or a[1] > b[3])
 
 
-def _feature(f: dict, nd: int) -> dict:
+MAX_PROPS = 16  # heavy layers keep this many attributes per feature (popups stay useful, the file stays light)
+
+
+def _feature(f: dict, nd: int, max_props: int | None = None) -> dict:
     g = f["geometry"]
     geom = g if g.get("type") == "GeometryCollection" else {"type": g.get("type"), "coordinates": _round(g.get("coordinates"), nd)}
     props = {k: v for k, v in (f.get("properties") or {}).items() if isinstance(v, (str, int, float, bool)) or v is None}
+    if max_props and len(props) > max_props:
+        props = {k: v for k, v in list(props.items())[:max_props] if v not in (None, "")}
     return {"type": "Feature", "properties": props, "geometry": geom}
 
 
@@ -64,12 +69,16 @@ def slim(feats: list[dict], study_bbox=None, raw_bytes: int | None = None) -> tu
         return None, (f"none of its {total} features touch the study area" if total else "no features"), total
     if len(feats) > MAX_FEATURES:  # an even sample keeps the whole pattern visible
         feats = feats[:: -(-len(feats) // MAX_FEATURES)]
-    for nd in (5, 4, 3, 2):
-        fc = {"type": "FeatureCollection", "features": [_feature(f, nd) for f in feats]}
+    # Precision drops only as far as it stays honest: about 10 m for points (rounding further would snap them onto a
+    # visible grid and move them hundreds of meters), about 100 m for lines and areas. Past that, an even sample.
+    points = all(f["geometry"].get("type") in ("Point", "MultiPoint") for f in feats[:200])
+    heavy = kept > SMALL_LAYER
+    for nd in ((5, 4) if points else (5, 4, 3)):
+        fc = {"type": "FeatureCollection", "features": [_feature(f, nd, MAX_PROPS if heavy else None) for f in feats]}
         size = len(json.dumps(fc, separators=(",", ":")))
         if size <= TARGET_BYTES:
             break
-    else:  # still too heavy at about 1 km precision: an even sample that fits
+    else:  # still too heavy: an even sample that fits
         fc["features"] = fc["features"][:: -(-size // int(TARGET_BYTES * 0.95))]
     if len(fc["features"]) < kept:
         note = "; ".join(filter(None, [note, f"a sample of {len(fc['features'])} of {kept} features"]))
