@@ -207,3 +207,36 @@ def test_nclimgrid_month_rule():
     import datetime as dt
     t = dt.date.today()
     assert previews._months({"time_start": "2020", "time_end": str(t.year + 1)})[0] == (t.year, t.month)  # reaches today: latest
+
+
+def test_airdata_monitors_near_the_study_area(s, monkeypatch):
+    import io as _io
+    import zipfile as _zf
+    head = ('"State Code","County Code","Site Num","Parameter Code","POC","Latitude","Longitude","Datum","Parameter Name","Sample Duration",'
+            '"Pollutant Standard","Date Local","Units of Measure","Event Type","Observation Count","Observation Percent","Arithmetic Mean",'
+            '"1st Max Value","1st Max Hour","AQI","Method Code","Method Name","Local Site Name","Address","State Name","County Name","City Name","CBSA Name","Date of Last Change"')
+
+    def row(site, lat, lon, day, mean, mx, dur="24 HOUR"):
+        return f'"09","009","{site}","88101",1,{lat},{lon},"NAD83","PM2.5","{dur}","","{day}","Micrograms/cubic meter (LC)","None",1,100,{mean},{mx},0,"","","","Site {site}","","","","New Haven","",""'
+    lines = [head, row("0027", 41.30, -72.92, "2023-06-07", 60.0, 70.0), row("0027", 41.30, -72.92, "2023-06-07", 50.0, 55.0),  # two POCs
+             row("0027", 41.30, -72.92, "2023-07-01", 8.0, 9.0), row("0027", 41.30, -72.92, "2022-12-31", 99.0, 99.0),       # outside window
+             row("9999", 35.0, -100.0, "2023-06-07", 5.0, 6.0)]                                                                   # far away
+    z = _io.BytesIO()
+    with _zf.ZipFile(z, "w") as zf:
+        zf.writestr("daily_88101_2023.csv", "\n".join(lines))
+    monkeypatch.setattr(previews, "_airdata_files", lambda: {"daily_88101_2023.zip": 9000, "daily_88101_2024.zip": 8000})
+    got = []
+
+    def fetch(url, dest, max_bytes=None):
+        got.append(url)
+        dest.write_bytes(z.getvalue())
+        return {"name": "x", "bytes": 1, "content_type": "", "final_url": url}
+    monkeypatch.setattr(downloads, "fetch", fetch)
+    s.scope = dict(s.scope, time_start="2023-06-01", time_end="2023-08-31")
+    r = previews.build(s, _pick("cur:aqs"))
+    assert got == ["https://aqs.epa.gov/aqsweb/airdata/daily_88101_2023.zip"]          # the study year, PM2.5 by default
+    props = json.load(open(session.layer_path(r["layers"][0]["id"]), encoding="utf-8"))["features"]
+    assert len(props) == 1 and props[0]["properties"]["days_measured"] == 2 and props[0]["properties"]["days_above_standard"] == 1
+    assert props[0]["properties"]["mean_PM2.5"] == 31.5                                # POCs averaged per day, then over days
+    assert "24-hour mean" in r["layers"][0]["paint"]["label"] and not list(downloads.session_dir(s.sid).glob("pv-*"))
+    assert [p[2] for p in previews._pollutants("ozone and NO2 near highways")] == ["Ozone", "NO2"]

@@ -265,6 +265,7 @@
     }
     const geom = (e.fc && e.fc.features && e.fc.features[0] && e.fc.features[0].geometry || {}).type || '';
     const shape = /Point/.test(geom) ? 'dot' : /Line/.test(geom) ? 'line' : '';
+    if (P && P.label) return `<div class="ml-i">${head}<div class="ml-r"><i class="${shape}" style="background:${e.color}"></i>one value</div></div>`;
     return `<div class="ml-i"><div class="ml-r"><i class="${shape}" style="background:${e.color}"></i><span>${esc(d.title)}</span></div></div>`;
   }
   function renderLegend() {

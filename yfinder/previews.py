@@ -21,6 +21,7 @@ import os
 import re
 import threading
 import time
+import zipfile
 
 import requests
 
@@ -81,8 +82,8 @@ def _stops(values: list[float], ramp: str) -> list[list]:
 
 def _paint(prop: str, values: list[float], ramp: str, label: str = "") -> dict | None:
     st = _stops(values, ramp)
-    if len(st) < 2:
-        return None
+    if len(st) < 2:  # one value (one county, one monitor): a single colour, still labelled for the legend
+        return {"fill": RAMPS[ramp][-2], "stroke": "#ffffff", "opacity": 0.75, "width": 0.5, "label": label or prop.replace("_", " ")} if st else None
     return {"mode": "graduated", "property": prop, "stops": st, "fill": st[-1][1], "stroke": "#ffffff", "opacity": 0.75,
             "width": 0.5, "label": label or prop.replace("_", " ")}
 
@@ -586,7 +587,132 @@ def _landing(s, pick, meta):
     return None
 
 
-BY_REF = {"cur:acs": _acs, "cur:tiger": _tiger, "cur:nclimgrid": _nclimgrid, "cur:places": _places}
+# ---------------------------------------------------------------------------- EPA AirData (pre-generated daily files)
+AIRDATA = "https://aqs.epa.gov/aqsweb/airdata"
+# words in the question or graph -> (AQS parameter code, name, standard, daily statistic EPA compares with that standard,
+# sample duration of that statistic). PM uses the 24-hour mean; the gases use the daily maximum 8-hour or 1-hour value.
+POLLUTANTS = [(("pm2.5", "pm 2.5", "pm25", "fine particul", "smoke"), "88101", "PM2.5", 35.0, "mean", ""),
+              (("ozone", " o3"), "44201", "Ozone", 0.070, "max", "8-HR"),
+              (("no2", "nitrogen dioxide", "nox"), "42602", "NO2", 100.0, "max", "1 HOUR"),
+              (("pm10", "pm 10", "coarse particul"), "81102", "PM10", 150.0, "mean", ""),
+              (("so2", "sulfur dioxide"), "42401", "SO2", 75.0, "max", "1 HOUR"),
+              ((" co ", "carbon monoxide"), "42101", "CO", 9.0, "max", "8-HR")]
+_airdata_list: dict = {"t": 0, "files": {}}
+
+
+def _airdata_files() -> dict[str, int]:
+    """AirData's file list (name -> size in KB), refreshed daily."""
+    if time.time() - _airdata_list["t"] > 86400:
+        r = requests.get(f"{AIRDATA}/file_list.csv", headers=UA, timeout=30)
+        r.raise_for_status()
+        files = {}
+        for row in csv.reader(io.StringIO(r.text)):
+            if len(row) >= 3 and row[0].endswith(".zip"):
+                try:
+                    files[row[0]] = int(row[2])
+                except ValueError:
+                    pass
+        _airdata_list.update(t=time.time(), files=files)
+    return _airdata_list["files"]
+
+
+def _pollutants(text: str) -> list[tuple]:
+    t = " " + text.lower() + " "
+    hits = [p for p in POLLUTANTS if any(w in t for w in p[0])]
+    return (hits or [POLLUTANTS[0]])[:2]
+
+
+def _aqs(s, pick, meta):
+    """EPA AirData daily files: monitors in and around the study area for the study's last published year."""
+    sb = s.scope.get("bbox")
+    if not sb:
+        return {"status": "none", "note": "Set a study area to preview monitors"}
+    files = _airdata_files()
+    pad = max(0.35, 0.3 * max(sb[2] - sb[0], sb[3] - sb[1]))
+    box = [sb[0] - pad, sb[1] - pad, sb[2] + pad, sb[3] + pad]
+    want = _study_year(s.scope) or dt.date.today().year
+    a = re.match(r"(\d{4})(?:-(\d{2})(?:-(\d{2}))?)?", str(s.scope.get("time_start") or ""))
+    b = re.match(r"(\d{4})(?:-(\d{2})(?:-(\d{2}))?)?", str(s.scope.get("time_end") or ""))
+    layers, notes, rows_out = [], [], [["site", "name", "pollutant", "date", "daily_value", "units"]]
+    for n, (_words, code, pname, limit, stat, duration) in enumerate(_pollutants(_scope_text(s))):
+        years = sorted(int(f[len(f"daily_{code}_"):-4]) for f in files if f.startswith(f"daily_{code}_") and f[-8:-4].isdigit())
+        full = [y for y in years if y < dt.date.today().year] or years
+        if not full:
+            continue
+        year = max([y for y in full if y <= want] or [min(full)])
+        fname = f"daily_{code}_{year}.zip"
+        if files.get(fname, 0) * 1024 > MAX_RAW_BYTES:
+            notes.append(f"{pname} {year} file too large")
+            continue
+        # the study window inside that year (whole year when the window does not touch it)
+        d0 = f"{a.group(1)}-{a.group(2) or '01'}-{a.group(3) or '01'}" if a and int(a.group(1)) == year else f"{year}-01-01"
+        d1 = f"{b.group(1)}-{b.group(2) or '12'}-{b.group(3) or '31'}" if b and int(b.group(1)) == year else f"{year}-12-31"
+        d = downloads.session_dir(s.sid)
+        d.mkdir(parents=True, exist_ok=True)
+        raw = d / f"pv-{fname}"
+        try:
+            downloads.fetch(f"{AIRDATA}/{fname}", raw, MAX_RAW_BYTES)
+            sites: dict[str, dict] = {}
+            with zipfile.ZipFile(raw) as zf:
+                member = next(i for i in zf.infolist() if i.filename.endswith(".csv"))
+                with zf.open(member) as fh:
+                    rd = csv.reader(io.TextIOWrapper(fh, encoding="utf-8", errors="replace"))
+                    head = next(rd)
+                    ix = {h: i for i, h in enumerate(head)}
+                    for r in rd:
+                        try:
+                            lat, lon = float(r[ix["Latitude"]]), float(r[ix["Longitude"]])
+                        except (ValueError, IndexError):
+                            continue
+                        if not (box[0] <= lon <= box[2] and box[1] <= lat <= box[3]):
+                            continue
+                        day = r[ix["Date Local"]]
+                        if not (d0 <= day <= d1):
+                            continue
+                        if duration and duration not in r[ix["Sample Duration"]].upper():
+                            continue  # e.g. ozone: the 8-hour running averages, not the 1-hour rows
+                        try:
+                            v = float(r[ix["Arithmetic Mean" if stat == "mean" else "1st Max Value"]])
+                        except ValueError:
+                            continue
+                        sid = f"{r[ix['State Code']]}-{r[ix['County Code']]}-{r[ix['Site Num']]}"
+                        st = sites.setdefault(sid, {"lat": lat, "lon": lon, "name": r[ix["Local Site Name"]] or r[ix["City Name"]],
+                                                    "units": r[ix["Units of Measure"]], "days": {}})
+                        st["days"].setdefault(day, []).append(v)  # several instruments (POCs) on one day: averaged
+        finally:
+            raw.unlink(missing_ok=True)
+        if not sites:
+            notes.append(f"no {pname} monitors near the study area in {year}")
+            continue
+        feats, vals = [], []
+        for sid, st in sites.items():
+            daily = {k: (sum(v) / len(v) if stat == "mean" else max(v)) for k, v in st["days"].items()}
+            mean = sum(daily.values()) / len(daily)
+            inside = sb[0] <= st["lon"] <= sb[2] and sb[1] <= st["lat"] <= sb[3]
+            feats.append({"type": "Feature", "geometry": {"type": "Point", "coordinates": [st["lon"], st["lat"]]},
+                          "properties": {"site": sid, "name": st["name"], f"mean_{pname}": round(mean, 3 if mean < 1 else 1),
+                                         "days_measured": len(daily), "days_above_standard": sum(1 for x in daily.values() if x > limit),
+                                         "units": st["units"], "in_study_area": inside}})
+            vals.append(mean)
+            for k in sorted(daily):
+                rows_out.append([sid, st["name"], pname, k, round(daily[k], 4), st["units"]])
+        units = next(iter(sites.values()))["units"].split("(")[0].strip()
+        what = "24-hour mean" if stat == "mean" else f"daily max {duration.lower().replace('-hr', '-hour').replace(' hour', '-hour')}"
+        lab = f"{pname}, average {what}, {d0[:7]} to {d1[:7]} ({units})"
+        layer, _note = _vector_layer(s, pick, feats, f"EPA AirData: {pname} monitors, {year}", "EPA AirData daily file (downloaded for this session)",
+                                     _paint(f"mean_{pname}", vals, ("reds", "purples")[n % 2], lab), "AirData preview")
+        if layer:
+            if n:
+                layer["hidden"] = True
+            layers.append(layer)
+            notes.append(f"{pname} {year}: {len(sites)} monitors")
+    if not layers:
+        return {"status": "none", "note": "; ".join(notes) or "No AirData file for this window"}
+    return {"status": "ready", "kind": "slice", "layers": layers, "csv": _csv(s, pick, rows_out),
+            "note": "; ".join(notes) + " (EPA daily values, downloaded for this session)"}
+
+
+BY_REF = {"cur:acs": _acs, "cur:tiger": _tiger, "cur:nclimgrid": _nclimgrid, "cur:places": _places, "cur:aqs": _aqs}
 
 
 def _reason(pick, meta) -> str:
