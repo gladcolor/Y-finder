@@ -567,11 +567,20 @@ def _landing(s, pick, meta):
     return res
 
 
+def _zip_has_shp(path) -> bool:
+    """A zip with a shapefile inside (the member list sits at the end of the file, so look there, not at the first bytes)."""
+    try:
+        with zipfile.ZipFile(path) as z:
+            return any(n.lower().endswith(".shp") for n in z.namelist())
+    except (zipfile.BadZipFile, OSError):
+        return False
+
+
 def _read_raw(s, pick, meta, raw_path, fname: str, host: str):
     """A downloaded file as map layers (GeoJSON, KML, zipped shapefile) or a table joined to places, else None."""
     raw = raw_path.read_bytes()
     low = fname.lower()
-    if low.endswith((".geojson", ".kml", ".kmz")) or (low.endswith(".zip") and b".shp" in raw[:200000]) or raw[:200].lstrip().startswith(b"{"):
+    if low.endswith((".geojson", ".kml", ".kmz")) or _zip_has_shp(raw_path) or raw[:200].lstrip().startswith(b"{"):
         fmt = downloads.sniff(fname, "", raw[:4096])
         parts = downloads.read_layers(raw_path, fmt, fname)
         layers = []
@@ -837,27 +846,99 @@ def _socrata(s, pick, meta):
                            f"{dom} open data (downloaded for this session)")
 
 
+DV_HOSTS = ("dataverse.harvard.edu", "dataverse.yale.edu")
+DV_PREFIX = {"10.7910/": "dataverse.harvard.edu", "10.60600/": "dataverse.yale.edu"}
+_DV_COLLECTION = re.compile(r"^https://(dataverse\.(?:harvard|yale)\.edu)/dataverse/([\w-]+)/?(?:[?#].*)?$")
+_STOP = set("""the and for with from that this which what where when how does did into over under between than then their there
+about across after before during within without whose would could should being been were they them these those over more most
+much many each some only also data study area areas year years change changed show""".split())
+
+
+def _dv_host(doi: str, default: str) -> str:
+    """A DOI names the repository that holds the files; Yale Dataverse also lists harvested Harvard datasets."""
+    for prefix, host in DV_PREFIX.items():
+        if doi[4:].startswith(prefix):
+            return host
+    return default
+
+
+def _question_terms(s, extra: str = "", k: int = 6) -> str:
+    words = re.findall(r"[a-z][a-z\-]{3,}", (_scope_text(s) + " " + extra).lower())
+    out = []
+    for w in words:
+        if w not in _STOP and w not in out:
+            out.append(w)
+    return " OR ".join(out[:k])
+
+
 def _dataverse(s, pick, meta):
-    """A Dataverse dataset: its first public tabular file (CSV, TSV, Excel) under 100 MB."""
-    doi, host = meta.get("doi") or "", meta.get("dataverse_host") or "dataverse.harvard.edu"
-    if not doi.startswith("doi:") or host not in ("dataverse.harvard.edu", "dataverse.yale.edu"):
+    """A Dataverse dataset (by DOI) or collection (by its page): the best public file under 100 MB. Map files
+    (zipped shapefile, GeoJSON, KML) come before tables; a collection is searched with the words of the question."""
+    doi = meta.get("doi") or ""
+    if doi.startswith("doi:"):
+        host = _dv_host(doi, meta.get("dataverse_host") or "dataverse.harvard.edu")
+        return _dataverse_dataset(s, pick, meta, doi, host) if host in DV_HOSTS else None
+    m = _DV_COLLECTION.match(meta.get("url") or pick.get("url") or "")
+    if not m:
         return None
+    host, alias = m.group(1), m.group(2)
+    q = _question_terms(s, " ".join(str(x) for x in (pick.get("why"), meta.get("keywords")) if x)) or "*"
+    j = requests.get(f"https://{host}/api/search", params={"q": q, "subtree": alias, "type": "dataset", "per_page": 5},
+                     headers=UA, timeout=30).json()
+    items = ((j.get("data") or {}).get("items")) or []
+    last = None
+    for it in items[:3]:
+        gid = it.get("global_id") or ""
+        if not gid.startswith("doi:"):
+            continue
+        r = _dataverse_dataset(s, pick, meta, gid, _dv_host(gid, host))
+        if r and r.get("status") == "ready":
+            r["note"] = f"{(it.get('name') or '').removeprefix('Data: ')[:70]}: {r.get('note', '')}"
+            return r
+        last = r
+    return last or {"status": "none", "note": "No dataset in this collection matched the question"}
+
+
+def _dataverse_dataset(s, pick, meta, doi: str, host: str):
     j = requests.get(f"https://{host}/api/datasets/:persistentId/", params={"persistentId": doi}, headers=UA, timeout=30).json()
+    if j.get("status") != "OK" and (j.get("status") or j.get("message")):
+        other = next(h for h in DV_HOSTS if h != host)  # a harvested copy: the files live in the other repository
+        j2 = requests.get(f"https://{other}/api/datasets/:persistentId/", params={"persistentId": doi}, headers=UA, timeout=30).json()
+        if j2.get("data"):
+            j, host = j2, other
     files = (((j.get("data") or {}).get("latestVersion") or {}).get("files")) or []
     cands = []
     for f in files:
         df = f.get("dataFile") or {}
         name = df.get("originalFileName") or df.get("filename") or ""
         size = df.get("originalFileSize") or df.get("filesize") or 0
-        if f.get("restricted") or size > MAX_RAW_BYTES or not name.lower().endswith((".csv", ".tab", ".tsv", ".xlsx", ".zip")):
+        low, ctype = name.lower(), (df.get("contentType") or "").lower()
+        spatial = low.endswith((".geojson", ".kml", ".kmz")) or "shapefile" in ctype
+        table = low.endswith((".csv", ".tab", ".tsv", ".xlsx"))
+        if f.get("restricted") or size > MAX_RAW_BYTES or not (spatial or table or low.endswith(".zip")):
             continue
-        cands.append((name.lower().endswith((".csv", ".tab", ".tsv", ".xlsx")), -size, df.get("id"), name))
+        cands.append((2 if spatial else 1 if table else 0, -size, df.get("id"), name))
     if not cands:
-        return {"status": "none", "note": "No public table file under 100 MB in this dataset"}
+        return {"status": "none", "note": "No public map or table file under 100 MB in this dataset"}
     cands.sort(reverse=True)
-    _ok, _sz, fid, name = cands[0]
-    return _download_table(s, pick, meta, f"https://{host}/api/access/datafile/{fid}?format=original", name,
-                           f"{host} file {name} (downloaded for this session)")
+    for kind, _sz, fid, name in cands[:2]:
+        url = f"https://{host}/api/access/datafile/{fid}?format=original"
+        if kind == 2:
+            d = downloads.session_dir(s.sid)
+            d.mkdir(parents=True, exist_ok=True)
+            raw_path = d / ("pv-" + re.sub(r"[^a-z0-9.]+", "-", name.lower())[-60:])
+            try:
+                downloads.fetch(url, raw_path, MAX_RAW_BYTES)
+                r = _read_raw(s, pick, meta, raw_path, name, host)
+            except (downloads.DownloadError, tables.TableError, ValueError, KeyError, OSError, zipfile.BadZipFile):
+                r = None
+            finally:
+                raw_path.unlink(missing_ok=True)
+        else:
+            r = _download_table(s, pick, meta, url, name, f"{host} file {name} (downloaded for this session)")
+        if r and r.get("status") == "ready":
+            return r
+    return {"status": "none", "note": "The dataset's files could not be drawn or tabulated"}
 
 
 def _in_ring(x, y, ring) -> bool:
