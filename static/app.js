@@ -681,7 +681,7 @@
   function renderMatrix(ps) {
     if (!ps.length) { $('#matrix').innerHTML = ''; return; }
     const cell = (x) => `<td title="${esc(x?.reason || '')}"><span class="fitdot ${esc(x?.label || 'unknown')}"></span></td>`;
-    $('#matrix').innerHTML = `<table class="matrix"><thead><tr><th>Dataset</th><th>Area</th><th>Time</th><th>Detail</th><th>Overall</th><th>Access</th></tr></thead><tbody>${
+    $('#matrix').innerHTML = `<table class="matrix"><thead><tr><th>Dataset</th><th>Area</th><th>Time</th><th>Detail</th><th title="Overall fit: the weakest of area, time and detail">Fit</th><th>Access</th></tr></thead><tbody>${
       ps.map((p) => `<tr><td data-ref="${esc(p.ref)}" title="${esc(p.title)}">${esc(p.title)}</td>${cell(p.fit.extent)}${cell(p.fit.time)}${cell(p.fit.resolution)}${cell({ label: p.fit.overall, reason: fitLabel[p.fit.overall] })}<td>${badge(p.fit.access?.label || 'unknown', { open: 'Open', yale: 'Yale', request: 'Reg.', paid: 'Paid' }[p.fit.access?.label] || '?', p.fit.access?.reason)}</td></tr>`).join('')}</tbody></table>`;
     $$('#matrix td[data-ref]').forEach((td) => { td.onclick = () => {
       const c = $$('.dcard').find((x) => x.dataset.ref === td.dataset.ref);
