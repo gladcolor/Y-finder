@@ -79,6 +79,11 @@ decision log and commit log when you change something important.
 - Portal samples are drawn evenly over the study years and labelled; counts over time come from the portal's own aggregate query, never from the sample.
 - A recording is kept only after reading it: when a re-recording is worse (fewer Yale sources, a wider box than the question names), the earlier one stays. `--index-only` rebuilds `index.json` and the results table without recording. Never edit a recording's answer text; re-record instead (fit labels are rules and may be recomputed).
 - The answer's first sentence is the data route, not the limits; limits follow in the bullets.
+- Screen sizes: tested at 1920x950, 2560x1310, 3440x1300 and 3840x2030 CSS pixels by loading the app in a same-origin iframe of
+  that size (the test Chrome runs on a 4K display at 156% scaling, so the window cannot take exact CSS sizes). From 2600x1100
+  the panel and the floating map controls scale by `--ui` (1.2, or 1.4 from 3400x1600) with CSS zoom and the panel widens;
+  the map and graph canvases are never zoomed (zoom on a canvas ancestor shifts pointer positions); the graph canvas grows
+  taller instead. Fixed positions inside zoomed elements divide by `--ui`.
 - A view of part of the study area is never a scope change (`view_bbox` on `search_stac_items`).
 - Demo cases are recorded and replayed so interviews do not depend on live latency; `/api/demo/<id>/load` restores the end state (including the OpenAI response id) so the conversation continues live.
 
