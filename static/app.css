@@ -544,6 +544,7 @@ body.wide.hist-open .hist { display: flex; }
 .xchart rect { fill: #a9c3e6; }
 .xchart rect.pk { fill: #286dc0; }
 .xchart .ln { fill: none; stroke: #286dc0; stroke-width: 2; }
+.xchart .ln2 { stroke: #8aa4c8; stroke-dasharray: 4 3; stroke-width: 1.6; }
 .xchart .md { stroke: #00356b; stroke-width: 2.4; }
 .xfoot { font-size: 11.5px; color: var(--muted); line-height: 1.5; margin: 4px 2px 0; }
 /* the pill on the map: what the explorer is doing, with pause and stop */

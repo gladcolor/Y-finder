@@ -13,7 +13,8 @@ MUTANTS = ["resolution_always_good", "extent_ignored", "time_ignored", "overall_
            "downloads_kept_after_session", "download_follows_redirects", "geolibre_any_url",
            "previews_not_session_only",
            "browser_cookies_to_any_site", "browser_opens_licensed_pages", "dead_links_trusted",
-           "explore_ignores_pause", "explore_hides_uneven_sample", "explore_no_stand_in_note"]
+           "explore_ignores_pause", "explore_hides_uneven_sample", "explore_no_stand_in_note",
+           "acs_always_income", "socrata_first_rows", "dataverse_no_join"]
 
 
 def run(mutant=None):

@@ -12,7 +12,7 @@
     "Yale aerial imagery and YCGS drone support",
     "Recent aerial photo loaded on the map"
    ],
-   "recorded": "2026-11-08",
+   "recorded": "2026-11-09",
    "model": "gpt-6.1-terra"
   },
   {
@@ -56,7 +56,7 @@
     "Georeferencing method and tools",
     "Hand-off to GeoLibre for full GIS"
    ],
-   "recorded": "2026-11-08",
+   "recorded": "2026-11-09",
    "model": "gpt-6.1-terra"
   },
   {
@@ -84,7 +84,7 @@
     "Satellite imagery preview over Kenya",
     "Field data needs called out"
    ],
-   "recorded": "2026-11-08",
+   "recorded": "2026-11-09",
    "model": "gpt-6.1-terra"
   },
   {

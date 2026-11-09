@@ -94,6 +94,13 @@ def link_score(name: str, text: str = "", year: int | None = None, download_attr
     return score
 
 
+TRACKERS = re.compile(r"doubleclick|googlesyndication|googleadservices|google-analytics|googletagmanager|adservice|adsystem|"
+                      r"facebook|scorecardresearch|hotjar|segment\.io|newrelic|nr-data|criteo|taboola|outbrain|quantserve|clarity\.ms", re.I)
+
+
+NOT_DATA = re.compile(r"\.(js|mjs|css|html?|php|aspx?|jsp|svg|png|jpe?g|gif|webp|ico|woff2?|ttf|map)$")
+
+
 def rank(anchors: list, loaded: list, year: int | None = None) -> tuple[list[str], list[str]]:
     """File links worth trying (best first) and raster files the page offers (reported, not drawn)."""
     cands: dict[str, int] = {}
@@ -103,6 +110,8 @@ def rank(anchors: list, loaded: list, year: int | None = None) -> tuple[list[str
         if not isinstance(href, str) or not href.startswith("https://"):
             continue
         u = urlparse(href)
+        if TRACKERS.search(u.netloc) or NOT_DATA.search(u.path.lower()):
+            continue  # advertising, analytics, scripts and pages, never data
         if "/preview/" in u.path:
             continue  # a viewer page for the file, not the file
         path = u.path.lower()
@@ -120,7 +129,9 @@ def rank(anchors: list, loaded: list, year: int | None = None) -> tuple[list[str
             s -= 4  # plain JSON is usually page configuration, not data
         cands[href] = max(cands.get(href, -99), s)
     for href in loaded:  # files the page's own map loaded
-        cands[href] = max(cands.get(href, -99), 4)
+        u = urlparse(href)
+        if not TRACKERS.search(u.netloc) and not NOT_DATA.search(u.path.lower()):
+            cands[href] = max(cands.get(href, -99), 4)
     ranked = [u for u, s in sorted(cands.items(), key=lambda kv: -kv[1]) if s > -3]
     return ranked, rasters[:5]
 
@@ -267,6 +278,8 @@ def find(url: str, progress=lambda _t: None, year: int | None = None) -> dict:
             ct = (resp.headers.get("content-type") or "").lower()
             disp = (resp.headers.get("content-disposition") or "").lower()
             path = urlparse(u).path.lower()
+            if NOT_DATA.search(path) or re.search(r"javascript|ecmascript|text/css|text/html|image/|font/", ct) or TRACKERS.search(urlparse(u).netloc):
+                return  # scripts, styles, pages, images and trackers are never data (Google serves its search script as "f.txt")
             if "geo+json" in ct or path.endswith((".geojson", ".kml", ".kmz")) or "text/csv" in ct or "attachment" in disp:
                 loaded.append(u)
         except Exception:

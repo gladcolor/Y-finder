@@ -124,6 +124,7 @@ class Geo:
         if self.title.lower() in ("data", "dataset", "layer", "table", "map", "file") and ":" in (desc.get("title") or ""):
             self.title = _short(desc["title"].split(":", 1)[1].strip())
         self.subset = None   # (column, values, mask): the records that match the question, once a profile found them
+        self.portal = None   # (x, y) of every matching record fetched from the open data portal
 
     def name(self, i: int) -> str:
         v = self.props[i].get(self.name_key) if self.name_key else None
@@ -384,13 +385,22 @@ def _variables(s, cache: dict) -> tuple[list[dict], list[str]]:
             seen[fp] = v
             out.append(v)
         sr = r.get("series")
+        sfp = repr((sr or {}).get("points"))[:400]
+        if sr and sfp in seen:
+            seen[sfp]["factors"] = list(dict.fromkeys(seen[sfp]["factors"] + factors))
+            continue
         if sr and len(sr.get("points") or []) >= 3:
             flab = nodes.get(factors[0], {}).get("label", "") if factors else ""
             raw = _clean_label(sr.get("label") or "")
             how = re.search(r"\((sum|mean) over rows\)", raw)
-            lab = (flab or raw.split(" (")[0]) + (f" ({how.group(1)} over the table's rows, by year)" if how else " (by year)")
+            if sr.get("x") == "hour" or raw.startswith("All records per year") or "places on the map" in raw:
+                lab, short = raw, raw.split(" (")[0]
+            else:
+                lab = (flab or raw.split(" (")[0]) + (f" ({how.group(1)} over the table's rows, by year)" if how else " (by year)")
+                short = flab or raw.split(" (")[0]
             out.append({"type": "series", "series": sr, "ref": p["ref"], "pick": p, "factors": factors, "label": lab,
-                        "short": flab or raw.split(" (")[0], "core": p.get("role") == "core", "valued": True, "id": "series:" + p["ref"]})
+                        "short": short, "core": p.get("role") == "core", "valued": True, "id": "series:" + p["ref"]})
+            seen[sfp] = out[-1]
     return out, list(dict.fromkeys(skipped))
 
 
@@ -544,8 +554,9 @@ def _var_label(g: Geo, factor_label: str) -> tuple[str, str]:
     lab = re.sub(r"\s*\((?=[^)]*[._])[A-Za-z0-9_.]+\)$", "", lab)           # column codes such as (AIR.new)
     lab = lab.replace("Micrograms/cubic meter", "µg/m³").replace("(LC)", "").strip()
     lab = re.sub(r",?\s*\d{4}(-\d{2})?\s+to\s+\d{4}(-\d{2})?", "", lab)    # the study window is shown elsewhere
-    if re.fullmatch(r"\d{4}|[A-Za-z0-9_.]{1,4}", lab or "x") and factor_label:
-        lab = f"{factor_label} ({lab})" if lab else factor_label
+    head = re.split(r",| \(", lab or "")[0].strip()
+    if (re.fullmatch(r"\d{4}|[A-Za-z0-9_.]{1,4}", lab or "x") or re.fullmatch(r"[A-Za-z]{3,12}", head) and head.lower() not in factor_label.lower()) and factor_label:
+        lab = f"{factor_label} ({lab})" if lab else factor_label  # "Pesos" says less than "Silver registered (Pesos)"
     short = re.sub(r"\s*\([^)]*\)$", "", lab).split(",")[0].strip() or lab
     return lab, short
 
@@ -640,6 +651,9 @@ def profile_area(v: dict, s) -> dict | None:
 
 def _lc(t: str) -> str:
     """Lower-case the first letter of a sentence-case label ("Median household income"), never of a name or acronym."""
+    first = t.split(" ", 1)[0] if t else ""
+    if first in ("Latino", "Hispanic", "Black", "Asian", "American", "Native", "White", "Indigenous", "Connecticut", "New", "Yale"):
+        return t  # names stay capitalised
     return t[:1].lower() + t[1:] if t and re.match(r"^[A-Z][a-z]+(\s[a-z(]|$)", t) else t
 
 
@@ -805,6 +819,9 @@ def profile_points(v: dict, s) -> dict | None:
         subset = None
     if subset:
         col, vals, why = subset
+        portal = _portal_subset(s, v["ref"], col, vals)
+        if portal:
+            return _portal_finding(s, v, g, col, vals, why, portal, n, outcome)
         sel = np.array([str(p.get(col)).strip() in set(vals) for p in g.props]) & mask
         k = int(sel.sum())
         shown = ", ".join(vals[:4]) + (f" and {len(vals) - 4} more" if len(vals) > 4 else "")
@@ -825,7 +842,7 @@ def profile_points(v: dict, s) -> dict | None:
         parts.append(("All records: " if subset else "") + text)
         focus_idx = focus_idx or reps
         head = head or (f"The {n:,} records of {g.title} {h}" if h.startswith("sit at") else f"{n:,} records of {g.title}: {h}")
-    tpart, chart, uneven = _time_part(g, mask, sampled)
+    tpart, chart, uneven = _time_part(g, mask, sampled) if "per year" not in note else ("", None, None)
     if uneven:
         parts.append(uneven + ".")
     elif tpart:
@@ -839,6 +856,76 @@ def profile_points(v: dict, s) -> dict | None:
         focus.update(layers=[sub_layer["id"]], add=[sub_layer], hide=[g.id])
     return {"kind": "profile", "headline": head, "detail": " ".join(parts), "chart": chart,
             "focus": focus, "numbers": {"n": n}, "coverage_warning": bool(uneven)}
+
+
+def _portal_subset(s, ref: str, col: str, vals: list[str]):
+    """Every record on the open data portal (not only the preview sample) that has one of the chosen categories,
+    within the study years: counts per year and up to 20,000 located rows."""
+    import requests
+    from . import downloads
+    so = (s.previews.get(ref) or {}).get("soda") or {}
+    url, dcol = so.get("url") or "", so.get("date") or ""
+    if not (re.fullmatch(r"https://[a-z0-9.-]+/resource/[a-z0-9]{4}-[a-z0-9]{4}\.csv", url) and re.fullmatch(r"\w+", col) and re.fullmatch(r"\w+", dcol)):
+        return None
+    quoted = ", ".join("'" + v.replace("'", "''") + "'" for v in vals[:40])
+    where = f"{col} in ({quoted}) AND {dcol} >= '{so['from']}-01-01T00:00:00' AND {dcol} < '{int(so['to']) + 1}-01-01T00:00:00'"
+    try:
+        j = requests.get(url[:-4] + ".json", params={"$select": f"date_extract_y({dcol}) AS y, count(*) AS n", "$where": where, "$group": "y", "$order": "y"},
+                         headers={"User-Agent": sources.HEADERS.get("User-Agent", "Y-finder")}, timeout=40).json()
+        counts = {int(float(r["y"])): int(float(r["n"])) for r in j if r.get("y") not in (None, "")}
+    except (requests.RequestException, ValueError, KeyError, TypeError):
+        return None
+    if not counts:
+        return {"counts": {}, "feats": [], "from": so["from"], "to": so["to"], "host": url.split("/")[2]}
+    q = requests.models.PreparedRequest()
+    q.prepare_url(url, {"$where": where, "$limit": 20000})
+    d = downloads.session_dir(s.sid)
+    d.mkdir(parents=True, exist_ok=True)
+    raw = d / f"x-{abs(hash(where)) % 10**8}.csv"
+    try:
+        downloads.fetch(q.url, raw, 100 * 1024 * 1024)
+        feats = downloads._csv(raw.read_bytes())
+    except (downloads.DownloadError, OSError, ValueError):
+        feats = []
+    finally:
+        raw.unlink(missing_ok=True)
+    return {"counts": counts, "feats": feats, "from": so["from"], "to": so["to"], "host": url.split("/")[2]}
+
+
+def _portal_finding(s, v, g: Geo, col, vals, why, portal, n_preview, outcome) -> dict:
+    counts, feats = portal["counts"], portal["feats"]
+    total = sum(counts.values())
+    shown = ", ".join(vals[:4]) + (f" and {len(vals) - 4} more" if len(vals) > 4 else "")
+    chose = f" (chosen by the AI model: {why.rstrip('.')})" if why else ""
+    if not total:
+        return {"kind": "profile", "headline": f"No records on {portal['host']} match the question from {portal['from']} to {portal['to']}",
+                "detail": f"Y-finder asked the portal for every record with {col} in: {shown}{chose}. None fall in the study years.",
+                "chart": None, "focus": {"layers": [g.id]}, "numbers": {"n": 0}}
+    parts = [f"On {portal['host']}, {total:,} records from {portal['from']} to {portal['to']} match the question by {col}: {shown}{chose}. "
+             f"Y-finder fetched them all, not only the preview sample of {n_preview:,}."]
+    yrs = sorted(counts)
+    peak = max(yrs, key=counts.get)
+    parts.append(f"Most in {peak} ({counts[peak]:,}); {yrs[0]}: {counts[yrs[0]]:,}; {yrs[-1]}: {counts[yrs[-1]]:,}.")
+    head = f"{total:,} records on the portal match the question, most in {peak}"
+    focus = {"layers": [g.id]}
+    if len(feats) >= 10:
+        sub = Geo({"id": "portal", "title": g.title}, {"type": "FeatureCollection", "features": feats})
+        if sub.kind == "point" and sub.n >= 10:
+            m = _in_box(sub, (s.scope or {}).get("bbox"))
+            text, reps, h = _hotspots(sub, m if m.sum() >= 10 else np.ones(sub.n, bool), (s.scope or {}).get("bbox"))
+            if text:
+                parts.append(f"Where ({sub.n:,} with locations): " + text[0].lower() + text[1:])
+                head += f"; {h}"
+            title = f"{g.title}: {_lc(outcome)} only (all {sub.n:,} on the portal)"
+            lay = _subset_layer(s, sub, np.ones(sub.n, bool), title)
+            focus = _focus(sub, reps, [g.id])
+            if lay:
+                focus.update(layers=[lay["id"]], add=[lay], hide=[g.id])
+            g.subset = (col, vals, np.array([str(p.get(col)).strip() in set(vals) for p in g.props]))
+            g.portal = (sub.x, sub.y)
+    return {"kind": "profile", "headline": head, "detail": " ".join(parts),
+            "chart": {"type": "bars", "items": [[str(y), counts[y]] for y in yrs], "label": "Matching records per year (all on the portal)"},
+            "focus": focus, "numbers": {"n": total, "by_year": counts}}
 
 
 def _subset_layer(s, g: Geo, sel: np.ndarray, title: str) -> dict | None:
@@ -856,7 +943,34 @@ def _subset_layer(s, g: Geo, sel: np.ndarray, title: str) -> dict | None:
     return d
 
 
+def profile_hours(v: dict, s) -> dict | None:
+    """A daily cycle (mean by hour of day on weekdays, with weekends to compare)."""
+    sr = v["series"]
+    wk = {int(h): float(x) for h, x in sr.get("points") or [] if _finite(_num(h), _num(x))}
+    we = {int(h): float(x) for h, x in (sr.get("compare") or {}).get("points") or [] if _finite(_num(h), _num(x))}
+    if len(wk) < 12:
+        return None
+    hp = max(wk, key=wk.get)
+    lo = min(wk, key=wk.get)
+    am = [h for h in range(5, 11) if h in wk]
+    am_peak = max(am, key=wk.get) if am else hp
+    head = f"{v['short']}: on weekdays it peaks at {hp:02d}:00 and is lowest at {lo:02d}:00"
+    parts = [f"{v['label']}: highest {fmt(wk[hp])} at {hp:02d}:00, lowest {fmt(wk[lo])} at {lo:02d}:00."]
+    if we and am_peak in we and we[am_peak] > 0:
+        parts.append(f"At {am_peak:02d}:00 weekdays average {fmt(wk[am_peak])} against {fmt(we[am_peak])} on weekends "
+                     f"({round(100 * (wk[am_peak] / we[am_peak] - 1)):+d}%), the pattern a morning commute would leave.")
+        if am_peak != hp:
+            head += f"; the morning hours run {round(100 * (wk[am_peak] / we[am_peak] - 1)):+d}% above weekends"
+    parts.append("Hours are local standard time at the monitors.")
+    return {"kind": "profile", "headline": head, "detail": " ".join(parts),
+            "chart": {"type": "line", "points": [[h, round(wk[h], 3)] for h in sorted(wk)], "label": "Hour of day (weekdays solid, weekends dashed)",
+                      "points2": [[h, round(we[h], 3)] for h in sorted(we)]},
+            "focus": {}, "numbers": {"peak_hour": hp, "peak": wk[hp]}}
+
+
 def profile_series(v: dict, s) -> dict | None:
+    if v["series"].get("x") == "hour":
+        return profile_hours(v, s)
     pts = sorted([(float(a), float(b)) for a, b in v["series"]["points"] if _finite(_num(a), _num(b))])
     if len(pts) < 3:
         return None
@@ -884,6 +998,9 @@ def _measure(v: dict, s, subsets: bool = True) -> tuple[str, np.ndarray | None, 
     """A variable's short label and, for points, the records used (the question's subset when there is a good one)."""
     g = v.get("geo")
     if v["type"] == "point" and not v["valued"]:
+        portal = getattr(g, "portal", None)
+        if subsets and portal and len(portal[0]) >= 30:  # every matching record, fetched from the portal
+            return "matching records on the portal per km²", portal[0], portal[1]
         sub = g.subset
         if subsets and sub and sub[2].sum() >= 30:
             return "matching records per km²", g.x[sub[2]], g.y[sub[2]]
@@ -920,7 +1037,11 @@ def relate(st: dict, s) -> dict | None:
     via = f" through {', '.join(st['via'])}" if st.get("via") else ""
     if st.get("same"):
         head = (f"{la[:1].upper() + la[1:]} and {lb} {'follow the same places' if r >= 0.5 else 'partly share places' if r >= 0.2 else 'sit in different places'}")
-        link = f"Both layers measure {nodes.get(na, na)}, so this shows how far the pattern held between them."
+        used = all(v["type"] == "point" and (v["geo"].portal is not None and len(v["geo"].portal[0]) >= 30
+                                             or v["geo"].subset is not None and v["geo"].subset[2].sum() >= 30) for v in (st["a"], st["b"]))
+        link = (f"Both layers measure {nodes.get(na, na)} (only the records that match the question), so this shows how far the pattern held between them."
+                if used else f"Both layers are listed for {nodes.get(na, na)} in your graph; this compares all their records, so it shows whether "
+                             f"records in general kept to the same places, not the question's records alone.")
     else:
         link = f"Graph link{' (indirect)' if via else ''}: {nodes.get(na, na)} → {nodes.get(nb, nb)}{via}."
     detail = f"Spearman rank correlation {r:+.2f} ({strength(r)}) across {len(xa):,} {unit}; {how}. {link}"
@@ -936,7 +1057,8 @@ def relate(st: dict, s) -> dict | None:
 
 def _spatial_pairs(a: dict, b: dict, s, same: bool = False):
     ga, gb = a["geo"], b["geo"]
-    both = not same or all(v["type"] == "point" and v["geo"].subset and v["geo"].subset[2].sum() >= 30 for v in (a, b))
+    both = not same or all(v["type"] == "point" and (v["geo"].portal is not None and len(v["geo"].portal[0]) >= 30
+                                                     or v["geo"].subset and v["geo"].subset[2].sum() >= 30) for v in (a, b))
     la, xa_pts, ya_pts = _measure(a, s, both)
     lb, xb_pts, yb_pts = _measure(b, s, both)
     sb = (s.scope or {}).get("bbox")
@@ -1058,20 +1180,79 @@ def _shared_key(gf: Geo, gc: Geo) -> tuple[str, str] | None:
     return None
 
 
+LEVELS = {"none": 0, "light": 1, "low": 1, "medium": 2, "moderate": 2, "heavy": 3, "high": 3}
+
+
+def _daily_zone_groups(zones: dict, other: dict, s):
+    """Dated zones (smoke on a given day) against the daily values of the points (monitors): each monitor-day is
+    classed by the zone that covered the monitor that day (none, light, medium, heavy)."""
+    import csv as _csv
+    from . import downloads
+    gz, go = zones["geo"], other["geo"]
+    if not gz.props or "date" not in gz.props[0] or not go.props or "site" not in go.props[0]:
+        return None
+    name = (s.previews.get(other["ref"]) or {}).get("csv") or ""
+    path = downloads.sample_path(s.sid, name) if name else None
+    if not path:
+        return None
+    with open(path, encoding="utf-8", newline="") as fh:
+        rows = list(_csv.reader(fh))
+    if len(rows) < 10 or not {"site", "date", "daily_value"} <= set(rows[0]):
+        return None
+    ix = {k: rows[0].index(k) for k in ("site", "date", "daily_value")}
+    sites = [str(p.get("site")) for p in go.props]
+    level: dict[tuple[str, str], int] = {}
+    for i, p in enumerate(gz.props):
+        day = str(p.get("date"))[:10]
+        lv = LEVELS.get(str(p.get("density") or "").strip().lower(), 1)
+        b = gz.box[i]
+        cand = np.nonzero((go.x >= b[0]) & (go.x <= b[2]) & (go.y >= b[1]) & (go.y <= b[3]))[0]
+        if not len(cand):
+            continue
+        inside = np.zeros(len(cand), bool)
+        for rings in gz.parts[i]:
+            pin = _ring_contains(rings[0], go.x[cand], go.y[cand])
+            for h in rings[1:]:
+                pin &= ~_ring_contains(h, go.x[cand], go.y[cand])
+            inside |= pin
+        for j in cand[inside]:
+            k = (sites[j], day)
+            level[k] = max(level.get(k, 0), lv)
+    known = set(sites)
+    by: dict[int, list[float]] = {}
+    for r in rows[1:]:
+        try:
+            v = float(r[ix["daily_value"]])
+        except (ValueError, IndexError):
+            continue
+        if r[ix["site"]] in known:
+            by.setdefault(level.get((r[ix["site"]], r[ix["date"]][:10]), 0), []).append(v)
+    if sum(1 for v in by.values() if len(v) >= 5) < 2:
+        return None
+    return {"groups": True, "daily": True, "by": by, "zones": gz, "other": go}
+
+
 def _zone_groups(zones: dict, other: dict, s):
     gz, go = zones["geo"], other["geo"]
     if not other["valued"]:
         return "the other layer has no values to compare"
+    daily = _daily_zone_groups(zones, other, s)
+    if daily:
+        return daily
     ok = np.isfinite(go.values)
     at = locate(go.x[ok], go.y[ok], gz)
     vals = go.values[ok]
     ins, outs = vals[at >= 0], vals[at < 0]
+    if len(outs) < 3 and len(ins) >= 3:
+        return f"all {len(vals)} {go.units()} fall inside {gz.title} at some point, so nothing lies outside to compare"
     if len(ins) < 3 or len(outs) < 3:
         return f"only {len(ins)} of {len(vals)} {go.units()} fall inside {gz.title}"
     return {"groups": True, "in": ins, "out": outs, "zones": gz, "other": go}
 
 
 def _zones_finding(st, out, s):
+    if out.get("daily"):
+        return _daily_finding(st, out, s)
     gz, go = out["zones"], out["other"]
     ins, outs = out["in"], out["out"]
     mi, mo = float(np.median(ins)), float(np.median(outs))
@@ -1091,6 +1272,33 @@ def _zones_finding(st, out, s):
             "chart": {"type": "groups", "groups": [["Inside", [round(float(v), 4) for v in ins[:300]]], ["Outside", [round(float(v), 4) for v in outs[:300]]]], "label": label[:60]},
             "edge": [st["fa"], st["fb"]], "rho": round(float(eff), 2), "n": int(len(ins) + len(outs)),
             "focus": {"layers": [gz.id, go.id]}, "numbers": {"median_in": mi, "median_out": mo, "effect": eff}}
+
+
+def _daily_finding(st, out, s):
+    gz, go, by = out["zones"], out["other"], out["by"]
+    nodes = {n["id"]: n["label"] for n in (s.graph or {}).get("nodes", [])}
+    other = st["b"] if st["b"]["geo"] is go else st["a"]
+    label = other.get("short") or go.label
+    names = {0: "No smoke" if "smoke" in gz.title.lower() else "Outside", 1: "Light", 2: "Medium", 3: "Heavy"}
+    lv = np.array([k for k, vs in by.items() for _v in vs], float)
+    vals = np.array([v for _k, vs in by.items() for v in vs], float)
+    r = spearman(lv, vals)
+    meds = {k: float(np.median(v)) for k, v in sorted(by.items()) if len(v) >= 3}
+    top = max(meds)
+    if r is not None and abs(r) >= 0.1 and 0 in meds:
+        head = (f"{label} is {'higher' if r > 0 else 'lower'} on days a monitor sits under heavier {gz.title.split(',')[0].replace('NOAA HMS ', '').lower()}: "
+                f"median {fmt(meds[top])} under {names[top].lower()}, {fmt(meds[0])} without")
+    else:
+        head = f"{label} changes little with the {gz.title.split(',')[0].lower()} over the monitors"
+    detail = ("Each monitor-day is classed by the zone over the monitor that day: " +
+              "; ".join(f"{names[k].lower()} {fmt(meds[k])} (median of {len(by[k])})" for k in sorted(meds)) +
+              (f". Spearman rank correlation between the level and the daily value {r:+.2f} ({strength(r)}) over {len(vals):,} monitor-days." if r is not None else ".") +
+              f" Graph link: {nodes.get(st['fa'], st['fa'])} → {nodes.get(st['fb'], st['fb'])}.")
+    groups = [[names[k], [round(float(v), 3) for v in by[k][:300]]] for k in sorted(by) if len(by[k]) >= 3]
+    return {"kind": "relate", "headline": head, "detail": detail,
+            "chart": {"type": "groups", "groups": groups, "label": label[:60]},
+            "edge": [st["fa"], st["fb"]], "rho": round(float(r), 2) if r is not None else None, "n": int(len(vals)),
+            "focus": {"layers": [gz.id, go.id]}, "numbers": {"medians": meds, "rho": r}}
 
 
 def run_step(st: dict, s) -> dict | None:

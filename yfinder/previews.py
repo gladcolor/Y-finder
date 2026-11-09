@@ -39,6 +39,8 @@ UA = {"User-Agent": "Y-finder/0.1 (YCGS data guide; +https://app.researcharchite
 TIGER2020 = "https://tigerweb.geo.census.gov/arcgis/rest/services/TIGERweb/tigerWMS_Census2020/MapServer"
 ESRI_ACS_INCOME = ("https://P3ePLMYs2RVChkJx.svcs.arcgis.com/P3ePLMYs2RVChkJx/arcgis/rest/services/"
                    "ACS_Median_Household_Income_View_Boundaries/FeatureServer")
+ESRI_ACS_RACE = ("https://services.arcgis.com/P3ePLMYs2RVChkJx/arcgis/rest/services/"
+                 "ACS_Population_by_Race_and_Hispanic_Origin_Boundaries/FeatureServer")
 NCLIMGRID = "https://www.ncei.noaa.gov/data/nclimgrid-daily/access/averages"
 PLACES_TRACTS = "https://data.cdc.gov/resource/cwsq-ngmh.json"   # PLACES census tract data, 2025 release
 FILE_EXT = (".geojson", ".json", ".csv", ".zip", ".kml", ".kmz")
@@ -265,14 +267,56 @@ def _stac(s, pick, meta):
             "note": f"Imagery of {date}" + (f", {n} scenes" if n > 1 else "") + f", about {pct}% of the study area"}
 
 
+RACE_GROUPS = [  # words in the pick's factors -> (ACS percent field, label)
+    (r"latin|hispan", "B03002_calc_pctHispLatE", "Latino"),
+    (r"\bblack|african", "B03002_calc_pctBlackE", "Black"),
+    (r"asian", "B03002_calc_pctAsianE", "Asian"),
+    (r"native|indigenous|american indian", "B03002_calc_pctAIANE", "American Indian and Alaska Native"),
+]
+
+
 def _acs(s, pick, meta):
-    """ACS median household income by tract (county for big areas) from Esri's keyless Living Atlas service."""
+    """ACS by tract (county for big areas) from Esri's keyless Living Atlas services: race and Hispanic origin
+    shares when the pick measures race or ethnicity, otherwise median household income."""
     sb = s.scope.get("bbox")
     if not sb:
         return {"status": "none", "note": "Set a study area to preview ACS values"}
     w, h = bbox_size_km(sb)
     lid, unit = (2, "tract") if w * h <= 40000 else (1, "county")
-    fc = sources.arcgis_query(f"{ESRI_ACS_INCOME}/{lid}", sb, max_features=3000, simplify_deg=max(0.00005, min(0.003, (sb[2] - sb[0]) / 4000)))
+    nodes = {n["id"]: n.get("label", "") + " " + n.get("observable", "") for n in (s.graph or {}).get("nodes", [])}
+    text = " ".join([nodes.get(f, "") for f in pick.get("factors") or []] + [pick.get("why") or ""]).lower()
+    simplify = max(0.00005, min(0.003, (sb[2] - sb[0]) / 4000))
+    if re.search(r"race|racial|ethnic|latin|hispan|black|african|asian|minorit|segregat|people of color", text):
+        groups = [(f, lab) for rx, f, lab in RACE_GROUPS if re.search(rx, text)]
+        fc = sources.arcgis_query(f"{ESRI_ACS_RACE}/{lid}", sb, max_features=3000, simplify_deg=simplify,
+                                  out_fields="GEOID,NAME,B03002_001E,B03002_calc_pctHispLatE,B03002_calc_pctBlackE,"
+                                             "B03002_calc_pctAsianE,B03002_calc_pctNHWhiteE,B03002_calc_pctAIANE")
+        feats = []
+        for f in fc.get("features", []):
+            p = f.get("properties") or {}
+            pr = {"GEOID": p.get("GEOID"), "name": p.get("NAME"), "population": p.get("B03002_001E"),
+                  "latino_pct": p.get("B03002_calc_pctHispLatE"), "black_pct": p.get("B03002_calc_pctBlackE"),
+                  "asian_pct": p.get("B03002_calc_pctAsianE"), "white_nh_pct": p.get("B03002_calc_pctNHWhiteE")}
+            few = (p.get("B03002_001E") or 0) < 200  # parks, airports and other near-empty tracts: no meaningful share
+            if groups:
+                vals = [p.get(fld) for fld, _l in groups]
+                pr["share_pct"] = round(sum(vals), 1) if all(isinstance(v, (int, float)) for v in vals) and not few else None
+            else:
+                v = p.get("B03002_calc_pctNHWhiteE")
+                pr["share_pct"] = round(100 - v, 1) if isinstance(v, (int, float)) and not few else None
+            feats.append({"type": "Feature", "geometry": f.get("geometry"), "properties": pr})
+        who = " or ".join(l for _f, l in groups) if groups else "people of color (not non-Hispanic White)"
+        label = f"The share of {who} residents (%)" if groups else "The share of people of color (% not non-Hispanic White)"
+        vals = [f["properties"]["share_pct"] for f in feats if f["properties"]["share_pct"] is not None]
+        layer, note = _vector_layer(s, pick, feats, f"ACS share of {who} residents by {unit}", "ACS 5-year, latest (Esri Living Atlas)",
+                                    _paint("share_pct", vals, "purples", label), "ACS preview")
+        if not layer:
+            return {"status": "none", "note": note or "No areas found"}
+        keys = ["GEOID", "name", "population", "share_pct", "latino_pct", "black_pct", "asian_pct", "white_nh_pct"]
+        rows = [keys] + [[f["properties"].get(k) for k in keys] for f in feats]
+        return {"status": "ready", "kind": "service", "layers": [layer], "csv": _csv(s, pick, rows),
+                "note": f"Share of {who} residents for {len(feats)} {unit}s (ACS table B03002, latest 5-year)"}
+    fc = sources.arcgis_query(f"{ESRI_ACS_INCOME}/{lid}", sb, max_features=3000, simplify_deg=simplify)
     feats = []
     for f in fc.get("features", []):
         p = f.get("properties") or {}
@@ -288,6 +332,117 @@ def _acs(s, pick, meta):
     rows = [["GEOID", "name", "median_household_income", "moe"]] + [[f["properties"][k] for k in ("GEOID", "name", "median_household_income", "moe")] for f in feats]
     return {"status": "ready", "kind": "service", "layers": [layer], "csv": _csv(s, pick, rows),
             "note": f"Median household income for {len(feats)} {unit}s (latest 5-year ACS)"}
+
+
+CT_BOX = [-73.75, 40.95, -71.75, 42.07]
+CTECO_SERVICES = [  # (words in the question or graph, ArcGIS service, title)
+    (r"canopy|tree|forest|shade", "https://cteco.uconn.edu/ctraster/rest/services/landcover/CCAP_LandcoverForestCanopy2021_1m/MapServer",
+     "CT ECO tree canopy 2021 (1 m)"),
+    (r"standing water|ponding|puddle|pond|wetland|open water|larva|mosquito", "https://cteco.uconn.edu/ctraster/rest/services/landcover/CCAP_LandcoverWater2021_1m/MapServer",
+     "CT ECO water 2021 (1 m)"),
+    (r"impervious|pavement|paved|heat island", "https://cteco.uconn.edu/ctraster/rest/services/landcover/CCAP_LandcoverImpervious2021_1m/MapServer",
+     "CT ECO impervious surface 2021 (1 m)"),
+    (r"shoreline|coast|waterfront|harbor|harbour|filled", "https://cteco.uconn.edu/ctmaps/rest/services/Coastal/Shoreline_Change_Long_Term/MapServer",
+     "CT ECO long-term shoreline change (historical shorelines)"),
+]
+CTECO_1934 = "https://cteco.uconn.edu/ctraster/rest/services/images/Mosaic_1934_MAGIC/ImageServer"
+CTECO_ORTHO = "https://cteco.uconn.edu/ctraster/rest/services/images/Ortho_2023/ImageServer"
+
+
+def _cteco(s, pick, meta):
+    """CT ECO's own map services, chosen by the question: 1934 aerial photos for historical questions, 1 m tree
+    canopy, water or impervious land cover, historical shorelines, else the 2023 orthophotos."""
+    sb = s.scope.get("bbox")
+    if not sb or sb[2] < CT_BOX[0] or sb[0] > CT_BOX[2] or sb[3] < CT_BOX[1] or sb[1] > CT_BOX[3]:
+        return {"status": "none", "note": "CT ECO covers Connecticut only"}
+    text = _scope_text(s)
+    question = ((s.graph or {}).get("question") or "").lower()
+    m = re.match(r"\d{4}", str(s.scope.get("time_start") or ""))
+    picks = []
+    if m and int(m.group()) < 1950:
+        picks.append((CTECO_1934, "CT ECO 1934 aerial photo mosaic"))
+    hits = [(len(re.findall(rx, question)) * 2 + len(re.findall(rx, text)), i, u, t) for i, (rx, u, t) in enumerate(CTECO_SERVICES)]
+    picks += [(u, t) for n, _i, u, t in sorted(hits, key=lambda h: (-h[0], h[1])) if n]  # the question's own words first
+    if not picks:
+        picks.append((CTECO_ORTHO, "CT ECO orthophotos 2023"))
+    layers = []
+    for i, (url, title) in enumerate(picks[:2]):
+        r = _arcgis_url(s, pick, url, title)
+        for l in (r or {}).get("layers", []):
+            l["source"] = "CT ECO (UConn CLEAR, CT DEEP)"
+            l["bbox"] = CT_BOX
+            if i:
+                l["hidden"] = True
+            layers.append(l)
+    if not layers:
+        return {"status": "none", "note": "CT ECO services did not answer"}
+    return {"status": "ready", "kind": "service", "layers": layers,
+            "note": "Live CT ECO map service: " + "; ".join(t for _u, t in picks[:2])}
+
+
+# ---------------------------------------------------------------- NOAA HMS smoke polygons
+HMS = "https://satepsanone.nesdis.noaa.gov/pub/FIRE/web/HMS/Smoke_Polygons/Shapefile"
+
+
+def _hms(s, pick, meta):
+    """NOAA Hazard Mapping System smoke polygons for each day of the window (up to 31 days) over the study area."""
+    import logging
+    import shapefile  # pyshp
+    logging.getLogger("shapefile").setLevel(logging.ERROR)  # HMS rings are often wound backwards; pyshp fixes them and logs each
+    sb = s.scope.get("bbox")
+    if not sb:
+        return {"status": "none", "note": "Set a study area to preview smoke polygons"}
+    try:
+        d0 = dt.date.fromisoformat(str(s.scope.get("time_start"))[:10])
+        d1 = dt.date.fromisoformat(str(s.scope.get("time_end"))[:10])
+    except ValueError:
+        return {"status": "none", "note": "HMS smoke is daily: give the study a start and end date"}
+    if d0 < dt.date(2005, 8, 1) or d0 > dt.date.today():
+        return {"status": "none", "note": "HMS smoke polygons start in August 2005"}
+    days = [d0 + dt.timedelta(days=i) for i in range(min((d1 - d0).days + 1, 31))]
+    feats, per_day = [], {}
+
+    def day(d):
+        url = f"{HMS}/{d.year}/{d.month:02d}/hms_smoke{d:%Y%m%d}.zip"
+        try:
+            r = requests.get(url, headers=UA, timeout=30)
+            if r.status_code != 200 or len(r.content) > 20 * 1024 * 1024:
+                return d, []
+            zf = zipfile.ZipFile(io.BytesIO(r.content))
+            names = {n.lower()[-4:]: n for n in zf.namelist()}
+            rd = shapefile.Reader(shp=io.BytesIO(zf.read(names[".shp"])), dbf=io.BytesIO(zf.read(names[".dbf"])))
+            out = []
+            for sr in rd.iterShapeRecords():
+                b = sr.shape.bbox
+                if b[2] < sb[0] or b[0] > sb[2] or b[3] < sb[1] or b[1] > sb[3]:
+                    continue
+                rec = sr.record.as_dict()
+                out.append({"type": "Feature", "geometry": sr.shape.__geo_interface__,
+                            "properties": {"date": d.isoformat(), "density": str(rec.get("Density") or "").strip() or "Unknown",
+                                           "satellite": rec.get("Satellite"), "start": rec.get("Start"), "end": rec.get("End")}})
+            return d, out
+        except (requests.RequestException, zipfile.BadZipFile, KeyError, ValueError, shapefile.ShapefileException):
+            return d, []
+    with cf.ThreadPoolExecutor(4) as ex:
+        for d, out in ex.map(day, days):
+            feats += out
+            per_day[d] = out
+    if not feats:
+        return {"status": "none", "note": f"No HMS smoke polygons over the study area from {days[0]} to {days[-1]}"}
+    order = {"Light": 0, "Medium": 1, "Heavy": 2}
+    feats.sort(key=lambda f: order.get(f["properties"]["density"], -1))  # heavy smoke drawn on top
+    paint = {"mode": "categorized", "property": "density", "stops": [["Light", "#d9d9d9"], ["Medium", "#969696"], ["Heavy", "#525252"]],
+             "fill": "#bdbdbd", "stroke": "#ffffff", "opacity": 0.35, "width": 0.4, "label": "Smoke density (NOAA HMS)"}
+    layer, note = _vector_layer(s, pick, feats, f"NOAA HMS smoke polygons, {days[0]} to {days[-1]}", "NOAA HMS daily smoke shapefiles", paint, "HMS preview")
+    if not layer:
+        return {"status": "none", "note": note or "No smoke polygons in the study area"}
+    heavy = sorted(d for d, out in per_day.items() if any(f["properties"]["density"] == "Heavy" for f in out))
+    smoky = sum(1 for out in per_day.values() if out)
+    rows = [["date", "polygons", "heavy_polygons"]] + [[d.isoformat(), len(o), sum(1 for f in o if f["properties"]["density"] == "Heavy")]
+                                                       for d, o in sorted(per_day.items())]
+    return {"status": "ready", "kind": "slice", "layers": [layer], "csv": _csv(s, pick, rows),
+            "series": {"label": "Smoke polygons over the study area per day", "points": [[d.day, len(o)] for d, o in sorted(per_day.items())]} if len(days) >= 3 else None,
+            "note": f"Smoke on {smoky} of {len(days)} days" + (f"; heavy smoke on {len(heavy)} days, first {heavy[0]}" if heavy else "")}
 
 
 def _tiger(s, pick, meta):
@@ -391,10 +546,14 @@ def _nclimgrid(s, pick, meta):
             rows.append([geoid, parts[2], f"{y}-{m:02d}-{i + 1:02d}", d, rain[i] if i < len(rain) else ""])
     if not feats:
         return {"status": "none", "note": "No nClimGrid counties in the study area"}
-    vals = [f["properties"]["mean_tmax_c"] for f in feats if f["properties"]["mean_tmax_c"] is not None]
-    layer, note = _vector_layer(s, pick, feats, f"nClimGrid mean daily max temperature, {y}-{m:02d}",
-                                "NOAA nClimGrid-Daily county averages (downloaded for this session)", _paint("mean_tmax_c", vals, "reds", "Mean daily max temperature (°C)"),
-                                "nClimGrid preview")
+    nodes = {n["id"]: n.get("label", "") + " " + n.get("observable", "") for n in (s.graph or {}).get("nodes", [])}
+    words = " ".join([nodes.get(f, "") for f in pick.get("factors") or []] + [_scope_text(s)]).lower()
+    heat = bool(re.search(r"extreme heat|heat day|hot day|heat wave|heatwave|heat exposure|days above|days over", words))
+    prop, title, label = (("days_over_32c", f"nClimGrid days at or above 32.2 °C (90 °F), {y}-{m:02d}", f"Days at or above 32.2 °C (90 °F), {y}-{m:02d}")
+                          if heat else ("mean_tmax_c", f"nClimGrid mean daily max temperature, {y}-{m:02d}", "Mean daily max temperature (°C)"))
+    vals = [f["properties"][prop] for f in feats if f["properties"][prop] is not None]
+    layer, note = _vector_layer(s, pick, feats, title, "NOAA nClimGrid-Daily county averages (downloaded for this session)",
+                                _paint(prop, vals, "reds", label), "nClimGrid preview")
     if not layer:
         return {"status": "none", "note": note}
     return {"status": "ready", "kind": "slice", "layers": [layer], "csv": _csv(s, pick, rows),
@@ -606,7 +765,7 @@ def _try_links(s, pick, meta, links: list[str], cookies: dict | None = None, pro
             progress(f"Downloading {fname} from {host}")
         d = downloads.session_dir(s.sid)
         d.mkdir(parents=True, exist_ok=True)
-        raw_path = d / ("pv-" + re.sub(r"[^a-z0-9.]+", "-", fname.lower())[-60:])
+        raw_path = d / ("pv-" + _tag(pick) + re.sub(r"[^a-z0-9.]+", "-", fname.lower())[-60:])
         try:
             got = downloads.fetch(link, raw_path, MAX_RAW_BYTES, cookies=cookies) if cookies else downloads.fetch(link, raw_path, MAX_RAW_BYTES)
             name = got.get("name") or fname if isinstance(got, dict) else fname
@@ -661,6 +820,59 @@ def _pollutants(text: str) -> list[tuple]:
     return (hits or [POLLUTANTS[0]])[:2]
 
 
+HOUR_WORDS = re.compile(r"hourly|hours?|rush|diurnal|time of day|morning|evening|commut|weekday|weekend")
+
+
+def _aqs_hourly(s, code: str, pname: str, year: int, sites: dict, d0: str, d1: str) -> tuple[dict | None, str]:
+    """Mean by hour of day on weekdays and weekends at the study's monitors (EPA AirData hourly file)."""
+    fname = f"hourly_{code}_{year}.zip"
+    if not 0 < _airdata_files().get(fname, 0) * 1024 <= MAX_RAW_BYTES:
+        return None, ""
+    want = set(sites)
+    prefixes = tuple({'"%s","%s"' % tuple(sid.split("-")[:2]) for sid in want})
+    d = downloads.session_dir(s.sid)
+    d.mkdir(parents=True, exist_ok=True)
+    raw = d / f"pv-{fname}"
+    acc: dict[tuple[bool, int], list[float]] = {}
+    units, weekday = "", {}
+    try:
+        downloads.fetch(f"{AIRDATA}/{fname}", raw, MAX_RAW_BYTES)
+        with zipfile.ZipFile(raw) as zf:
+            member = next(i for i in zf.infolist() if i.filename.endswith(".csv"))
+            with zf.open(member) as fh:
+                for line in io.TextIOWrapper(fh, encoding="utf-8", errors="replace"):
+                    if not line.startswith(prefixes):
+                        continue  # a cheap test first: the state and county of the study's monitors
+                    r = next(csv.reader([line]))
+                    if len(r) < 15 or f"{r[0]}-{r[1]}-{r[2]}" not in want or not d0 <= r[9] <= d1:
+                        continue
+                    try:
+                        hr, v = int(r[10][:2]), float(r[13])
+                    except ValueError:
+                        continue
+                    if r[9] not in weekday:
+                        weekday[r[9]] = dt.date.fromisoformat(r[9]).weekday() < 5
+                    a = acc.setdefault((weekday[r[9]], hr), [0.0, 0])
+                    a[0] += v
+                    a[1] += 1
+                    units = units or r[14]
+    except (downloads.DownloadError, zipfile.BadZipFile, StopIteration, OSError):
+        return None, ""
+    finally:
+        raw.unlink(missing_ok=True)
+    wk = [[h, round(acc[(True, h)][0] / acc[(True, h)][1], 2)] for h in range(24) if acc.get((True, h), [0, 0])[1]]
+    we = [[h, round(acc[(False, h)][0] / acc[(False, h)][1], 2)] for h in range(24) if acc.get((False, h), [0, 0])[1]]
+    if len(wk) < 20:
+        return None, ""
+    peak = max(wk, key=lambda p: p[1])
+    wem = dict(we).get(peak[0])
+    unit = units.split("(")[0].strip().lower().replace("parts per billion", "ppb")
+    note = (f"weekday {pname} peaks at {peak[0]:02d}:00 ({peak[1]:g} {unit})" +
+            (f", {round(100 * (peak[1] / wem - 1))}% above weekends at that hour" if wem else ""))
+    return ({"label": f"{pname} by hour of day, weekdays ({unit})", "x": "hour", "points": wk,
+             "compare": {"label": "weekends", "points": we}}, note)
+
+
 def _aqs(s, pick, meta):
     """EPA AirData daily files: monitors in and around the study area for the study's last published year."""
     sb = s.scope.get("bbox")
@@ -672,7 +884,7 @@ def _aqs(s, pick, meta):
     want = _study_year(s.scope) or dt.date.today().year
     a = re.match(r"(\d{4})(?:-(\d{2})(?:-(\d{2}))?)?", str(s.scope.get("time_start") or ""))
     b = re.match(r"(\d{4})(?:-(\d{2})(?:-(\d{2}))?)?", str(s.scope.get("time_end") or ""))
-    layers, notes, rows_out = [], [], [["site", "name", "pollutant", "date", "daily_value", "units"]]
+    layers, notes, rows_out, series = [], [], [["site", "name", "pollutant", "date", "daily_value", "units"]], None
     for n, (_words, code, pname, limit, stat, duration) in enumerate(_pollutants(_scope_text(s))):
         years = sorted(int(f[len(f"daily_{code}_"):-4]) for f in files if f.startswith(f"daily_{code}_") and f[-8:-4].isdigit())
         full = [y for y in years if y < dt.date.today().year] or years
@@ -745,10 +957,16 @@ def _aqs(s, pick, meta):
                 layer["hidden"] = True
             layers.append(layer)
             notes.append(f"{pname} {year}: {len(sites)} monitors")
+            if not n and HOUR_WORDS.search(_scope_text(s)):  # the question is about hours: the daily cycle
+                inside = {k: v for k, v in sites.items() if sb[0] <= v["lon"] <= sb[2] and sb[1] <= v["lat"] <= sb[3]} or sites
+                hourly, hnote = _aqs_hourly(s, code, pname, year, inside, d0, d1)
+                if hourly:
+                    series = hourly
+                    notes.append(hnote)
     if not layers:
         return {"status": "none", "note": "; ".join(notes) or "No AirData file for this window"}
-    return {"status": "ready", "kind": "slice", "layers": layers, "csv": _csv(s, pick, rows_out),
-            "note": "; ".join(notes) + " (EPA daily values, downloaded for this session)"}
+    return {"status": "ready", "kind": "slice", "layers": layers, "csv": _csv(s, pick, rows_out), "series": series,
+            "note": "; ".join(notes) + (" (EPA daily and hourly values, downloaded for this session)" if series else " (EPA daily values, downloaded for this session)")}
 
 
 # ---------------------------------------------------------------------------- non-spatial tables
@@ -789,6 +1007,8 @@ def _table_result(s, pick, meta, raw: bytes, fname: str, src: str):
         return None
     h = tables._header_row(rows)
     header, body = rows[h], rows[h + 1:]
+    if len(body) < 3 or len(header) < 2:
+        return None  # an empty or one-line file (a tracking pixel, a stub) is not a preview
     towns = _towns(s) if any(tables.TOWN_COLUMN.match(c.strip()) for c in header) else {}
     if towns:
         tc = tables.detect_town(header, body, set(towns))
@@ -825,10 +1045,16 @@ def _table_result(s, pick, meta, raw: bytes, fname: str, src: str):
             "note": f"{fname}: {len(body):,} rows, {len(header)} columns (a table without places to map)"}
 
 
+def _tag(pick) -> str:
+    """A short per-card prefix for temporary files: two cards can point at the same file."""
+    import hashlib
+    return hashlib.sha1(str(pick.get("ref")).encode()).hexdigest()[:6] + "-"
+
+
 def _download_table(s, pick, meta, url: str, fname: str, src: str):
     d = downloads.session_dir(s.sid)
     d.mkdir(parents=True, exist_ok=True)
-    raw_path = d / ("pv-" + re.sub(r"[^a-z0-9.]+", "-", fname.lower())[-60:])
+    raw_path = d / ("pv-" + _tag(pick) + re.sub(r"[^a-z0-9.]+", "-", fname.lower())[-60:])
     try:
         downloads.fetch(url, raw_path, MAX_RAW_BYTES)
         return _table_result(s, pick, meta, raw_path.read_bytes(), fname, src)
@@ -837,13 +1063,62 @@ def _download_table(s, pick, meta, url: str, fname: str, src: str):
 
 
 def _socrata(s, pick, meta):
-    """A table on a Socrata open data portal: its CSV (up to 50,000 rows) through the SODA API."""
+    """A table on a Socrata open data portal through the SODA API. With a date column and a study window: an even
+    sample over the years of the window (the first 50,000 rows can all come from one year) and the portal's count
+    of every row per year; otherwise its first 50,000 rows."""
     soda = meta.get("soda") or ""
     if not re.fullmatch(r"https://[a-z0-9.-]+/resource/[a-z0-9]{4}-[a-z0-9]{4}\.csv", soda):
         return None
-    dom = soda.split("/")[2]
-    return _download_table(s, pick, meta, soda + "?$limit=50000", soda.rsplit("/", 1)[-1],
-                           f"{dom} open data (downloaded for this session)")
+    dom, rid = soda.split("/")[2], soda.rsplit("/", 1)[-1][:-4]
+    src = f"{dom} open data (downloaded for this session)"
+    y0, y1 = (re.match(r"\d{4}", str(s.scope.get(k) or "")) for k in ("time_start", "time_end"))
+    dcol, counts = None, {}
+    if y0 and y1 and sources.safe_url(f"https://{dom}/api/views/{rid}.json"):
+        try:
+            cols = requests.get(f"https://{dom}/api/views/{rid}.json", headers=UA, timeout=25).json().get("columns") or []
+            dates = [c["fieldName"] for c in cols if c.get("dataTypeName") in ("calendar_date", "floating_timestamp") and not c["fieldName"].startswith(":")]
+            dcol = next((c for c in dates if "date" in c.lower()), dates[0] if dates else None)
+            if dcol:
+                j = requests.get(soda[:-4] + ".json", params={"$select": f"date_extract_y({dcol}) AS y, count(*) AS n", "$group": "y", "$order": "y"},
+                                 headers=UA, timeout=40).json()
+                counts = {int(float(r["y"])): int(float(r["n"])) for r in j if r.get("y") not in (None, "")}
+        except (requests.RequestException, ValueError, KeyError, TypeError):
+            dcol, counts = None, {}
+    yrs = [y for y in sorted(counts) if int(y0.group()) <= y <= int(y1.group()) and counts[y] > 0] if counts else []
+    if dcol and len(yrs) >= 2 and sum(counts[y] for y in yrs) > 50000:
+        per = max(1000, 50000 // len(yrs))
+        d = downloads.session_dir(s.sid)
+        d.mkdir(parents=True, exist_ok=True)
+        header, body = None, []
+        for y in yrs:
+            raw_path = d / f"pv-{_tag(pick)}{rid}-{y}.csv"
+            q = requests.models.PreparedRequest()
+            q.prepare_url(soda, {"$where": f"{dcol} >= '{y}-01-01T00:00:00' AND {dcol} < '{y + 1}-01-01T00:00:00'", "$limit": per})
+            try:
+                downloads.fetch(q.url, raw_path, MAX_RAW_BYTES)
+                rows = list(csv.reader(io.StringIO(raw_path.read_text(encoding="utf-8", errors="replace"))))
+            finally:
+                raw_path.unlink(missing_ok=True)
+            if rows:
+                header = header or rows[0]
+                body += rows[1:]
+        if header and body:
+            buf = io.StringIO()
+            csv.writer(buf).writerows([header] + body)
+            res = _table_result(s, pick, meta, buf.getvalue().encode("utf-8"), f"{rid}.csv", src)
+            if res:
+                res["series"] = {"label": f"All records per year in {short_title(meta.get('title') or pick.get('title') or rid)} ({dom})",
+                                 "points": [[y, counts[y]] for y in yrs]}
+                res["note"] = (res.get("note") or "") + (f"; an even sample of up to {per:,} rows per year, {yrs[0]}-{yrs[-1]}; "
+                                                         f"the trend counts all {sum(counts[y] for y in yrs):,} rows on the portal")
+                res["soda"] = {"url": soda, "date": dcol, "from": yrs[0], "to": yrs[-1]}
+                return res
+    res = _download_table(s, pick, meta, soda + "?$limit=50000", soda.rsplit("/", 1)[-1], src)
+    if res and dcol and yrs:
+        res["series"] = {"label": f"All records per year in {short_title(meta.get('title') or pick.get('title') or rid)} ({dom})",
+                         "points": [[y, counts[y]] for y in yrs]}
+        res["soda"] = {"url": soda, "date": dcol, "from": yrs[0], "to": yrs[-1]}
+    return res
 
 
 DV_HOSTS = ("dataverse.harvard.edu", "dataverse.yale.edu")
@@ -869,6 +1144,115 @@ def _question_terms(s, extra: str = "", k: int = 6) -> str:
         if w not in _STOP and w not in out:
             out.append(w)
     return " OR ".join(out[:k])
+
+
+def _join_dataset_table(s, pick, meta, r, host, tables_):
+    """Join a table from the same dataset to its map file by a shared ID column; the value is summed over the study
+    years per place (a yearly table becomes one value per place plus a trend)."""
+    lay = next((l for l in r.get("layers", []) if l.get("kind") == "geojson"), None)
+    path = session.layer_path(lay["id"]) if lay else None
+    if not path:
+        return None
+    import json as _json
+    feats = _json.loads(path.read_text(encoding="utf-8")).get("features", [])
+    props = [f.get("properties") or {} for f in feats]
+    norm = lambda v: re.sub(r"\.0+$", "", str(v).strip())
+    for fid, name in tables_[:2]:
+        d = downloads.session_dir(s.sid)
+        d.mkdir(parents=True, exist_ok=True)
+        tmp = d / ("pv-" + _tag(pick) + "join-" + re.sub(r"[^a-z0-9.]+", "-", name.lower())[-50:])
+        try:
+            downloads.fetch(f"https://{host}/api/access/datafile/{fid}?format=original", tmp, MAX_RAW_BYTES)
+            tbls = tables.read_tables(tmp.read_bytes(), name if name.lower().endswith((".csv", ".xlsx")) else name.rsplit(".", 1)[0] + ".csv")
+        except (downloads.DownloadError, tables.TableError, ValueError, OSError, zipfile.BadZipFile, csv.Error):
+            continue
+        finally:
+            tmp.unlink(missing_ok=True)
+        tname, rows = max(tbls, key=lambda t: len(t[1]), default=("", []))
+        if len(rows) < 4:
+            continue
+        hi = tables._header_row(rows)
+        header, body = rows[hi], rows[hi + 1:]
+        # the shared key: a table column whose values match one map attribute (IDs or names, never years)
+        years_ = lambda vs: bool(vs) and sum(bool(re.fullmatch(r"1\d{3}|20\d\d", v)) for v in vs) >= 0.8 * len(vs)
+        best = None
+        for j, col in enumerate(header):
+            vals = {norm(r[j]) for r in body if len(r) > j and r[j].strip()}
+            if not 2 <= len(vals) <= 5000 or years_(vals) or (len(body) > 50 and len(vals) > 0.9 * len(body)):
+                continue  # years and per-row serial numbers are not place keys
+            for k in (props[0].keys() if props else []):
+                mv = {norm(p.get(k)) for p in props if p.get(k) not in (None, "")}
+                if not mv or years_(mv) or len(mv) > 0.9 * len(props) and len(props) > 50:
+                    continue  # a per-record serial number is not a place key
+                hit = len(vals & mv)
+                score = hit + (2 if re.search(r"id|code|key|name|nombre|caja", col + k, re.I) else 0)
+                if hit >= max(2, 0.6 * len(mv)) and (best is None or score > best[0]):
+                    best = (score, j, k)
+        if not best:
+            continue
+        _hit, kj, kprop = best
+        yc = next((j for j, h in enumerate(header) if re.fullmatch(r"(year|anio|año|start_?|ano|yr)", h.strip().lower())), None)
+        nodes = {n["id"]: n.get("label", "") for n in (s.graph or {}).get("nodes", [])}
+        text = " ".join([_scope_text(s), " ".join(nodes.get(f, "") for f in pick.get("factors") or [])])
+        vcols = tables.value_columns(header, body, kj, tables.dictionary(tbls), text, k=8)
+        yearlike = lambda c: all(1400 <= (tables._num(r[c]) or 0) <= 2100 for r in body[:300] if len(r) > c and r[c].strip())
+        vcols = [c for c in vcols if c != yc and not yearlike(c) and not re.search(r"diferencia|difference|change|deviaci|desv|std|tendencia|trend|promedio|average|mean", header[c], re.I)]
+        if not vcols:
+            continue
+        vc = vcols[0]
+        lo, hi_ = (re.match(r"\d{4}", str(s.scope.get(k) or "")) for k in ("time_start", "time_end"))
+        lo, hi_ = (int(lo.group()) if lo else -9999), (int(hi_.group()) if hi_ else 9999)
+        sums, years, by_year = {}, {}, {}
+        for row in body:
+            if len(row) <= max(kj, vc):
+                continue
+            v = tables._num(row[vc])
+            y = None
+            if yc is not None and len(row) > yc:
+                m = re.match(r"(1[5-9]\d\d|20\d\d)", row[yc].strip())
+                y = int(m.group(1)) if m else None
+            if v is None or (y is not None and not lo <= y <= hi_):
+                continue
+            key = norm(row[kj])
+            sums[key] = sums.get(key, 0.0) + v
+            if y is not None:
+                years.setdefault(key, set()).add(y)
+                by_year[(key, y)] = by_year.get((key, y), 0.0) + v
+        if not sums:
+            continue
+        out, seen = [], set()
+        vname = header[vc].strip()
+        for f, p in zip(feats, props):
+            key = norm(p.get(kprop))
+            if key in sums and key not in seen:
+                seen.add(key)
+                nm = next((p.get(x) for x in p if re.search(r"label|name|nombre|caja", x, re.I) and isinstance(p.get(x), str) and p.get(x).strip()), key)
+                ys = sorted(years.get(key, []))
+                out.append({"type": "Feature", "geometry": f["geometry"],
+                            "properties": {"name": nm, kprop: p.get(kprop), f"{vname}_total": round(sums[key], 2),
+                                           "years_with_data": len(ys), "first_year": ys[0] if ys else None, "last_year": ys[-1] if ys else None}})
+        if len(out) < 2:
+            continue
+        mapped = {norm(f["properties"].get(kprop)) for f in out}
+        totals: dict[int, float] = {}
+        for (key, y), v in by_year.items():
+            if key in mapped:  # the trend covers the places on the map, not the whole table
+                totals[y] = totals.get(y, 0.0) + v
+        by_year = totals
+        span = f"{max(lo, min(by_year))}-{min(hi_, max(by_year))}" if by_year else ""
+        vals = [f["properties"][f"{vname}_total"] for f in out]
+        new, _n = _vector_layer(s, pick, out, f"{short_title(meta.get('title') or pick.get('title') or name)}: {vname} {span}".strip()[:100],
+                                f"{host} files {name} and the map file, joined by {header[kj].strip()}",
+                                _paint(f"{vname}_total", vals, "reds", f"{vname}, total {span}".strip()), "joined preview")
+        if not new:
+            continue
+        res = {"status": "ready", "kind": "slice", "layers": [new],
+               "csv": _csv(s, pick, [header] + body[:50000]), "table": tables.preview(header, body),
+               "note": f"{name}: {vname} summed per place{(' over ' + span) if span else ''} for {len(out)} places, joined to the map file by {header[kj].strip()}"}
+        if len(by_year) >= 3:
+            res["series"] = {"label": f"{vname} per year, the {len(out)} places on the map", "points": [[y, round(v, 2)] for y, v in sorted(by_year.items())][-120:]}
+        return res
+    return None
 
 
 def _dataverse(s, pick, meta):
@@ -921,12 +1305,13 @@ def _dataverse_dataset(s, pick, meta, doi: str, host: str):
     if not cands:
         return {"status": "none", "note": "No public map or table file under 100 MB in this dataset"}
     cands.sort(reverse=True)
+    tables_ = [(fid, name) for kind, _sz, fid, name in cands if kind == 1]
     for kind, _sz, fid, name in cands[:2]:
         url = f"https://{host}/api/access/datafile/{fid}?format=original"
         if kind == 2:
             d = downloads.session_dir(s.sid)
             d.mkdir(parents=True, exist_ok=True)
-            raw_path = d / ("pv-" + re.sub(r"[^a-z0-9.]+", "-", name.lower())[-60:])
+            raw_path = d / ("pv-" + _tag(pick) + re.sub(r"[^a-z0-9.]+", "-", name.lower())[-60:])
             try:
                 downloads.fetch(url, raw_path, MAX_RAW_BYTES)
                 r = _read_raw(s, pick, meta, raw_path, name, host)
@@ -934,6 +1319,10 @@ def _dataverse_dataset(s, pick, meta, doi: str, host: str):
                 r = None
             finally:
                 raw_path.unlink(missing_ok=True)
+            if r and r.get("status") == "ready" and tables_:  # the values often sit in a table beside the map file
+                joined = _join_dataset_table(s, pick, meta, r, host, tables_)
+                if joined:
+                    return joined
         else:
             r = _download_table(s, pick, meta, url, name, f"{host} file {name} (downloaded for this session)")
         if r and r.get("status") == "ready":
@@ -1081,6 +1470,27 @@ def gee_mirror(ref: str) -> str | None:
     return None
 
 
+MAP_WMS = "https://data.malariaatlas.org/geoserver/Malaria/wms"
+MAP_LAYERS = [(r"vivax|\bpv\b", "Malaria:202406_Global_Pv_Parasite_Rate", "Plasmodium vivax parasite rate"),
+              (r"incidence|cases", "Malaria:202406_Global_Pf_Incidence_Rate", "Plasmodium falciparum incidence rate"),
+              (r".", "Malaria:202406_Global_Pf_Parasite_Rate", "Plasmodium falciparum parasite rate (PfPR, ages 2-10)")]
+
+
+def _malaria_atlas(s, pick, meta):
+    """A Malaria Atlas Project page: MAP's own WMS map of the modelled parasite rate (2024 release)."""
+    url = meta.get("url") or pick.get("url") or pick.get("ref") or ""
+    if not re.match(r"^https://(data\.)?malariaatlas\.org/", url):
+        return None
+    text = _scope_text(s) + " " + (pick.get("why") or "").lower()
+    name, title = next((n, t) for rx, n, t in MAP_LAYERS if re.search(rx, text))
+    tiles = (f"{MAP_WMS}?service=WMS&request=GetMap&version=1.1.1&layers={name}&styles=&format=image/png&transparent=true"
+             "&srs=EPSG:3857&width=256&height=256&bbox={bbox-epsg-3857}")
+    legend = f"{MAP_WMS}?service=WMS&request=GetLegendGraphic&format=image/png&layer={name}"
+    layer = {"id": "pv-map-" + re.sub(r"[^a-z0-9]", "", name.lower())[-24:], "kind": "raster", "title": f"Malaria Atlas Project: {title}",
+             "source": "Malaria Atlas Project (WMS)", "tiles": [tiles], "bbox": None, "minzoom": 0, "maxzoom": 12, "legend": legend}
+    return {"status": "ready", "kind": "service", "layers": [layer], "note": f"Live MAP map service: {title}, 2024 release (latest modelled year)"}
+
+
 def _gee(s, pick, meta):
     coll = gee_mirror(pick["ref"])
     pc = catalog_mod.load().get("pc:" + coll) if coll else None
@@ -1093,7 +1503,119 @@ def _gee(s, pick, meta):
     return None
 
 
-BY_REF = {"cur:acs": _acs, "cur:tiger": _tiger, "cur:nclimgrid": _nclimgrid, "cur:places": _places, "cur:aqs": _aqs, "cur:gadm": _gadm}
+OSM_TAGS = [  # words in the pick's factors -> OpenStreetMap tags, and the largest area worth asking for (km2)
+    (r"village|settlement|hamlet|communit|household|town", ["place=village", "place=hamlet", "place=town"], 60000),
+    (r"school", ["amenity=school"], 10000),
+    (r"clinic|hospital|health (facilit|care|centre|center)", ["amenity=hospital", "amenity=clinic", "healthcare"], 10000),
+    (r"water|pond|wetland|lake", ["natural=water", "natural=wetland"], 2500),
+    (r"park|green ?space", ["leisure=park"], 2500),
+    (r"road|street|highway", ["highway=primary", "highway=secondary", "highway=tertiary"], 2500),
+    (r"building|roof|house", ["building"], 100),
+]
+
+
+def _osm(s, pick, meta):
+    """OpenStreetMap features that the pick's factors name (villages, schools, clinics, water, roads), from Overpass."""
+    sb = s.scope.get("bbox")
+    if not sb:
+        return {"status": "none", "note": "Set a study area to preview OpenStreetMap features"}
+    nodes = {n["id"]: n.get("label", "") + " " + n.get("observable", "") for n in (s.graph or {}).get("nodes", [])}
+    text = " ".join([nodes.get(f, "") for f in pick.get("factors") or []] + [pick.get("why") or ""]).lower()
+    hit = next(((tags, lim) for rx, tags, lim in OSM_TAGS if re.search(rx, text)), None)
+    if not hit:
+        return {"status": "none", "note": "OpenStreetMap has many feature types; ask Y-finder for the ones you need (villages, schools, roads...)"}
+    tags, lim = hit
+    try:
+        fc = sources.osm_features(tags, sb, max_elements=4000, max_area_km2=lim)
+    except ValueError as e:
+        return {"status": "none", "note": str(e)}
+    feats = fc.get("features", [])
+    layer, note = _vector_layer(s, pick, feats, f"OpenStreetMap: {', '.join(t.split('=')[-1] for t in tags)}", "OpenStreetMap contributors (Overpass)")
+    if not layer:
+        return {"status": "none", "note": note or "No such features in the study area"}
+    return {"status": "ready", "kind": "service", "layers": [layer], "note": note or f"{layer['n']} OpenStreetMap features ({', '.join(tags)})"}
+
+
+NWIS = "https://waterservices.usgs.gov/nwis"
+
+
+def _rdb(text: str) -> list[dict]:
+    rows = [line.split("\t") for line in text.splitlines() if line and not line.startswith("#")]
+    if len(rows) < 3:
+        return []
+    head = rows[0]
+    return [dict(zip(head, r)) for r in rows[2:]]  # the second line gives column widths
+
+
+def _usgs_water(s, pick, meta):
+    """USGS streamgages in the study area with their annual mean discharge for the study's last full year."""
+    sb = s.scope.get("bbox")
+    if not sb:
+        return {"status": "none", "note": "Set a study area to preview streamgages"}
+    end = _study_year(s.scope) or dt.date.today().year - 1
+    year = min(end, dt.date.today().year - 1)
+    sites: dict[str, dict] = {}
+    x = sb[0]
+    while x < sb[2] and len(sites) < 600:  # the site service takes boxes up to 25 square degrees
+        y = sb[1]
+        while y < sb[3] and len(sites) < 600:
+            box = [round(x, 4), round(y, 4), round(min(x + 5, sb[2]), 4), round(min(y + 5, sb[3]), 4)]
+            try:
+                r = requests.get(f"{NWIS}/site/", params={"format": "rdb", "bBox": ",".join(map(str, box)), "parameterCd": "00060",
+                                                         "siteType": "ST", "hasDataTypeCd": "dv", "siteStatus": "active"}, headers=UA, timeout=60)
+            except requests.RequestException:
+                r = None  # one slow tile should not lose the others
+            if r is not None and r.status_code == 200:
+                for d in _rdb(r.text):
+                    try:
+                        sites[d["site_no"]] = {"name": d.get("station_nm", ""), "lat": float(d["dec_lat_va"]), "lon": float(d["dec_long_va"])}
+                    except (KeyError, ValueError):
+                        continue
+            y += 5
+        x += 5
+    if not sites:
+        return {"status": "none", "note": "No USGS streamgages with daily discharge in the study area"}
+    ids = list(sites)[:300]
+
+    def batch(args):  # the statistics service takes at most 10 sites per request
+        chunk, yr = args
+        try:
+            r = requests.get(f"{NWIS}/stat/", params={"format": "rdb", "sites": ",".join(chunk), "statReportType": "annual",
+                                                     "statTypeCd": "mean", "parameterCd": "00060", "startDt": str(yr), "endDt": str(yr)},
+                             headers=UA, timeout=60)
+        except requests.RequestException:
+            return {}
+        out = {}
+        for d in (_rdb(r.text) if r.status_code == 200 else []):
+            try:
+                out[d["site_no"]] = float(d["mean_va"])
+            except (KeyError, ValueError):
+                continue
+        return out
+    chunks = [ids[i:i + 10] for i in range(0, len(ids), 10)]
+    means: dict[str, float] = {}
+    for yr in (year, year - 1, year - 2):  # annual statistics are published some months after a year ends
+        if not any(batch((c, yr)) for c in chunks[:2]):
+            continue
+        with cf.ThreadPoolExecutor(4) as ex:
+            for got in ex.map(batch, [(c, yr) for c in chunks]):
+                means.update(got)
+        year = yr
+        break
+    feats = [{"type": "Feature", "geometry": {"type": "Point", "coordinates": [v["lon"], v["lat"]]},
+              "properties": {"site": k, "name": v["name"], f"mean_flow_cfs_{year}": means.get(k)}} for k, v in sites.items()]
+    vals = [m for m in means.values() if m is not None]
+    paint = _paint(f"mean_flow_cfs_{year}", vals, "blues", f"Mean flow {year} (cubic feet per second)") if len(vals) >= 2 else None
+    layer, note = _vector_layer(s, pick, feats, f"USGS streamgages: mean flow {year}", "USGS Water Data (waterservices.usgs.gov)", paint)
+    if not layer:
+        return {"status": "none", "note": note or "No streamgages in the study area"}
+    rows = [["site", "name", "lat", "lon", f"mean_flow_cfs_{year}"]] + [[k, v["name"], v["lat"], v["lon"], means.get(k)] for k, v in sites.items()]
+    return {"status": "ready", "kind": "service", "layers": [layer], "csv": _csv(s, pick, rows),
+            "note": f"{len(sites)} streamgages; annual mean flow {year} for {len(means)} of them (USGS)"}
+
+
+BY_REF = {"cur:acs": _acs, "cur:tiger": _tiger, "cur:nclimgrid": _nclimgrid, "cur:places": _places, "cur:aqs": _aqs, "cur:gadm": _gadm,
+          "cur:cteco": _cteco, "cur:hms": _hms, "cur:osm": _osm, "cur:usgs_water": _usgs_water}
 
 
 def _reason(pick, meta) -> str:
@@ -1111,7 +1633,7 @@ def _reason(pick, meta) -> str:
 def build(s, pick) -> dict:
     meta = pick.get("meta") or catalog_mod.load().get(pick["ref"]) or {}
     for fn in (_geolibre, _service, BY_REF.get(pick["ref"]), _worldbank, _socrata, _dataverse, _arcgis, _stac, _gee,
-               _direct_file, _landing):
+               _malaria_atlas, _direct_file, _landing):
         if fn is None:
             continue
         r = fn(s, pick, meta)
@@ -1208,7 +1730,7 @@ def _from_browser(s, pick, meta, found: dict, progress) -> dict:
         progress(f"Reading {f['name']}")
         d = downloads.session_dir(s.sid)
         d.mkdir(parents=True, exist_ok=True)
-        dest = d / ("pv-" + re.sub(r"[^a-z0-9.]+", "-", f["name"].lower())[-60:])
+        dest = d / ("pv-" + _tag(pick) + re.sub(r"[^a-z0-9.]+", "-", f["name"].lower())[-60:])
         try:
             os.replace(f["path"], dest)
             res = _read_raw(s, pick, meta, dest, f["name"], host)

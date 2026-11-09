@@ -85,5 +85,15 @@ if MUTANT:
     elif MUTANT == "explore_no_stand_in_note":
         from yfinder import explore
         explore._proxy = lambda v, factor: ""
+    elif MUTANT == "acs_always_income":
+        from yfinder import previews
+        previews.ESRI_ACS_RACE = previews.ESRI_ACS_INCOME
+    elif MUTANT == "socrata_first_rows":
+        from yfinder import previews
+        previews._socrata = lambda s, pick, meta: (previews._download_table(s, pick, meta, meta["soda"] + "?$limit=50000", "x.csv", "portal")
+                                                   if meta.get("soda") else None)
+    elif MUTANT == "dataverse_no_join":
+        from yfinder import previews
+        previews._join_dataset_table = lambda *a, **k: None
     else:
         raise SystemExit(f"unknown mutant {MUTANT}")

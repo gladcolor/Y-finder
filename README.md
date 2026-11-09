@@ -43,7 +43,7 @@ handbooks/      <source>/SKILL.md access handbooks
 scripts/        build_catalog.py, write_handbooks.py, record_demos.py, run_personas.py, mutation_check.py, run_watches.py
 tests/          pytest suite, personas.json
 deploy/         systemd units, nginx snippet, deploy.sh
-docs/           design.md, literature_review.md, persona_results.md, demo_case_results.md
+docs/           design.md, literature_review.md, persona_results.md, demo_case_results.md, demo_data_audit.md
 ```
 
 ## Tests

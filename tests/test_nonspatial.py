@@ -173,7 +173,7 @@ def test_dataverse_host_comes_from_the_doi_and_maps_come_before_tables(s, monkey
     meta = {"title": "Silver registry", "doi": "doi:10.60600/YU/TEST", "dataverse_host": "dataverse.yale.edu"}
     r = previews.build(s, {"ref": "https://doi.org/10.60600/YU/TEST", "role": "core", "title": "Silver", "meta": meta})
     assert asked[0].startswith("https://dataverse.yale.edu") and asked[1].startswith("https://dataverse.harvard.edu")   # retried at Harvard
-    assert got == ["https://dataverse.harvard.edu/api/access/datafile/8?format=original"]                            # the map file
+    assert got[0] == "https://dataverse.harvard.edu/api/access/datafile/8?format=original"                          # the map file first
     assert r["status"] == "ready" and r["layers"][0]["n"] == 4
     assert previews._dv_host("doi:10.7910/DVN/NNFFCH", "dataverse.yale.edu") == "dataverse.harvard.edu"
 
@@ -197,3 +197,56 @@ def test_a_dataverse_collection_is_searched_with_the_question(s, monkeypatch):
     assert search[0] == "https://dataverse.yale.edu/api/search" and search[1]["subtree"] == "some-collection"
     assert "zoning" in search[1]["q"] or "housing" in search[1]["q"] or "permits" in search[1]["q"]
     assert r["status"] == "ready" and r["note"].startswith("Housing permits by town:")
+
+
+def test_a_dataset_table_is_joined_to_its_map_file_by_a_shared_id(s, monkeypatch):
+    """The silver registry: treasury points in a shapefile, pesos per treasury and year in a CSV beside it. The values
+    are summed per place over the study years; rows of places not on the map (Peru) stay out of the trend; a column of
+    years or a per-row serial number is never taken as the key."""
+    import io
+    import zipfile
+    import shapefile  # pyshp
+    shp, shx, dbf = io.BytesIO(), io.BytesIO(), io.BytesIO()
+    w = shapefile.Writer(shp=shp, shx=shx, dbf=dbf, shapeType=shapefile.POINT)
+    w.field("GZ_ID", "N", decimal=1)
+    w.field("GZ_START", "N", decimal=1)
+    w.field("GZ_Label", "C")
+    for i, (gid, name) in enumerate([(1000001, "Mexico"), (1000002, "Guanajuato"), (1000003, "Zacatecas")]):
+        for k in range(3):  # several records per treasury, as in the real file
+            w.point(-101.0 + i, 21.0 + i * 0.5)
+            w.record(gid, 1548 + i, name)
+    w.close()
+    zbuf = io.BytesIO()
+    with zipfile.ZipFile(zbuf, "w") as z:
+        for ext, b in (("shp", shp), ("shx", shx), ("dbf", dbf)):
+            z.writestr(f"cajas.{ext}", b.getvalue())
+    rows = ["ID;Caja;GZ_ID;START_;Pesos"]
+    k = 0
+    for gid, base in ((1000001, 100), (1000002, 300), (1000003, 200), (6000001, 900)):  # 6000001: a Peruvian treasury
+        for y in range(1700, 1712):
+            k += 1
+            rows.append(f"{k};c{gid};{gid};{y};{base + y - 1700}")
+    csv_bytes = ("\n".join(rows) + "\n").encode()
+
+    class R:
+        def __init__(self, url):
+            self.url = url
+
+        def json(self):
+            return {"status": "OK", "data": {"latestVersion": {"files": [
+                {"dataFile": {"id": 7, "originalFileName": "cajas_plata.csv", "originalFileSize": len(csv_bytes)}},
+                {"dataFile": {"id": 8, "originalFileName": "cajas.zip", "originalFileSize": 5000, "contentType": "application/zipped-shapefile"}}]}}}
+    monkeypatch.setattr(previews.requests, "get", lambda url, **kw: R(url))
+    monkeypatch.setattr(downloads, "fetch", lambda url, dest, max_bytes=None: dest.write_bytes(csv_bytes if "/7?" in url else zbuf.getvalue()) or {})
+    s.scope = {"bbox": [-118.6, 14.4, -86.5, 32.7], "time_start": "1701", "time_end": "1710"}
+    s.graph = {"question": "How did silver registered at treasuries shift?", "outcome": "silver",
+               "nodes": [{"id": "silver", "label": "Silver registered", "role": "outcome", "core": True, "observable": ""}], "edges": []}
+    meta = {"title": "Silver registry", "doi": "doi:10.7910/DVN/TEST"}
+    r = previews.build(s, {"ref": "https://doi.org/10.7910/DVN/TEST", "role": "core", "title": "Silver", "meta": meta, "factors": ["silver"]})
+    lay = r["layers"][0]
+    fc = json.loads(session.layer_path(lay["id"]).read_text(encoding="utf-8"))
+    got = {f["properties"]["name"]: f["properties"]["Pesos_total"] for f in fc["features"]}
+    assert got == {"Mexico": sum(100 + y for y in range(1, 11)), "Guanajuato": sum(300 + y for y in range(1, 11)),
+                   "Zacatecas": sum(200 + y for y in range(1, 11))}                       # one point per treasury, 1701-1710 only
+    assert "joined to the map file by GZ_ID" in r["note"]
+    assert r["series"]["points"][0] == [1701, 101 + 301 + 201]                           # Peru is not on the map: not in the trend

@@ -350,7 +350,8 @@ def arcgis_layer_url(url: str) -> str | None:
     return f"{m.group(1)}/{m.group(2) or 0}"
 
 
-def arcgis_query(url: str, bbox, where: str = "1=1", max_features: int = 2000, simplify_deg: float | None = None) -> dict:
+def arcgis_query(url: str, bbox, where: str = "1=1", max_features: int = 2000, simplify_deg: float | None = None,
+                 out_fields: str = "*") -> dict:
     layer = arcgis_layer_url(url)
     if not layer:
         raise ValueError("Not an ArcGIS FeatureServer or MapServer layer URL")
@@ -358,7 +359,9 @@ def arcgis_query(url: str, bbox, where: str = "1=1", max_features: int = 2000, s
         raise ValueError("URL host is not allowed")
     if not re.fullmatch(r"[\w\s=<>'%.,()\-]*", where or "1=1"):
         raise ValueError("Unsupported where clause")
-    params = {"where": where or "1=1", "outFields": "*", "outSR": 4326, "f": "geojson",
+    if not re.fullmatch(r"\*|[\w,]+", out_fields or "*"):
+        raise ValueError("Unsupported field list")
+    params = {"where": where or "1=1", "outFields": out_fields or "*", "outSR": 4326, "f": "geojson",
               "resultRecordCount": max(1, min(int(max_features), 4000))}
     if bbox and valid_bbox(bbox):
         params.update({"geometry": ",".join(str(x) for x in bbox), "geometryType": "esriGeometryEnvelope",
@@ -384,7 +387,7 @@ def arcgis_query(url: str, bbox, where: str = "1=1", max_features: int = 2000, s
     # Servers cap each answer (often 1,000 or 2,000 features); keep asking with an offset until max_features.
     fc = page(0)
     feats = list(fc.get("features", []))
-    for _ in range(10):
+    for _ in range(80):  # some Living Atlas services answer 50 features at a time
         more = fc.get("exceededTransferLimit") or (fc.get("properties") or {}).get("exceededTransferLimit")
         if not more or len(feats) >= max_features or not fc.get("features"):
             break
@@ -422,12 +425,13 @@ AREA_KEYS = {"building", "landuse", "leisure", "natural", "amenity", "water", "w
              "boundary", "area", "man_made", "parking", "shop", "tourism", "historic", "aeroway"}
 
 
-def osm_features(tag_filters: list[str], bbox, max_elements: int = 4000) -> dict:
+def osm_features(tag_filters: list[str], bbox, max_elements: int = 4000, max_area_km2: float = 2500) -> dict:
     if not bbox or not valid_bbox(bbox):
         raise ValueError("Set a study area first")
     wkm, hkm = bbox_size_km(bbox)
-    if wkm * hkm > 2500:
-        raise ValueError(f"Study area is {wkm:.0f} x {hkm:.0f} km; OpenStreetMap preview is limited to about 50 x 50 km")
+    if wkm * hkm > max_area_km2:
+        side = max_area_km2 ** 0.5
+        raise ValueError(f"Study area is {wkm:.0f} x {hkm:.0f} km; this OpenStreetMap preview is limited to about {side:.0f} x {side:.0f} km")
     filters = [t.strip() for t in tag_filters if t and t.strip()][:4]
     if not filters or not all(_TAG_RE.match(t) for t in filters):
         raise ValueError("Tag filters must look like key or key=value, e.g. natural=water")
@@ -436,12 +440,14 @@ def osm_features(tag_filters: list[str], bbox, max_elements: int = 4000) -> dict
     for t in filters:
         k, _, v = t.partition("=")
         sel = f'["{k}"="{v}"]' if v else f'["{k}"]'
-        parts.append(f"nwr{sel}({s},{w},{n},{e});")
-    q = f"[out:json][timeout:25];({''.join(parts)});out geom {int(max_elements)};"
+        kind = "node" if k == "place" else "nwr"  # settlements are points; asking for ways too is slow
+        parts.append(f"{kind}{sel}({s},{w},{n},{e});")
+    q = f"[out:json][timeout:50];({''.join(parts)});out geom {int(max_elements)};"
     data, last_err = None, None
     for endpoint in OVERPASS:  # the main server is often busy; fall back to a mirror
         try:
-            r = requests.post(endpoint, data={"data": q}, headers=HEADERS, timeout=32)
+            # Overpass stalls when asked for "Accept: application/json"; the query itself sets the format
+            r = requests.post(endpoint, data={"data": q}, headers={"User-Agent": USER_AGENT}, timeout=65)
             if r.status_code == 200:
                 data = r.json()
                 break

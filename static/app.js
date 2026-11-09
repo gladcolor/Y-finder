@@ -1169,11 +1169,14 @@
       c.type === 'hist' ? `Histogram of ${c.label}` : `${c.label}`);
     }
     if (c.type === 'line') {
-      const pts = (c.points || []).filter((p) => Number.isFinite(+p[0]) && Number.isFinite(+p[1])); if (pts.length < 2) return '';
-      const xs = pts.map((p) => +p[0]), ys = pts.map((p) => +p[1]);
+      const ok = (p) => Number.isFinite(+p[0]) && Number.isFinite(+p[1]);
+      const pts = (c.points || []).filter(ok); if (pts.length < 2) return '';
+      const pts2 = (c.points2 || []).filter(ok); // a second line to compare (weekends against weekdays)
+      const xs = pts.concat(pts2).map((p) => +p[0]), ys = pts.concat(pts2).map((p) => +p[1]);
       const X = sx(Math.min(...xs), Math.max(...xs)), y0 = Math.min(...ys), y1 = Math.max(...ys), Y = sy(y0, y1);
-      const d = pts.map((p, i) => `${i ? 'L' : 'M'}${X(+p[0]).toFixed(1)},${Y(+p[1]).toFixed(1)}`).join('');
-      return frame(`${axis}<path d="${d}" class="ln"/><text x="${L}" y="${H - B + 11}" class="tk">${esc(String(xs[0]))}</text><text x="${W - R}" y="${H - B + 11}" class="tk" text-anchor="end">${esc(String(xs[xs.length - 1]))}</text>
+      const path = (a) => a.map((p, i) => `${i ? 'L' : 'M'}${X(+p[0]).toFixed(1)},${Y(+p[1]).toFixed(1)}`).join('');
+      const d = path(pts) + '';
+      return frame(`${axis}${pts2.length > 1 ? `<path d="${path(pts2)}" class="ln ln2"/>` : ''}<path d="${d}" class="ln"/><text x="${L}" y="${H - B + 11}" class="tk">${esc(String(xs[0]))}</text><text x="${W - R}" y="${H - B + 11}" class="tk" text-anchor="end">${esc(String(xs[xs.length - 1]))}</text>
         <text x="${L - 4}" y="${T + 7}" class="tk" text-anchor="end">${esc(f(y1))}</text><text x="${L - 4}" y="${H - B}" class="tk" text-anchor="end">${esc(f(y0))}</text>
         <text x="${(L + W - R) / 2}" y="${H - 3}" class="al" text-anchor="middle">${esc(c.label || '')}</text>`, `Trend of ${c.label}`);
     }
