@@ -554,9 +554,9 @@ def _landing(s, pick, meta):
     if not sources.safe_url(url):
         return None
     try:
-        r = requests.get(url, headers=UA, timeout=25)
+        r = requests.get(url, headers=UA, timeout=(6, 20))  # some sites drop connections from data centres
     except requests.RequestException:
-        return None
+        return {"status": "none", "note": "The source site did not answer the Y-finder server; open it with the Source link"}
     if r.status_code != 200 or "html" not in (r.headers.get("Content-Type") or "") or not sources.safe_url(r.url):
         return None
     links = _data_links(r.url, r.text[:3_000_000], _study_year(s.scope))
