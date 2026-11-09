@@ -128,15 +128,20 @@
     if (d.style === 'scope') for (const [id, e] of state.layers) if (e.d.style === 'scope') removeLayer(id);
     let color = d.style === 'scope' ? '#2b4f8a' : d.style === 'boundary' ? '#1d2433' : d.style === 'footprint' ? '#d97706' : PALETTE[state.colorIdx++ % PALETTE.length];
     if (d.paint) color = swatchOf(d.paint, color);
-    const src = 'src-' + d.id; const entry = { d, color, ids: [], visible: true, fc: null };
+    const src = 'src-' + d.id; const entry = { d, color, ids: [], srcs: [], visible: true, fc: null };
     state.layers.set(d.id, entry);
     try {
-      if (d.kind === 'raster') {
-        const opts = { type: 'raster', tiles: d.tiles, tileSize: 256, minzoom: d.minzoom || 0, maxzoom: Math.min(d.maxzoom || 18, 20), attribution: d.source || '' };
-        if (d.bbox && d.bbox.length === 4) opts.bounds = d.bbox;
-        map.addSource(src, opts);
-        map.addLayer({ id: 'L-' + d.id, type: 'raster', source: src, paint: { 'raster-opacity': 0.92 } }, firstVectorId());
-        entry.ids.push('L-' + d.id);
+      if (d.kind === 'raster') { // same-date scenes arrive as parts of one entry
+        const parts = [{ tiles: d.tiles, bbox: d.bbox }].concat(Array.isArray(d.parts) ? d.parts : []);
+        parts.forEach((p, k) => {
+          if (!Array.isArray(p.tiles) || !p.tiles.length || !p.tiles.every((t) => /^https:\/\//.test(t))) return;
+          const sid = k ? `${src}-${k}` : src, lid = k ? `L-${d.id}-${k}` : 'L-' + d.id;
+          const opts = { type: 'raster', tiles: p.tiles, tileSize: 256, minzoom: d.minzoom || 0, maxzoom: Math.min(d.maxzoom || 18, 20), attribution: d.source || '' };
+          if (p.bbox && p.bbox.length === 4) opts.bounds = p.bbox;
+          map.addSource(sid, opts); entry.srcs.push(sid);
+          map.addLayer({ id: lid, type: 'raster', source: sid, paint: { 'raster-opacity': 0.92 } }, firstVectorId());
+          entry.ids.push(lid);
+        });
       } else {
         const fc = d.data || await fetch(d.url).then((r) => {
           if (r.status === 404) throw new Error(d.session_only || d.style === 'download' ? 'gone' : 'missing');
@@ -144,7 +149,7 @@
         });
         if (state.layers.get(d.id) !== entry) return null; // removed (or new conversation) while loading
         entry.fc = fc;
-        map.addSource(src, { type: 'geojson', data: fc });
+        map.addSource(src, { type: 'geojson', data: fc }); entry.srcs.push(src);
         const before = state.firstSymbol;
         if (d.style === 'scope') {
           map.addLayer({ id: 'F-' + d.id, type: 'fill', source: src, paint: { 'fill-color': color, 'fill-opacity': 0.04 } }, before);
@@ -195,7 +200,7 @@
   function removeLayer(id) {
     const e = state.layers.get(id); if (!e) return;
     e.ids.forEach((l) => { if (map.getLayer(l)) map.removeLayer(l); });
-    if (map.getSource('src-' + id)) map.removeSource('src-' + id);
+    (e.srcs.length ? e.srcs : ['src-' + id]).forEach((sid) => { if (map.getSource(sid)) map.removeSource(sid); });
     state.layers.delete(id); renderLayerList();
   }
   function toggleLayer(id) {
@@ -203,15 +208,26 @@
     e.ids.forEach((l) => map.getLayer(l) && map.setLayoutProperty(l, 'visibility', e.visible ? 'visible' : 'none'));
     renderLayerList();
   }
+  const ICON = {
+    eye: '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round"><path d="M2 12s3.6-7 10-7 10 7 10 7-3.6 7-10 7S2 12 2 12Z"/><circle cx="12" cy="12" r="3"/></svg>',
+    eyeOff: '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round"><path d="M3 3l18 18M10.6 5.1A10.4 10.4 0 0 1 12 5c6.4 0 10 7 10 7a17 17 0 0 1-3.2 4.1M6.6 6.6C3.9 8.3 2 12 2 12s3.6 7 10 7c1.6 0 3-.4 4.3-1"/><path d="M9.9 9.9a3 3 0 0 0 4.2 4.2"/></svg>',
+    zoom: '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round"><circle cx="12" cy="12" r="7"/><path d="M12 2v4M12 18v4M2 12h4M18 12h4"/></svg>',
+    dl: '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M12 4v11M7 10l5 5 5-5M5 20h14"/></svg>',
+    x: '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round"><path d="M6 6l12 12M18 6 6 18"/></svg>',
+  };
   function renderLayerList() {
     const list = $('#layerList'); const n = state.layers.size;
     $('#nLayers').textContent = n ? `${n}` : '';
+    $('#nLayersBadge').textContent = n; $('#nLayersBadge').hidden = !n;
     if (!n) { list.innerHTML = '<div class="muted small">Layers that Y-finder adds appear here.</div>'; return; }
     list.innerHTML = [...state.layers.values()].reverse().map((e) => {
-      const d = e.d; const dl = d.kind === 'geojson' ? `<a class="btn" style="padding:0 6px" href="${esc(d.url)}" download="${esc((d.title || 'layer').replace(/[^\w-]+/g, '_'))}.geojson" title="Download GeoJSON">&#8595;</a>` : '';
-      return `<div class="lrow" data-id="${esc(d.id)}"><span class="sw" style="background:${e.color};opacity:${e.visible ? 1 : .3}"></span>
-        <span class="nm" title="${esc(d.title)} · ${esc(d.source || '')}">${esc(d.title)}${d.n ? ` <span class="muted">(${d.n})</span>` : ''}${d.session_only ? '<span class="tag" title="Downloaded to the server for this session; deleted when it ends">session</span>' : ''}</span>
-        <button data-act="zoom" title="Zoom to">Zoom</button><button data-act="vis">${e.visible ? 'Hide' : 'Show'}</button>${dl}<button data-act="rm" title="Remove">&times;</button></div>`;
+      const d = e.d;
+      const dl = d.kind === 'geojson' ? `<a href="${esc(d.url)}" download="${esc((d.title || 'layer').replace(/[^\w-]+/g, '_'))}.geojson" title="Download GeoJSON" aria-label="Download GeoJSON">${ICON.dl}</a>` : '';
+      const src = String(d.source || '').replace(/\s*\(.*?\)\s*$/, '');
+      const sub = [d.date && !String(d.title).includes(d.date) ? d.date : '', d.n ? `${Number(d.n).toLocaleString()} feature${d.n === 1 ? '' : 's'}` : '', src].filter(Boolean).join(' · ');
+      return `<div class="lrow${e.visible ? '' : ' off'}" data-id="${esc(d.id)}"><span class="sw" style="background:${e.color}"></span>
+        <div class="lmain" title="${esc(d.title)}${d.source ? '\n' + esc(d.source) : ''}"><div class="nm">${esc(d.title)}${d.session_only ? '<span class="tag" title="Downloaded to the server for this session; deleted when it ends">session</span>' : ''}</div>${sub ? `<div class="ls">${esc(sub)}</div>` : ''}</div>
+        <div class="lact"><button data-act="vis" title="${e.visible ? 'Hide' : 'Show'}" aria-label="${e.visible ? 'Hide' : 'Show'} layer">${e.visible ? ICON.eye : ICON.eyeOff}</button><button data-act="zoom" title="Zoom to layer" aria-label="Zoom to layer">${ICON.zoom}</button>${dl}<button data-act="rm" title="Remove" aria-label="Remove layer">${ICON.x}</button></div></div>`;
     }).join('');
     $$('.lrow', list).forEach((row) => {
       const id = row.dataset.id;

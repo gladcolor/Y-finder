@@ -412,22 +412,28 @@ def h_map_stac_preview(s: Session, a: dict):
     it = s.stac_items.get(a["item_id"])
     if not it:
         raise ToolError("Unknown item_id; use an item_id returned by search_stac_items")
-    events, shown = [], []
+    parts, shown = [], []
     for k, scene in enumerate([it] + _mosaic_partners(s, it)):
         t = sources.stac_tiles(scene.get("tilejson"))
         if not t or not t.get("tiles"):
             if k == 0:
                 raise ToolError("This item has no map preview")
             continue
-        title = (a.get("title") or scene["id"]) + (f" (part {k + 1})" if k else "")
-        layer = {"id": "stac-" + re.sub(r"[^A-Za-z0-9]", "", scene["id"])[-40:], "kind": "raster", "title": title,
-                 "source": "Microsoft Planetary Computer", "tiles": t["tiles"], "bbox": t.get("bounds") or scene.get("bbox"),
-                 "minzoom": t["minzoom"], "maxzoom": t["maxzoom"], "preview": scene.get("preview"),
-                 "date": (scene.get("datetime") or "")[:10], "collection": scene["collection"]}
-        s.layers.append(layer)
-        events.append({"type": "layer", "layer": layer})
+        parts.append({"tiles": t["tiles"], "bbox": t.get("bounds") or scene.get("bbox"), "minzoom": t["minzoom"], "maxzoom": t["maxzoom"]})
         shown.append(scene["id"])
-    events.append({"type": "zoom", "bbox": s.scope.get("bbox") or events[0]["layer"]["bbox"]})
+    # one map entry: neighbor scenes that complete the study area are parts of it
+    date = (it.get("datetime") or "")[:10]
+    title = (a.get("title") or it["id"])
+    if date and date not in title:
+        title += f" · {date}"
+    if len(parts) > 1:
+        title += f" · {len(parts)} scenes"
+    layer = {"id": "stac-" + re.sub(r"[^A-Za-z0-9]", "", it["id"])[-40:], "kind": "raster", "title": title[:120],
+             "source": "Microsoft Planetary Computer", "tiles": parts[0]["tiles"], "bbox": parts[0]["bbox"],
+             "minzoom": parts[0]["minzoom"], "maxzoom": parts[0]["maxzoom"], "parts": parts[1:], "preview": it.get("preview"),
+             "date": date, "collection": it["collection"]}
+    s.layers.append(layer)
+    events = [{"type": "layer", "layer": layer}, {"type": "zoom", "bbox": s.scope.get("bbox") or layer["bbox"]}]
     covered = coverage_fraction([min(s.stac_items[i]["bbox"][0] for i in shown), min(s.stac_items[i]["bbox"][1] for i in shown),
                                  max(s.stac_items[i]["bbox"][2] for i in shown), max(s.stac_items[i]["bbox"][3] for i in shown)],
                                 s.scope["bbox"]) if s.scope.get("bbox") else None
@@ -787,8 +793,11 @@ def restore(s: Session, b: dict) -> None:
             l.pop("data", None)
         elif l.get("kind") == "raster":
             tiles = l.get("tiles")
-            if not (isinstance(tiles, list) and tiles and all(isinstance(t, str) and t.startswith("https://") for t in tiles)):
+            parts = l.get("parts") or []
+            ok = lambda ts: isinstance(ts, list) and ts and all(isinstance(t, str) and t.startswith("https://") for t in ts)  # noqa: E731
+            if not ok(tiles) or not isinstance(parts, list) or not all(isinstance(p, dict) and ok(p.get("tiles")) for p in parts[:10]):
                 continue
+            l["parts"] = parts[:10]
         else:
             continue
         layers.append(l)

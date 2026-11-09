@@ -62,7 +62,9 @@ def test_imagery_uses_the_best_scene_and_mosaics_small_tiles(s, monkeypatch):
     monkeypatch.setattr(sources, "stac_tiles", lambda u: {"tiles": [u + "/{z}/{x}/{y}"], "bounds": None, "minzoom": 10, "maxzoom": 18})
     r = previews.build(s, _pick("pc:naip"))
     assert calls[:2] == [("2015-01-01/2024-12-31", 30), ("2015-01-01/2024-12-31", None)]
-    assert [l["id"] for l in r["layers"]] == ["pv-stac-b", "pv-stac-a"] and "2 scenes" in r["note"]
+    [lay] = r["layers"]                                  # one entry per date; same-day scenes are its parts
+    assert lay["id"] == "pv-stac-b" and len(lay["parts"]) == 1 and "/a/" in lay["parts"][0]["tiles"][0]
+    assert lay["title"] == "NAIP · 2023-07-06 · 2 scenes" and lay["date"] == "2023-07-06" and "2 scenes" in r["note"]
 
 
 def test_nclimgrid_slice_is_downloaded_joined_and_kept_for_the_session(s, monkeypatch):

@@ -172,8 +172,10 @@
 </div>
 
 <div class="layers-box">
-  <button id="btnLayers" class="layers-btn" title="Layers">
-    <span class="thumb" id="baseThumb"></span><span>Layers</span>
+  <button id="btnLayers" class="layers-btn" title="Map layers and basemap" aria-label="Map layers and basemap">
+    <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linejoin="round" aria-hidden="true">
+      <path d="M12 3 2.5 8 12 13l9.5-5L12 3Z" fill="currentColor" fill-opacity=".14"/><path d="m2.5 12.5 9.5 5 9.5-5"/><path d="m2.5 17 9.5 5 9.5-5" opacity=".55"/></svg>
+    <span class="lb-t">Layers</span><span class="lb-n" id="nLayersBadge" hidden></span>
   </button>
   <div id="layerPanel" class="layer-panel" hidden>
     <div class="lp-head"><b>Basemap</b>

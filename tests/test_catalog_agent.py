@@ -163,4 +163,6 @@ def test_stac_preview_adds_mosaic_partners(monkeypatch):
     res, ev, _ = agent.h_map_stac_preview(s, {"item_id": "A", "title": "NAIP"})
     assert res["shown"] == ["A", "B"]                      # same-week neighbor added, 2021 scene not
     assert res["approx_study_area_covered_pct"] == 100
-    assert sum(e["type"] == "layer" for e in ev) == 2
+    lay = [e["layer"] for e in ev if e["type"] == "layer"]
+    assert len(lay) == 1 and len(lay[0]["parts"]) == 1      # one map entry; the neighbor is a part of it
+    assert lay[0]["title"] == "NAIP · 2023-07-05 · 2 scenes" and lay[0]["date"] == "2023-07-05"

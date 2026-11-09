@@ -109,6 +109,15 @@ def _retry(fn, tries: int = 2):
             time.sleep(1.5)
 
 
+def short_title(t: str) -> str:
+    """'NAIP: National Agriculture Imagery Program' -> 'NAIP'; long names are cut at a word."""
+    t = (t or "").strip()
+    head = t.split(":")[0].strip()
+    if ":" in t and 2 <= len(head) <= 24:
+        return head
+    return t if len(t) <= 40 else t[:40].rsplit(" ", 1)[0] + "..."
+
+
 def _study_year(scope: dict) -> int | None:
     m = re.match(r"\d{4}", str((scope or {}).get("time_end") or ""))
     return int(m.group()) if m else None
@@ -210,21 +219,23 @@ def _stac(s, pick, meta):
     # small tiles (NAIP quarter quads): add the other scenes from the same day that cover the study area
     same = [it] + sorted([x for x in items if x is not it and (x.get("datetime") or "")[:10] == date and x["covers"] > 0],
                          key=lambda x: -x["covers"])[:4]
-    layers = []
-    for k, sc in enumerate(same):
+    parts = []
+    for sc in same:
         t = sources.stac_tiles(sc["tilejson"])
-        if not t or not t.get("tiles"):
-            continue
-        layers.append({"id": "pv-stac-" + re.sub(r"[^A-Za-z0-9]", "", sc["id"])[-40:], "kind": "raster",
-                       "title": f"{meta.get('title') or coll}, {date}" + (f" (part {k + 1})" if k else ""),
-                       "source": "Microsoft Planetary Computer", "tiles": t["tiles"], "bbox": t.get("bounds") or sc.get("bbox"),
-                       "minzoom": t["minzoom"], "maxzoom": t["maxzoom"]})
-    if not layers:
+        if t and t.get("tiles"):
+            parts.append({"tiles": t["tiles"], "bbox": t.get("bounds") or sc.get("bbox"), "minzoom": t["minzoom"], "maxzoom": t["maxzoom"]})
+    if not parts:
         return {"status": "none", "note": "The imagery tiler did not answer"}
     union = [min(x["bbox"][0] for x in same), min(x["bbox"][1] for x in same), max(x["bbox"][2] for x in same), max(x["bbox"][3] for x in same)]
     pct = round(100 * min(1.0, coverage_fraction(union, sb)))
-    return {"status": "ready", "kind": "service", "layers": layers,
-            "note": f"Imagery of {date}" + (f", {len(layers)} scenes" if len(layers) > 1 else "") + f", about {pct}% of the study area"}
+    n = len(parts)
+    # one map entry per date: same-day scenes are parts of it, and the date stays visible in the Layers panel
+    layer = {"id": "pv-stac-" + re.sub(r"[^A-Za-z0-9]", "", it["id"])[-40:], "kind": "raster",
+             "title": f"{short_title(meta.get('title') or coll)} · {date}" + (f" · {n} scenes" if n > 1 else ""),
+             "date": date, "source": "Microsoft Planetary Computer", "tiles": parts[0]["tiles"], "bbox": parts[0]["bbox"],
+             "minzoom": parts[0]["minzoom"], "maxzoom": parts[0]["maxzoom"], "parts": parts[1:]}
+    return {"status": "ready", "kind": "service", "layers": [layer],
+            "note": f"Imagery of {date}" + (f", {n} scenes" if n > 1 else "") + f", about {pct}% of the study area"}
 
 
 def _acs(s, pick, meta):
