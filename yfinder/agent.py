@@ -464,7 +464,10 @@ def h_map_feature_service(s: Session, a: dict):
         fc = sources.arcgis_query(a["url"], s.scope.get("bbox"))
     except ValueError as e:
         raise ToolError(str(e))
-    return _vector(s, fc, a.get("title") or "ArcGIS layer", "ArcGIS service")
+    res, ev, label = _vector(s, fc, a.get("title") or "ArcGIS layer", "ArcGIS service")
+    if ev:  # remembered so a map preview of the same service is not drawn twice
+        ev[0]["layer"]["service_url"] = sources.arcgis_layer_url(a["url"])
+    return res, ev, label
 
 
 def _study_year(scope: dict) -> int | None:

@@ -10,7 +10,7 @@ decision log and commit log when you change something important.
 - **Purpose:** working prototype for Huan Ning's answer to the YCGS written question on an *interactive data guide*
   (Lead, Geospatial AI & ML interview, Yale Job 138060WD). The answer text lives in
   `E:\OneDrive_Huan\OneDrive\Job_hunting\2026\Yale\written_exam.md` (Huan edits it himself; do not overwrite it).
-- **Tests:** `python -m pytest -q` (158 pass, no model calls); `scripts/mutation_check.py` (all 13 injected faults caught);
+- **Tests:** `python -m pytest -q` (159 pass, no model calls); `scripts/mutation_check.py` (all 13 injected faults caught);
   personas 190/195 checks across 3 models (Terra 9/10 personas fully, Sol 8/10, Luna 8/10; fixes after the run listed in
   `docs/persona_results.md`); demo cases 12, every check passing (`docs/demo_case_results.md`).
 - **Reviewed:** Codex CLI (gpt-6.1-sol) reviewed the code; all 15 findings fixed with regression tests (time-fit bug for

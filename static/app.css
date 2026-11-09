@@ -327,7 +327,7 @@ body.collapsed .layers-box { left: 12px; }
 .lrow .lact button:hover, .lrow .lact a:hover { background: var(--soft); }
 .lrow .lact svg { width: 15px; height: 15px; }
 .lrow button { border: 0; background: none; color: var(--navy-2); font-size: 12px; padding: 0 3px; }
-.lrow .tag { font-size: 10.5px; color: #8a5a00; background: #fff4dc; border-radius: 4px; padding: 0 4px; margin-left: 4px; }
+.lrow .tag { font-size: 10.5px; color: #8a5a00; background: #fff4dc; border-radius: 4px; padding: 0 4px; margin-left: 4px; white-space: nowrap; display: inline-block; line-height: 1.4; }
 .dl-form { display: flex; gap: 6px; margin-top: 10px; padding-top: 8px; border-top: 1px solid var(--line); }
 .dl-form input { flex: 1; min-width: 0; border: 1px solid var(--line); border-radius: 8px; padding: 5px 8px; font: inherit; font-size: 12.5px; }
 .dl-note { font-size: 11px; margin-top: 4px; }

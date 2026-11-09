@@ -125,6 +125,9 @@
   async function addLayer(d) {
     if (!state.mapReady) { state.pending.push(d); return null; }
     if (state.layers.has(d.id)) return state.layers.get(d.id);
+    // the same data drawn twice (same name, source and feature count) stays one entry
+    const twin = d.kind === 'geojson' && d.style !== 'scope' && [...state.layers.values()].find((e) => e.d.kind === 'geojson' && e.d.title === d.title && e.d.source === d.source && e.d.n === d.n);
+    if (twin) return twin;
     if (d.style === 'scope') for (const [id, e] of state.layers) if (e.d.style === 'scope') removeLayer(id);
     let color = d.style === 'scope' ? '#2b4f8a' : d.style === 'boundary' ? '#1d2433' : d.style === 'footprint' ? '#d97706' : PALETTE[state.colorIdx++ % PALETTE.length];
     if (d.paint) color = swatchOf(d.paint, color);
@@ -821,6 +824,7 @@
     const it = state.previews[ref]; if (!it) return '';
     if (it.status === 'pending') return '<span class="pv-dot run"></span><span class="muted">Preparing a map preview...</span>';
     if (it.status !== 'ready') return `<span class="pv-dot"></span><span class="muted">No map preview: ${esc(it.note || '')}</span>`;
+    if (!(it.layers || []).length) return `<span class="pv-dot ok"></span><span class="muted">${esc(it.note || 'Already on the map')}</span>`;
     const ids = (it.layers || []).map((l) => l.id); const vis = ids.some((id) => state.layers.get(id)?.visible);
     const csv = it.csv ? ` <a class="pv-a" href="api/session/${encodeURIComponent(state.sid)}/sample/${encodeURIComponent(it.csv)}" download>CSV</a>` : '';
     return `<span class="pv-dot ok"></span><span>${it.kind === 'slice' ? 'Sample on map' : 'On map'}</span><span class="muted"> · ${esc(it.note || '')}</span>

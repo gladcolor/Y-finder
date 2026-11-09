@@ -41,6 +41,24 @@ def test_services_are_drawn_directly(s):
     assert all(l in s.layers for l in r["layers"])                                                 # part of the GeoLibre hand-off
 
 
+def test_layers_already_on_the_map_are_not_drawn_twice(s, monkeypatch):
+    s.layers.append({"id": "x", "kind": "geojson", "title": "Census tracts", "source": "U.S. Census Bureau TIGERweb"})
+    called = []
+    monkeypatch.setattr(sources, "census_boundaries", lambda level, bbox: called.append(level) or {"features": []})
+    r = previews.build(s, _pick("cur:tiger"))
+    assert r["layers"] == [] and r["note"] == "Already on the map" and not called
+    s.layers.append({"id": "y", "kind": "geojson", "title": "Trees", "service_url": "https://services.example.com/arcgis/rest/services/Trees/FeatureServer/0"})
+    monkeypatch.setattr(sources, "safe_url", lambda u: True)
+    monkeypatch.setattr(sources, "arcgis_query", lambda *a, **k: called.append("arcgis") or {"features": []})
+    r = previews.build(s, {"ref": "https://services.example.com/arcgis/rest/services/Trees/FeatureServer/0", "role": "core", "meta": {}})
+    assert r["note"] == "Already on the map" and "arcgis" not in called
+    # an older layer without a service URL but with the same features counts too
+    s.layers.append({"id": "z", "kind": "geojson", "title": "Parks", "source": "ArcGIS service", "n": 1, "bbox": [-72.95, 41.29, -72.93, 41.31]})
+    monkeypatch.setattr(sources, "arcgis_query", lambda *a, **k: {"features": [_poly(-72.95, 41.29, -72.93, 41.31)]})
+    r = previews.build(s, {"ref": "https://services.example.com/arcgis/rest/services/Parks/FeatureServer/0", "role": "core", "meta": {}})
+    assert r["note"] == "Already on the map"
+
+
 def test_unviewable_sources_say_why(s):
     assert "Earth Engine account" in previews.build(s, _pick("gee:COPERNICUS/S5P/OFFL/L3_NO2"))["note"]
     assert "Licensed" in previews.build(s, _pick("cur:planet"))["note"]

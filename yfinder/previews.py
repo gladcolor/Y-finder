@@ -26,7 +26,7 @@ import requests
 
 from . import catalog as catalog_mod
 from . import downloads, geolibre, session, sources, vector
-from .geo import bbox_size_km, coverage_fraction
+from .geo import bbox_size_km, coverage_fraction, geojson_bbox
 from .session import save_layer
 
 MAX_PICKS = 10
@@ -109,6 +109,14 @@ def _retry(fn, tries: int = 2):
             time.sleep(1.5)
 
 
+ALREADY = {"status": "ready", "kind": "service", "layers": [], "note": "Already on the map"}
+
+
+def _on_map(s, test) -> bool:
+    """Whether the agent (or an earlier preview) already drew this layer, so previews do not add a copy."""
+    return any(test(l) for l in list(s.layers))
+
+
 def short_title(t: str) -> str:
     """'NAIP: National Agriculture Imagery Program' -> 'NAIP'; long names are cut at a word."""
     t = (t or "").strip()
@@ -165,10 +173,19 @@ def _arcgis_url(s, pick, url, title):
     if kind == "featureserver" or (kind == "mapserver" and idx is not None):
         if not s.scope.get("bbox"):
             return {"status": "none", "note": "Set a study area to preview this feature layer"}
-        fc = sources.arcgis_query(f"{root}/{idx or 0}", s.scope["bbox"], max_features=2000)
-        layer, note = _vector_layer(s, pick, fc.get("features", []), title or "ArcGIS layer", "ArcGIS service (features in the study area)")
+        url = f"{root}/{idx or 0}"
+        if _on_map(s, lambda l: (l.get("service_url") or "").lower() == url.lower()):
+            return dict(ALREADY, layers=[])  # a fresh copy: results are updated later
+        fc = sources.arcgis_query(url, s.scope["bbox"], max_features=2000)
+        feats = fc.get("features", [])
+        fb = geojson_bbox({"type": "FeatureCollection", "features": feats}) if feats else None
+        if fb and _on_map(s, lambda l: str(l.get("source", "")).startswith("ArcGIS service") and l.get("n") == len(feats)
+                          and l.get("bbox") and all(abs(x - y) < 1e-3 for x, y in zip(l["bbox"], fb))):
+            return dict(ALREADY, layers=[])  # same features already drawn (an older layer without its service URL)
+        layer, note = _vector_layer(s, pick, feats, title or "ArcGIS layer", "ArcGIS service (features in the study area)")
         if not layer:
             return {"status": "none", "note": note or "No features in the study area"}
+        layer["service_url"] = url
         return {"status": "ready", "kind": "service", "layers": [layer], "note": note or f"{layer['n']} features in the study area"}
     t = geolibre.service_layer({"kind": "arcgis-map" if kind == "mapserver" else "arcgis-image", "url": root})
     layer = {"id": "pv-" + re.sub(r"[^a-z0-9]", "", root.lower())[-40:], "kind": "raster", "title": (title or "ArcGIS map")[:100],
@@ -271,8 +288,12 @@ def _tiger(s, pick, meta):
     w, h = bbox_size_km(sb)
     level = ("block_group" if "block" in unit else "tract" if "tract" in unit else "town" if "town" in unit
              else "county" if "county" in unit or w * h > 40000 else "tract")
-    fc = _retry(lambda: sources.census_boundaries(level, sb))
     plural = {"county": "counties", "block_group": "block groups"}.get(level, level + "s")
+    agent_name = {"tract": "Census tracts", "block_group": "Census block groups", "town": "Towns (county subdivisions)",
+                  "county": "Counties"}.get(level)  # names map_census_boundaries uses
+    if _on_map(s, lambda l: l.get("source") == "U.S. Census Bureau TIGERweb" and l.get("title") in (agent_name, f"Census {plural}")):
+        return dict(ALREADY, layers=[])  # a fresh copy: results are updated later
+    fc = _retry(lambda: sources.census_boundaries(level, sb))
     layer, note = _vector_layer(s, pick, fc.get("features", []), f"Census {plural}", "U.S. Census Bureau TIGERweb")
     if not layer:
         return {"status": "none", "note": note or "No boundaries found"}
