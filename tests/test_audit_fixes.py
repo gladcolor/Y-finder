@@ -574,7 +574,7 @@ def test_heavy_point_layers_keep_their_name_columns():
     props.update(hospital_name="Yale New Haven Hospital", city="New Haven")
     f = vector._feature({"type": "Feature", "properties": props, "geometry": {"type": "Point", "coordinates": [-72.9, 41.3]}}, 5, 16)
     assert f["properties"]["hospital_name"] == "Yale New Haven Hospital" and f["properties"]["city"] == "New Haven"
-    assert len(f["properties"]) == 16
+    assert len(f["properties"]) == 18 and "metric_15" in f["properties"]  # the first 16 stay; names come in addition
 
 
 def test_heavy_point_layers_keep_columns_that_name_the_topic():
@@ -602,3 +602,16 @@ def test_already_on_the_map_names_the_layer_and_sends_it(monkeypatch):
     assert r["note"] == "Already on the map as “FUNAI Indigenous lands (2020)”"
     s.previews = {"x": dict(r, sig="1")}
     assert previews.public(s)["items"]["x"]["existing"][0]["title"] == "FUNAI Indigenous lands (2020)"
+
+
+def test_topic_columns_never_push_out_the_first_columns():
+    """LAPD rows: rpt_id ... chrg_desc (15th) ... then location, crsst, location_1. Promoting the location columns (the topic
+    words included "location") dropped chrg_desc, and the explorer lost the street-vending charges."""
+    from yfinder import explore, vector
+    cols = ["rpt_id", "report_type", "arst_date", "time", "area", "area_desc", "rd", "age", "sex_cd", "descent_cd", "chrg_grp_cd",
+            "grp_description", "arst_typ_cd", "charge", "chrg_desc", "dispo_desc", "location", "crsst", "location_1", "bkg_date"]
+    props = {c: f"v{i}" for i, c in enumerate(cols)}
+    f = vector._feature({"type": "Feature", "properties": props, "geometry": {"type": "Point", "coordinates": [0, 0]}}, 5, 16,
+                        {"location", "arrest", "street"})
+    assert "chrg_desc" in f["properties"] and "dispo_desc" in f["properties"]
+    assert explore.PLACE_TEXT.search("crsst") and explore.PLACE_TEXT.search("location_1") and not explore.PLACE_TEXT.search("chrg_desc")

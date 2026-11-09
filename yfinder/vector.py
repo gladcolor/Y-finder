@@ -24,6 +24,7 @@ def _intersects(a, b) -> bool:
 
 
 MAX_PROPS = 16  # heavy layers keep this many attributes per feature (popups stay useful, the file stays light)
+MAX_EXTRA = 4   # ... plus this many later columns that name places or the card's topic
 NAME_LIKE = re.compile(r"(^|_)(name|title|label|town|city|county|state|site|station|facility|hospital|place|neighbou?rhood)(_|$)|name$", re.I)
 
 
@@ -31,9 +32,12 @@ def _feature(f: dict, nd: int, max_props: int | None = None, keep=None) -> dict:
     g = f["geometry"]
     geom = g if g.get("type") == "GeometryCollection" else {"type": g.get("type"), "coordinates": _round(g.get("coordinates"), nd)}
     props = {k: v for k, v in (f.get("properties") or {}).items() if isinstance(v, (str, int, float, bool)) or v is None}
-    if max_props and len(props) > max_props:  # names first (hospital_name, city), then columns that name the topic (fentanyl)
-        keys = sorted(props, key=lambda k: 0 if NAME_LIKE.search(k) else 1 if keep and any(w in k.lower() for w in keep) else 2)
-        props = {k: props[k] for k in keys[:max_props] if props[k] not in (None, "")}
+    if max_props and len(props) > max_props:
+        # the first columns as before, plus up to 4 later ones that name places (hospital_name, city) or the topic
+        # (fentanyl); promoting them instead pushed LAPD's charge descriptions out
+        keys = list(props)
+        extra = [k for k in keys[max_props:] if NAME_LIKE.search(k) or (keep and any(w in k.lower() for w in keep))][:MAX_EXTRA]
+        props = {k: props[k] for k in keys[:max_props] + extra if props[k] not in (None, "")}
     return {"type": "Feature", "properties": props, "geometry": geom}
 
 

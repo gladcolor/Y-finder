@@ -84,8 +84,8 @@ body.collapsed .stepper { display: none; }
 .themes button:hover { background: var(--navy-2); color: #fff; }
 /* ---------- concise layout (v2) ---------- */
 .sec-h { font-size: 13.5px; margin: 18px 0 8px; color: var(--ink); font-weight: 700; }
-.demo-grid { display: grid; grid-template-columns: 1fr 1fr; gap: 6px; }
-body.wide .demo-grid { grid-template-columns: 1fr 1fr 1fr; }
+.demo-grid { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 6px; }
+body.wide .demo-grid { grid-template-columns: repeat(3, minmax(0, 1fr)); } /* minmax(0, ...): one-line labels must not widen a column */
 .more-demos { margin-top: 8px; }
 .more-demos summary { cursor: pointer; font-size: 12.5px; color: var(--navy-2); margin-bottom: 6px; }
 .demo-find { display: flex; flex-wrap: wrap; gap: 6px 10px; align-items: center; margin: 2px 0 8px; }
@@ -98,7 +98,7 @@ body.wide .demo-grid { grid-template-columns: 1fr 1fr 1fr; }
 .demo-card[hidden] { display: none; }
 .demo-none { font-size: 12.5px; color: var(--muted); margin: 4px 0; }
 .demo-head .based { font-size: 12px; color: var(--ink-2); margin-top: 3px; }
-.demo-card { text-align: left; border: 1px solid var(--card-line); border-left: 3px solid var(--navy); background: #fff; border-radius: 9px; padding: 8px 10px; min-height: 52px; box-shadow: var(--lift-1); }
+.demo-card { min-width: 0; text-align: left; border: 1px solid var(--card-line); border-left: 3px solid var(--navy); background: #fff; border-radius: 9px; padding: 8px 10px; min-height: 52px; box-shadow: var(--lift-1); }
 .demo-card { transition: transform .12s ease, box-shadow .12s ease, background .12s ease; }
 .demo-card:hover { background: #fff; border-color: var(--navy-2); transform: translateY(-1px); box-shadow: 0 4px 14px rgba(20, 30, 50, .09); }
 .demo-card .field { font-size: 10.5px; text-transform: uppercase; letter-spacing: .05em; color: var(--navy-2); font-weight: 700;
@@ -576,4 +576,27 @@ body.wide.hist-open .hist { display: flex; }
 @media (max-width: 720px) {
   .xpill { left: 8px; right: 74px; top: auto; bottom: calc(62vh + 14px); max-width: none; }
   body.collapsed .xpill { bottom: 150px; }
+}
+
+/* ---------- screens of every size ---------- */
+:root { --ui: 1; } /* how much the panel and the map's controls are scaled up on very large screens */
+@media (min-width: 721px) {
+  /* notices appear over the map, so they never cover the chat's send button */
+  .toast { left: calc((100vw + var(--panel-w) + 24px) / 2 / var(--ui)); max-width: calc((100vw - var(--panel-w) - 48px) / var(--ui)); }
+  body.collapsed .toast { left: calc(50vw / var(--ui)); max-width: calc(80vw / var(--ui)); }
+  .maplibregl-ctrl-bottom-left .maplibregl-ctrl-scale { margin: 0 0 30px 64px; } /* beside the Layers button, clear of the legend */
+}
+/* Very large screens (a 4K monitor at 100% scaling, ultrawide monitors): text and controls would be tiny and the panel
+   a narrow strip, so the panel and the floating map controls scale up together. The map canvas and the graph canvas are
+   not scaled: CSS zoom on a canvas's ancestor shifts its pointer positions. */
+@media (min-width: 2600px) and (min-height: 1100px) { :root { --ui: 1.2; } }
+@media (min-width: 3400px) and (min-height: 1600px) { :root { --ui: 1.4; } }
+@media (min-width: 2600px) and (min-height: 1100px) {
+  :root { --panel-w: clamp(calc(440px * var(--ui)), 34vw, calc(560px * var(--ui))); }
+  body.wide { --panel-w: min(calc(1100px * var(--ui)), 46vw); }
+  .interview-banner, header.brand, .hist, .tabs, #tab-chat, #tab-data, #tab-insights, #tab-catalog, .attach-info, .ask,
+  #tab-frame > :not(#graph), .topright, .gis-bar, .xpill, .map-legend, .layers-box, .toast, .dlg,
+  .maplibregl-ctrl-top-right, .maplibregl-ctrl-bottom-left, .maplibregl-ctrl-bottom-right { zoom: var(--ui); }
+  .xpill { left: calc((var(--panel-w) + 36px) / var(--ui)); }
+  .layers-box { left: calc((var(--panel-w) + 24px) / var(--ui)); }
 }

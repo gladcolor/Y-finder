@@ -66,7 +66,7 @@
     center: [-72.925, 41.31], zoom: 11.6, attributionControl: { compact: true }, hash: false,
   });
   map.addControl(new maplibregl.NavigationControl({ visualizePitch: false }), 'bottom-right');
-  map.addControl(new maplibregl.ScaleControl({ unit: 'metric' }), 'bottom-right');
+  map.addControl(new maplibregl.ScaleControl({ unit: 'metric' }), 'bottom-left'); // beside the Layers button; the legend sits bottom right
   map.on('load', () => {
     map.resize(); // the panel may have changed size while the style loaded
     const firstSymbol = (map.getStyle().layers.find((l) => l.type === 'symbol') || {}).id;

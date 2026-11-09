@@ -47,6 +47,7 @@ UNIT_NAME = re.compile(r"^(census )?(tract|block group|block|bg)\b", re.I)
 COUNT_WORDS = re.compile(r"permit|count|number|arrest|case|crime|incident|record|death|birth|visit|trip|unit|housing|\brows?\b", re.I)
 DATE_FIELD = re.compile(r"date|year|^yr|start|time|period|month|day", re.I)
 YES = re.compile(r"^(y|yes|true|t|1|x)$", re.I)
+PLACE_TEXT = re.compile(r"(^|_)(address|addr|street|crsst|cross|cross_?street|location|block|intersection)(_|$|\d)", re.I)
 ISO_DATE = re.compile(r"^(1[5-9]\d\d|20\d\d)(-(\d\d))?")
 UNIT_WORDS = [("block group", "block groups"), ("tract", "tracts"), ("countr", "countries"), ("county", "counties"),
               ("counties", "counties"), ("town", "towns"), ("province", "provinces"), ("district", "districts"), ("state", "states"),
@@ -776,8 +777,8 @@ def _question_subset(g: Geo, s) -> tuple[str, list[str]] | None:
     outcome = next((n for n in (s.graph or {}).get("nodes", []) if n["id"] == (s.graph or {}).get("outcome")), {})
     fields, flags = [], []
     for k in g.props[0].keys():
-        if ID_FIELD.search(k) or DATE_FIELD.search(k):
-            continue
+        if ID_FIELD.search(k) or DATE_FIELD.search(k) or PLACE_TEXT.search(k):
+            continue  # addresses and cross streets never pick out the outcome, and would crowd the menu
         c = Counter(str(p.get(k)).strip() for p in g.props if isinstance(p.get(k), str) and p.get(k).strip())
         if 3 <= len(c) <= 2000 and sum(c.values()) >= 0.5 * g.n and any(re.search(r"[a-z]{3}", w, re.I) for w in list(c)[:20]):
             fields.append((k, c))
