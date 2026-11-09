@@ -25,7 +25,7 @@ import time
 import requests
 
 from . import catalog as catalog_mod
-from . import downloads, geolibre, session, sources, vector
+from . import downloads, geolibre, session, sources, tables, vector
 from .geo import bbox_size_km, coverage_fraction, geojson_bbox
 from .session import save_layer
 
@@ -443,6 +443,149 @@ def _direct_file(s, pick, meta):
             "note": f"{r['file']} ({r['bytes'] / 1e6:.1f} MB) downloaded for this session"}
 
 
+# ---------------------------------------------------------------------------- download pages (no direct link on the card)
+DATA_LINK_EXT = (".csv", ".xlsx", ".zip", ".geojson", ".kml", ".kmz")
+_HREF = re.compile(r"""href\s*=\s*["']([^"'#]+)["']""", re.I)
+_BAD_LINK = re.compile(r"method|technical|appendix|readme|codebook|dictionary|template|report|press|summary|glossary|metadata", re.I)
+_GOOD_LINK = re.compile(r"result|score|data|indicator|value|estimate|table", re.I)
+
+
+def _data_links(page_url: str, html_text: str, year: int | None) -> list[str]:
+    from urllib.parse import urljoin, urlparse
+    links, seen = [], set()
+    for href in _HREF.findall(html_text):
+        u = urljoin(page_url, href.strip())
+        path = urlparse(u).path.lower()
+        if not path.endswith(DATA_LINK_EXT) or u in seen or not u.startswith("https://"):
+            continue
+        seen.add(u)
+        name = path.rsplit("/", 1)[-1]
+        score = (3 if _GOOD_LINK.search(name) else 0) - (6 if _BAD_LINK.search(name) else 0)
+        score += 2 if name.endswith((".xlsx", ".csv", ".geojson")) else 0
+        score += 1 if year and str(year) in name else 0
+        links.append((score, -len(name), u))
+    links.sort(reverse=True)
+    return [u for _s, _l, u in links]
+
+
+def _boundaries(s, kind: str) -> dict[str, dict]:
+    sb = s.scope.get("bbox")
+    if kind == "country":
+        return tables.countries()
+    if not sb:
+        return {}
+    layer = {"state": 80, "county": 82, "tract": 8}[kind]
+    fc = _retry(lambda: sources.arcgis_query(f"{sources.TIGER}/{layer}", sb, max_features=3000,
+                                             simplify_deg=max(0.0001, min(0.003, (sb[2] - sb[0]) / 4000))))
+    out = {}
+    for f in fc.get("features", []):
+        g = str((f.get("properties") or {}).get("GEOID") or "")
+        if g:
+            out[g] = {"type": "Feature", "geometry": f["geometry"], "properties": {"name": (f.get("properties") or {}).get("NAME")}}
+    return out
+
+
+def _table_layers(s, pick, meta, raw: bytes, fname: str, src: str):
+    tbls = tables.read_tables(raw, fname)
+    labels = tables.dictionary(tbls)
+    iso3 = set(tables.countries()) if any(len(r) > 1 for _n, rows in tbls for r in rows[:3]) else set()
+    nodes = {n["id"]: n.get("label", "") for n in (s.graph or {}).get("nodes", [])}
+    # what the column should measure: the question, the factors this dataset was picked for, and why
+    text = " ".join([_scope_text(s), " ".join(nodes.get(f, "") for f in pick.get("factors") or []), pick.get("why") or ""])
+    for tname, rows in tbls:
+        if len(rows) < 4:
+            continue
+        h = tables._header_row(rows)
+        header, body = rows[h], rows[h + 1:]
+        found = tables.detect_key(header, body, iso3)
+        if not found:
+            continue
+        key, kind = found
+        cols = tables.value_columns(header, body, key, labels, text)
+        if not cols:
+            continue
+        shapes = _boundaries(s, kind)
+        if not shapes:
+            continue
+        layers, out_rows = [], [[header[key], "name"] + [header[c] for c in cols]]
+        joined = {}
+        for r in body:
+            if len(r) <= key or not r[key]:
+                continue
+            k = tables.key_value(kind, r[key])
+            if k in shapes:
+                joined[k] = r
+        for n, c in enumerate(cols):
+            feats, vals = [], []
+            for k, r in joined.items():
+                v = tables._num(r[c]) if len(r) > c else None
+                f = shapes[k]
+                feats.append({"type": "Feature", "geometry": f["geometry"],
+                              "properties": {"key": k, "name": f["properties"].get("name"), header[c]: v}})
+                if v is not None:
+                    vals.append(v)
+            lab = tables.label_for(header[c], labels)
+            layer, _note = _vector_layer(s, pick, feats, f"{short_title(meta.get('title') or pick.get('title') or '')}: {lab}"[:100],
+                                         src, _paint(header[c], vals, ("blues", "greens", "purples")[n % 3], lab), "table preview")
+            if layer:
+                if n:
+                    layer["hidden"] = True  # the best-matching column shows; the others wait in Layers
+                layers.append(layer)
+        for k, r in joined.items():
+            out_rows.append([k, shapes[k]["properties"].get("name")] + [tables._num(r[c]) if len(r) > c else None for c in cols])
+        if layers:
+            unit = {"country": "countries", "state": "states", "county": "counties", "tract": "tracts"}[kind]
+            return {"status": "ready", "kind": "slice", "layers": layers, "csv": _csv(s, pick, out_rows),
+                    "note": f"{fname} ({tname}): {len(joined)} {unit}; " + ", ".join(tables.label_for(header[c], labels) for c in cols)}
+    return None
+
+
+def _landing(s, pick, meta):
+    """The card links a download page: find its data files, download the best one (up to 100 MB) and map it."""
+    url = meta.get("url") or pick.get("url") or ""
+    acc = (meta.get("access_class") or "").lower()
+    if not url.startswith("https://") or acc in ("yale", "paid", "request") or pick["ref"].startswith(("gee:", "geec:")):
+        return None
+    if not sources.safe_url(url):
+        return None
+    try:
+        r = requests.get(url, headers=UA, timeout=25)
+    except requests.RequestException:
+        return None
+    if r.status_code != 200 or "html" not in (r.headers.get("Content-Type") or "") or not sources.safe_url(r.url):
+        return None
+    links = _data_links(r.url, r.text[:3_000_000], _study_year(s.scope))
+    for link in links[:3]:
+        fname = link.split("?")[0].rsplit("/", 1)[-1]
+        d = downloads.session_dir(s.sid)
+        d.mkdir(parents=True, exist_ok=True)
+        raw_path = d / ("pv-" + re.sub(r"[^a-z0-9.]+", "-", fname.lower())[-60:])
+        try:
+            downloads.fetch(link, raw_path, MAX_RAW_BYTES)
+            raw = raw_path.read_bytes()
+            low = fname.lower()
+            if low.endswith((".geojson", ".kml", ".kmz")) or (low.endswith(".zip") and b".shp" in raw[:200000]):
+                fmt = downloads.sniff(fname, "", raw[:4096])
+                parts = downloads.read_layers(raw_path, fmt, fname)
+                layers = []
+                for stem, feats in parts[:3]:
+                    layer, _n = _vector_layer(s, pick, feats, f"{short_title(meta.get('title') or '')}: {stem}"[:100],
+                                              f"Downloaded from {link.split('/')[2]} (kept for this session only)")
+                    if layer:
+                        layers.append(layer)
+                if layers:
+                    return {"status": "ready", "kind": "slice", "layers": layers, "note": f"{fname} downloaded for this session"}
+                continue
+            res = _table_layers(s, pick, meta, raw, fname, f"{fname} from {link.split('/')[2]} (downloaded for this session)")
+            if res:
+                return res
+        except (downloads.DownloadError, tables.TableError, requests.RequestException, ValueError, KeyError):
+            continue
+        finally:
+            raw_path.unlink(missing_ok=True)  # only the map layer and the CSV slice are kept
+    return None
+
+
 BY_REF = {"cur:acs": _acs, "cur:tiger": _tiger, "cur:nclimgrid": _nclimgrid, "cur:places": _places}
 
 
@@ -460,7 +603,7 @@ def _reason(pick, meta) -> str:
 
 def build(s, pick) -> dict:
     meta = pick.get("meta") or catalog_mod.load().get(pick["ref"]) or {}
-    for fn in (_geolibre, _service, BY_REF.get(pick["ref"]), _arcgis, _stac, _direct_file):
+    for fn in (_geolibre, _service, BY_REF.get(pick["ref"]), _arcgis, _stac, _direct_file, _landing):
         if fn is None:
             continue
         r = fn(s, pick, meta)
