@@ -130,7 +130,8 @@ mosaic and historical shorelines).
 **Malaria and land cover in western Kenya (re-recorded).** Dynamic World and the Esri 10 m land cover: fit. Malaria
 Atlas card: *new pick*, fits (previews MAP's parasite-rate map; marked a poor fit for 30 m village buffers, which is
 right: the model is about 5 km). OpenStreetMap: fits, *preview fixed* (villages from Overpass, not a Geofabrik file of
-Antarctica). CHIRPS: fits (5 km).
+Antarctica; 1,006 villages and towns when the server answered in 45 s; on 2026-11-09 it was often overloaded, and
+the card then says so). CHIRPS: fits (5 km).
 
 ## What stays out of reach
 
