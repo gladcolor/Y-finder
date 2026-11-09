@@ -986,7 +986,7 @@
       const j = await r.json().catch(() => ({}));
       if (j.error) toast(j.error);
       if (j.status) { if (action === 'start') state.xSeen = false; xApply(j); }
-      if (xLive(j.status)) xWatch();
+      if (xLive(j.status) || action === 'stop') xWatch(); // after Stop, until the step under way has finished
       return j;
     } catch { toast('Could not reach the server.'); return null; }
   }
@@ -1012,7 +1012,9 @@
       let j = null; try { j = await getJSON(xUrl()); } catch { j = null; }
       if (gen !== state.xGen || sid !== state.sid) return;
       if (j) xApply(j);
-      if (!j || j.status === 'running' || j.status === 'waiting') state.xTimer = setTimeout(tick, j ? 1800 : 5000);
+      const ending = j && j.status === 'stopped' && !/^Stopped/.test(j.step || '') && (state.xEnd = (state.xEnd || 0) + 1) < 30;
+      if (!j || j.status === 'running' || j.status === 'waiting' || ending) state.xTimer = setTimeout(tick, j ? 1800 : 5000);
+      else state.xEnd = 0;
     };
     state.xTimer = setTimeout(tick, 900);
   }
