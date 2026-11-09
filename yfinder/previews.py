@@ -125,6 +125,18 @@ def _on_map(s, test) -> bool:
     return any(test(l) for l in list(s.layers))
 
 
+def _drawn(s, test) -> dict | None:
+    return next((l for l in list(s.layers) if test(l)), None)
+
+
+def _already(layer: dict | None) -> dict:
+    """The card's data is a layer already drawn (by the agent or another card): name it as the Layers list does, and
+    send it, so the card can show or hide it and the browser can draw it again if it lost it."""
+    title = (layer or {}).get("title") or ""
+    return dict(ALREADY, layers=[], existing=[dict(layer)] if layer else [],
+                note=f"Already on the map as “{title}”" if title else ALREADY["note"])
+
+
 def short_title(t: str) -> str:
     """'NAIP: National Agriculture Imagery Program' -> 'NAIP'; long names are cut at a word."""
     t = (t or "").strip()
@@ -188,14 +200,16 @@ def _arcgis_url(s, pick, url, title):
         if not s.scope.get("bbox"):
             return {"status": "none", "note": "Set a study area to preview this feature layer"}
         url = f"{root}/{idx or 0}"
-        if _on_map(s, lambda l: (l.get("service_url") or "").lower() == url.lower()):
-            return dict(ALREADY, layers=[])  # a fresh copy: results are updated later
+        same = _drawn(s, lambda l: (l.get("service_url") or "").lower() == url.lower())
+        if same:
+            return _already(same)
         fc = sources.arcgis_query(url, s.scope["bbox"], max_features=2000)
         feats = fc.get("features", [])
         fb = geojson_bbox({"type": "FeatureCollection", "features": feats}) if feats else None
-        if fb and _on_map(s, lambda l: str(l.get("source", "")).startswith("ArcGIS service") and l.get("n") == len(feats)
-                          and l.get("bbox") and all(abs(x - y) < 1e-3 for x, y in zip(l["bbox"], fb))):
-            return dict(ALREADY, layers=[])  # same features already drawn (an older layer without its service URL)
+        same = fb and _drawn(s, lambda l: str(l.get("source", "")).startswith("ArcGIS service") and l.get("n") == len(feats)
+                             and l.get("bbox") and all(abs(x - y) < 1e-3 for x, y in zip(l["bbox"], fb)))
+        if same:
+            return _already(same)  # same features already drawn (an older layer without its service URL)
         layer, note = _vector_layer(s, pick, feats, title or "ArcGIS layer", "ArcGIS service (features in the study area)")
         if not layer:
             return {"status": "none", "note": note or "No features in the study area"}
@@ -458,8 +472,9 @@ def _tiger(s, pick, meta):
     plural = {"county": "counties", "block_group": "block groups"}.get(level, level + "s")
     agent_name = {"tract": "Census tracts", "block_group": "Census block groups", "town": "Towns (county subdivisions)",
                   "county": "Counties"}.get(level)  # names map_census_boundaries uses
-    if _on_map(s, lambda l: l.get("source") == "U.S. Census Bureau TIGERweb" and l.get("title") in (agent_name, f"Census {plural}")):
-        return dict(ALREADY, layers=[])  # a fresh copy: results are updated later
+    same = _drawn(s, lambda l: l.get("source") == "U.S. Census Bureau TIGERweb" and l.get("title") in (agent_name, f"Census {plural}"))
+    if same:
+        return _already(same)
     fc = _retry(lambda: sources.census_boundaries(level, sb))
     layer, note = _vector_layer(s, pick, fc.get("features", []), f"Census {plural}", "U.S. Census Bureau TIGERweb")
     if not layer:
@@ -1875,7 +1890,7 @@ def start(s, refs: list[str] | None = None, sync: bool = False) -> bool:
 
 def public(s) -> dict:
     with s.plock:
-        items = {ref: {k: v for k, v in r.items() if k in ("status", "kind", "note", "layers", "csv", "table", "series", "step", "browser")}
+        items = {ref: {k: v for k, v in r.items() if k in ("status", "kind", "note", "layers", "existing", "csv", "table", "series", "step", "browser")}
                  for ref, r in s.previews.items()}
         # the browser works after the first pass, so the page keeps asking while any card still waits
         return {"running": s.preview_running or any(i.get("status") == "pending" for i in items.values()), "items": items}

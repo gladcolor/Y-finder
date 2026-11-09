@@ -103,6 +103,9 @@ if MUTANT:
     elif MUTANT == "us_box_spans_globe":
         from yfinder import sources
         sources._is_united_states = lambda d: False
+    elif MUTANT == "already_card_without_layer":  # "Already on the map" without naming or sending the layer
+        from yfinder import previews
+        previews._already = lambda layer: dict(previews.ALREADY, layers=[])
     elif MUTANT == "tables_without_years":
         from yfinder import sources
         sources.socrata_span = lambda soda, field: None

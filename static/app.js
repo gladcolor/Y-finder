@@ -918,12 +918,20 @@
     const tblBtn = it.table ? ` <button class="pv-a" data-pvact="table" data-ref="${esc(ref)}">${open ? 'Hide table' : 'View table'}</button>` : '';
     const extra = `${sparkSVG(it.series)}${open ? tableHTML(it.table) : ''}`;
     if (it.kind === 'table') return `<span class="pv-dot ok"></span><span>Table preview</span><span class="muted"> · ${esc(it.note || '')}</span>${tblBtn}${csv0}${extra}`;
-    if (!(it.layers || []).length) return `<span class="pv-dot ok"></span><span class="muted">${esc(it.note || 'Already on the map')}</span>`;
-    const ids = (it.layers || []).map((l) => l.id); const vis = ids.some((id) => state.layers.get(id)?.visible);
+    const mine = pvLayers(it);
+    if (!mine.length) return `<span class="pv-dot ok"></span><span class="muted">${esc(it.note || 'Already on the map')}</span>`;
+    const ids = mine.map((l) => l.id); const vis = ids.some((id) => state.layers.get(id)?.visible);
+    if (!(it.layers || []).length) { // the data is a layer drawn earlier (by Y-finder or another card): name it, show or hide it
+      const name = mine[0].title || 'a layer on the map';
+      return `<span class="pv-dot ok"></span><span>On map</span><span class="muted"> · as “${esc(name)}” in Layers</span>
+        <button class="pv-a" data-pvact="toggle" data-ref="${esc(ref)}">${vis ? 'Hide' : 'Show'}</button>`;
+    }
     const csv = it.csv ? ` <a class="pv-a" href="api/session/${encodeURIComponent(state.sid)}/sample/${encodeURIComponent(it.csv)}" download>CSV</a>` : '';
     return `<span class="pv-dot ok"></span><span>${it.kind === 'slice' ? 'Sample on map' : 'On map'}</span><span class="muted"> · ${esc(it.note || '')}</span>
       <button class="pv-a" data-pvact="toggle" data-ref="${esc(ref)}">${vis ? 'Hide' : 'Show'}</button>${tblBtn}${csv}${extra}`;
   }
+  // a card's layers: its own preview, or the layer drawn earlier that already holds its data ("existing")
+  const pvLayers = (it) => ((it.layers || []).length ? it.layers : (it.existing || []));
   function refreshPreviewLines() {
     $$('.pv[data-pv]').forEach((el) => { el.innerHTML = pvLine(el.dataset.pv); });
     bindPreviewButtons();
@@ -934,10 +942,11 @@
     }; });
     $$('[data-pvact=toggle]').forEach((b) => { b.onclick = (e) => {
       e.stopPropagation(); const it = state.previews[b.dataset.ref]; if (!it) return;
-      const ids = (it.layers || []).map((l) => l.id).filter((id) => state.layers.has(id));
+      const mine = pvLayers(it);
+      const ids = mine.map((l) => l.id).filter((id) => state.layers.has(id));
       const show = !ids.some((id) => state.layers.get(id).visible);
       ids.forEach((id) => { if (state.layers.get(id).visible !== show) toggleLayer(id); });
-      if (show && it.layers[0] && it.layers[0].bbox) fit(state.scope?.bbox || it.layers[0].bbox);
+      if (show && mine[0] && mine[0].bbox) fit(state.scope?.bbox || mine[0].bbox);
       refreshPreviewLines();
     }; });
   }
@@ -954,7 +963,8 @@
       const fresh = [];
       Object.entries(j.items).forEach(([ref, it]) => {
         state.previews[ref] = it;
-        (it.layers || []).forEach((l) => { if (!applied.has(l.id)) { applied.add(l.id); fresh.push(l); } });
+        // a layer drawn earlier that the page no longer has (a failed load, a restart) is drawn again from the server's copy
+        (it.layers || []).concat(it.existing || []).forEach((l) => { if (!applied.has(l.id)) { applied.add(l.id); fresh.push(l); } });
       });
       if (fresh.length) {
         const t = state.conv ? convTurn(null) : null; // kept with the conversation, so reopening shows them

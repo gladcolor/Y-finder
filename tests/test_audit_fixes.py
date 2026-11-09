@@ -585,3 +585,20 @@ def test_heavy_point_layers_keep_columns_that_name_the_topic():
     assert f["properties"].get("fentanyl") == "Y"
     f = vector._feature({"type": "Feature", "properties": props, "geometry": {"type": "Point", "coordinates": [0, 0]}}, 5, 16)
     assert "fentanyl" not in f["properties"]  # without topic words the first columns win, as before
+
+
+def test_already_on_the_map_names_the_layer_and_sends_it(monkeypatch):
+    """The FUNAI card said "Already on the map" without saying which layer, offering Show, or redrawing it when the
+    page had lost it. It now names the agent's layer and sends it with the result."""
+    from yfinder import previews
+    from yfinder.session import Session
+    s = Session(sid="t-already")
+    s.scope = {"bbox": [-54.0, -13.0, -52.5, -10.6]}
+    url = "https://services8.arcgis.com/vn6q/arcgis/rest/services/br_terras_indigenas_funai_2020/FeatureServer/0"
+    s.layers = [{"id": "e26e", "kind": "geojson", "title": "FUNAI Indigenous lands (2020)", "service_url": url, "n": 5}]
+    monkeypatch.setattr(previews.sources, "safe_url", lambda u: True)
+    r = previews._arcgis_url(s, {"ref": "x"}, url, "br_terras_indigenas_funai_2020")
+    assert r["layers"] == [] and r["existing"][0]["id"] == "e26e"
+    assert r["note"] == "Already on the map as “FUNAI Indigenous lands (2020)”"
+    s.previews = {"x": dict(r, sig="1")}
+    assert previews.public(s)["items"]["x"]["existing"][0]["title"] == "FUNAI Indigenous lands (2020)"
