@@ -277,7 +277,8 @@
     const open = $('#mapLegend').classList.toggle('closed') === false;
     $('#mlToggle').setAttribute('aria-expanded', String(open)); local.set('yf_legend', open ? '1' : '0');
   };
-  if (local.get('yf_legend') === '0') { $('#mapLegend').classList.add('closed'); $('#mlToggle').setAttribute('aria-expanded', 'false'); }
+  // phones start with the legend folded (the map is small there); a choice the user made is kept
+  if (local.get('yf_legend') === '0' || (local.get('yf_legend') == null && innerWidth <= 720)) { $('#mapLegend').classList.add('closed'); $('#mlToggle').setAttribute('aria-expanded', 'false'); }
 
   function renderLayerList() {
     renderLegend();

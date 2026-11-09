@@ -47,7 +47,7 @@ body.collapsed .stepper { display: none; }
 .choices button:hover { background: var(--navy-2); color: #fff; }
 .choices.used button { opacity: .45; pointer-events: none; }
 .matrix { width: 100%; border-collapse: collapse; font-size: 12px; margin: 2px 0 10px; }
-.matrix th { text-align: center; color: var(--muted); font-weight: 600; padding: 3px 2px; border-bottom: 1px solid var(--line); }
+.matrix th { text-align: center; color: var(--muted); font-weight: 600; padding: 3px 4px; border-bottom: 1px solid var(--line); overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
 .matrix th:first-child { text-align: left; }
 .matrix td { padding: 4px 2px; border-bottom: 1px solid var(--soft-2); text-align: center; }
 .matrix td:first-child { text-align: left; max-width: 190px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; cursor: pointer; color: var(--navy-2); }
@@ -432,6 +432,8 @@ body.wide.hist-open .hist { display: flex; }
   .topright { top: 8px; right: 8px; left: 8px; flex-wrap: wrap; justify-content: flex-end; gap: 6px; }
   .model-pick span { display: none; }
   .layers-box { left: auto; right: 10px; bottom: calc(62vh + 12px); }
+  .matrix { font-size: 11px; }
+  .matrix th:first-child, .matrix td:first-child { width: 38%; }
   .map-legend { right: auto; left: 8px; bottom: auto; top: 56px; width: min(200px, 55vw); max-height: 30vh; }
   body.collapsed .layers-box { left: auto; bottom: 150px; }
   .layers-btn { width: 54px; height: 54px; }
