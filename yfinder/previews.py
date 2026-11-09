@@ -1051,6 +1051,48 @@ def _gadm(s, pick, meta):
     return {"status": "none", "note": "GADM did not answer for this country"}
 
 
+# ---------------------------------------------------------------------------- Earth Engine data with an open copy
+# Earth Engine needs an account; many of its collections are also on Microsoft Planetary Computer, which needs none.
+GEE_MIRRORS = [(re.compile(r"^COPERNICUS/S2(_SR)?(_HARMONIZED)?$"), "sentinel-2-l2a"),
+               (re.compile(r"^LANDSAT/L[COTE]0[4-9]/C02/T1_L2$"), "landsat-c2-l2"),
+               (re.compile(r"^NASA/HLS/HLSS30/"), "hls2-s30"), (re.compile(r"^NASA/HLS/HLSL30/"), "hls2-l30"),
+               (re.compile(r"^COPERNICUS/S1_GRD"), "sentinel-1-rtc"),
+               (re.compile(r"^ESA/WorldCover/"), "esa-worldcover"),
+               (re.compile(r"^USGS/3DEP/(10m|1m)"), "3dep-seamless"),
+               (re.compile(r"^COPERNICUS/DEM/GLO30"), "cop-dem-glo-30"), (re.compile(r"^NASA/NASADEM_HGT/"), "nasadem"),
+               (re.compile(r"^JAXA/ALOS/AW3D30/"), "alos-dem"),
+               (re.compile(r"^JRC/GSW1_\d/GlobalSurfaceWater"), "jrc-gsw"),
+               (re.compile(r"^USDA/NAIP/DOQQ"), "naip"), (re.compile(r"^USDA/NASS/CDL"), "usda-cdl"),
+               (re.compile(r"^USFS/GTAC/MTBS/"), "mtbs")]
+_MODIS = re.compile(r"^MODIS/061/M[OYC]D(\w+)$")
+
+
+def gee_mirror(ref: str) -> str | None:
+    """The Planetary Computer collection holding the same data as an Earth Engine collection, if there is one."""
+    if not ref.startswith("gee:"):
+        return None
+    gid = ref[4:]
+    for rx, coll in GEE_MIRRORS:
+        if rx.search(gid):
+            return coll
+    m = _MODIS.match(gid)
+    if m and catalog_mod.load().get(f"pc:modis-{m.group(1)}-061"):
+        return f"modis-{m.group(1)}-061"
+    return None
+
+
+def _gee(s, pick, meta):
+    coll = gee_mirror(pick["ref"])
+    pc = catalog_mod.load().get("pc:" + coll) if coll else None
+    if not pc:
+        return None
+    r = _stac(s, pick, pc)
+    if r and r.get("status") == "ready":
+        r["note"] = "From Planetary Computer, which needs no account (Earth Engine does): " + (r.get("note") or "")
+        return r
+    return None
+
+
 BY_REF = {"cur:acs": _acs, "cur:tiger": _tiger, "cur:nclimgrid": _nclimgrid, "cur:places": _places, "cur:aqs": _aqs, "cur:gadm": _gadm}
 
 
@@ -1068,7 +1110,7 @@ def _reason(pick, meta) -> str:
 
 def build(s, pick) -> dict:
     meta = pick.get("meta") or catalog_mod.load().get(pick["ref"]) or {}
-    for fn in (_geolibre, _service, BY_REF.get(pick["ref"]), _worldbank, _socrata, _dataverse, _arcgis, _stac,
+    for fn in (_geolibre, _service, BY_REF.get(pick["ref"]), _worldbank, _socrata, _dataverse, _arcgis, _stac, _gee,
                _direct_file, _landing):
         if fn is None:
             continue

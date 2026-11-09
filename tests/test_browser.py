@@ -173,3 +173,21 @@ def test_a_result_after_the_scope_changed_is_dropped(s, monkeypatch):
     s.previews[PAGE["ref"]] = {"status": "pending", "sig": previews._sig(s.scope)}  # a new pass started
     held["done"]({"host": "data.example.org", "wall": "signin"})
     assert s.previews[PAGE["ref"]]["status"] == "pending"
+
+
+# ---------------------------------------------------------------------------- Earth Engine data with an open copy
+def test_earth_engine_picks_use_their_planetary_computer_copy(s, monkeypatch):
+    assert previews.gee_mirror("gee:COPERNICUS/S2_SR_HARMONIZED") == "sentinel-2-l2a"
+    assert previews.gee_mirror("gee:LANDSAT/LC09/C02/T1_L2") == "landsat-c2-l2"
+    assert previews.gee_mirror("gee:MODIS/061/MOD13Q1") == "modis-13Q1-061"
+    assert previews.gee_mirror("gee:LARSE/GEDI/GEDI04_A_002") is None and previews.gee_mirror("pc:naip") is None
+    seen = {}
+
+    def stac(ses, pick, meta):
+        seen["coll"] = (meta.get("stac") or {}).get("collection")
+        return {"status": "ready", "kind": "service", "layers": [], "note": "Imagery of 2023-12-18"}
+    monkeypatch.setattr(previews, "_stac", stac)
+    r = previews.build(s, {"ref": "gee:COPERNICUS/S2_SR_HARMONIZED", "role": "core", "title": "Sentinel-2"})
+    assert seen["coll"] == "sentinel-2-l2a" and r["status"] == "ready" and "Planetary Computer" in r["note"]
+    r2 = previews.build(s, {"ref": "gee:LARSE/GEDI/GEDI04_A_002", "role": "core", "title": "GEDI"})
+    assert r2["status"] == "none" and "Earth Engine" in r2["note"]
