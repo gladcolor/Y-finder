@@ -200,8 +200,13 @@ def create_app() -> Flask:
         limit = min(int(request.args.get("limit", 30) or 30), 60)
         cat = catalog.load()
         if not q.strip() and source != "any":  # browse one source, e.g. everything collected in GeoLibre
-            items = sorted((it for it in cat.items if source.lower() in (it.get("source") or "").lower()),
-                           key=lambda it: (it.get("source") or "", it.get("title") or ""))
+            items = [it for it in cat.items if source.lower() in (it.get("source") or "").lower()]
+            size = {}
+            for it in items:
+                size[it.get("source")] = size.get(it.get("source"), 0) + 1
+            # small groups first (GeoLibre's 6 services before its 105 maps), then by title
+            items.sort(key=lambda it: (size[it.get("source")], it.get("source") or "", it.get("title") or ""))
+            limit = min(int(request.args.get("limit", 30) or 30), 150)
             sc = s.scope if s and s.scope else None
             return jsonify(results=[catalog.card(it, fit.assess(it, sc) if sc else None) for it in items[:limit]])
         res = cat.search(q, kind=kind if kind in ("any", "dataset", "tool", "method") else "any",

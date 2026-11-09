@@ -50,8 +50,9 @@
   }
   function padding() {
     const mobile = innerWidth <= 720; const collapsed = document.body.classList.contains('collapsed');
+    // desktop: the map container already starts right of the panel (app.css), so only a margin is needed
     return mobile ? { top: 70, left: 30, right: 30, bottom: collapsed ? 160 : innerHeight * 0.62 + 20 }
-      : { top: 70, right: 60, bottom: 60, left: collapsed ? 60 : $('#panel').offsetWidth + 50 };
+      : { top: 80, right: 50, bottom: 50, left: 50 };
   }
   function fit(bbox) {
     if (!bbox || bbox.length !== 4 || !state.mapReady) return;
@@ -377,6 +378,44 @@
   // coverage as transparency, dagre top-down layout, hover and tap-to-focus, a pulse on the outcome.
   // One change: coverage fades the circle, not the label, so factors without data stay readable.
   try { if (window.cytoscapeDagre && window.dagre) cytoscape.use(window.cytoscapeDagre); } catch { /* already registered */ }
+  try { if (window.cytoscapeCola && window.cola) cytoscape.use(window.cytoscapeCola); } catch { /* already registered */ }
+  // Layouts offered in the Frame tab, as in Research Architect (applyLayout in app_v2.js), plus left-to-right layers.
+  const LAYOUT_NAMES = ['dagre-tb', 'dagre-lr', 'cola', 'cose', 'breadthfirst', 'concentric', 'circle', 'grid'];
+  state.layout = LAYOUT_NAMES.includes(local.get('yf_layout')) ? local.get('yf_layout') : 'dagre-tb';
+  function layoutOpts(name, animate) {
+    const anim = { animate, animationDuration: 300, fit: true, padding: 22 };
+    const dagre = (dir) => ({ name: 'dagre', rankDir: dir, ranker: 'tight-tree', nodeSep: dir === 'LR' ? 18 : 28, rankSep: dir === 'LR' ? 90 : 64,
+      edgeSep: 14, nodeDimensionsIncludeLabels: true, ...anim });
+    return {
+      'dagre-tb': dagre('TB'), 'dagre-lr': dagre('LR'),
+      // cola with infinite: edges act like springs and the graph follows when a node is dragged
+      cola: { name: 'cola', animate: true, refresh: 1, infinite: true, fit: false, nodeSpacing: 34, edgeLength: 120,
+        edgeSymDiffLength: 24, maxSimulationTime: 1500, avoidOverlap: true, handleDisconnected: true, nodeDimensionsIncludeLabels: true },
+      cose: { name: 'cose', idealEdgeLength: 100, nodeRepulsion: 8000, nodeDimensionsIncludeLabels: true, ...anim },
+      breadthfirst: { name: 'breadthfirst', directed: true, spacingFactor: 1.25, nodeDimensionsIncludeLabels: true, ...anim },
+      concentric: { name: 'concentric', concentric: (n) => (n.data('target') ? 3 : n.data('core') ? 2 : 1), levelWidth: () => 1,
+        minNodeSpacing: 34, avoidOverlap: true, startAngle: -Math.PI / 2, nodeDimensionsIncludeLabels: true, ...anim },
+      circle: { name: 'circle', avoidOverlap: true, nodeDimensionsIncludeLabels: true, ...anim },
+      grid: { name: 'grid', avoidOverlap: true, nodeDimensionsIncludeLabels: true, ...anim },
+    }[name];
+  }
+  function runLayout(cy, name, animate) {
+    if (state.cyLive) { try { state.cyLive.stop(); } catch { /* already stopped */ } state.cyLive = null; }
+    let opts = layoutOpts(name, animate) || layoutOpts('dagre-tb', animate);
+    const missing = (opts.name === 'dagre' && !window.cytoscapeDagre) || (opts.name === 'cola' && !window.cytoscapeCola);
+    if (missing) opts = layoutOpts(opts.name === 'cola' ? 'cose' : 'concentric', animate); // a CDN script did not load
+    try {
+      const l = cy.layout(opts); l.run();
+      if (opts.name === 'cola' && opts.infinite) state.cyLive = l;
+      else if (!opts.fit) cy.fit(undefined, 22);
+    } catch (err) { console.warn('layout failed', name, err); cy.layout(layoutOpts('concentric', false)).run(); }
+  }
+  $('#layoutSel').value = state.layout;
+  $('#layoutSel').onchange = (e) => {
+    state.layout = e.target.value; local.set('yf_layout', state.layout);
+    if (state.cy && !state.cy.destroyed()) runLayout(state.cy, state.layout, true);
+  };
+  $('#btnFitGraph').onclick = () => { if (state.cy && !state.cy.destroyed()) state.cy.animate({ fit: { padding: 22 } }, { duration: 250 }); };
   const RA_STYLE = [
     { selector: 'node', style: {
       'background-color': '#93c5fd', 'background-opacity': 0.95, label: 'data(label)', color: '#0f172a',
@@ -429,10 +468,14 @@
     });
     return nodes.concat(edges);
   }
-  function destroyGraph() { clearInterval(state.cyPulse); if (state.cy) { state.cy.destroy(); state.cy = null; } }
+  function destroyGraph() {
+    clearInterval(state.cyPulse);
+    if (state.cyLive) { try { state.cyLive.stop(); } catch { /* already stopped */ } state.cyLive = null; }
+    if (state.cy) { state.cy.destroy(); state.cy = null; }
+  }
   function renderGraph() {
     const g = state.graph; const has = !!(g && g.nodes && g.nodes.length);
-    $('#graphEmpty').hidden = has; $('#graph').hidden = !has; $('#graphLegend').hidden = !has; $('#frameActions').hidden = !has;
+    $('#graphEmpty').hidden = has; $('#graph').hidden = !has; $('#graphLegend').hidden = !has; $('#frameActions').hidden = !has; $('#graphBar').hidden = !has;
     if (!has) return;
     $('#btnGraphml').href = `api/session/${encodeURIComponent(state.sid)}/graph.graphml`;
     const withCov = (state.picks || []).length > 0; // coverage is shown once datasets have been checked
@@ -442,13 +485,7 @@
     const draw = () => {
       destroyGraph();
       const cy = state.cy = cytoscape({ container: $('#graph'), elements: els, style: RA_STYLE, wheelSensitivity: 0.25, minZoom: 0.25, maxZoom: 3, layout: { name: 'preset' } });
-      try {
-        cy.layout({ name: 'dagre', rankDir: 'TB', ranker: 'tight-tree', nodeSep: 28, rankSep: 64, edgeSep: 14,
-          nodeDimensionsIncludeLabels: true, animate: false, fit: true, padding: 22 }).run();
-      } catch { // dagre did not load: outcome in the centre, core factors on the inner ring
-        cy.layout({ name: 'concentric', concentric: (n) => (n.data('target') ? 3 : n.data('core') ? 2 : 1), levelWidth: () => 1,
-          minNodeSpacing: 34, padding: 18, avoidOverlap: true, startAngle: -Math.PI / 2 }).run();
-      }
+      runLayout(cy, state.layout, false);
       const clear = () => cy.elements().removeClass('dim dim-strong anchor');
       cy.on('mouseover', 'node', (e) => { e.target.addClass('is-hover'); e.target.connectedEdges().addClass('is-hover'); });
       cy.on('mouseout', 'node', (e) => { e.target.removeClass('is-hover'); e.target.connectedEdges().removeClass('is-hover'); });
@@ -755,7 +792,7 @@
     const q = $('#catQ').value.trim(); const srcF = state.catSource || 'any';
     if (!q && srcF === 'any') { $('#catRes').innerHTML = ''; $('#catMeta').textContent = state.config ? `${state.config.catalog.counts?.total || ''} cards: YCGS curated, Planetary Computer, Earth Engine and its community catalog, and layers collected in GeoLibre. Built ${state.config.catalog.built}.` : ''; return; }
     try {
-      const j = await getJSON(`api/catalog/search?q=${encodeURIComponent(q)}&kind=${state.catKind}&access=${state.catAccess}&source=${encodeURIComponent(srcF)}&sid=${encodeURIComponent(state.sid)}&limit=${q ? 30 : 60}`);
+      const j = await getJSON(`api/catalog/search?q=${encodeURIComponent(q)}&kind=${state.catKind}&access=${state.catAccess}&source=${encodeURIComponent(srcF)}&sid=${encodeURIComponent(state.sid)}&limit=${q ? 30 : 150}`);
       $('#catMeta').textContent = `${j.results.length} results${state.scope ? ' · fit labels use your current scope' : ''}`;
       $('#catRes').innerHTML = j.results.map((c) => `<div class="ccard" data-id="${esc(c.id)}"><div class="t">${safeUrl(c.url) ? `<a href="${esc(safeUrl(c.url))}" target="_blank" rel="noopener">${esc(c.title)}</a>` : esc(c.title)}</div>
         <div class="src">${esc([c.kind !== 'dataset' ? c.kind : '', c.source, c.provider, c.resolution, c.time].filter(Boolean).join(' · '))}</div>
@@ -814,17 +851,23 @@
   $('#q').addEventListener('input', autosize);
   $('#q').addEventListener('keydown', (e) => { if (e.key === 'Enter' && !e.shiftKey && !e.isComposing) { e.preventDefault(); send($('#q').value); } });
   $('#ask').onsubmit = (e) => { e.preventDefault(); send($('#q').value); };
-  $('#btnCollapse').onclick = () => { const c = document.body.classList.toggle('collapsed'); $('#btnCollapse').setAttribute('aria-expanded', String(!c)); };
+  // The map container changes size with the panel; keep the same place in view.
+  function mapResized() {
+    if (!state.mapReady) return;
+    const c = map.getCenter(); map.resize(); map.setCenter(c);
+  }
+  $('#btnCollapse').onclick = () => { const c = document.body.classList.toggle('collapsed'); $('#btnCollapse').setAttribute('aria-expanded', String(!c)); requestAnimationFrame(mapResized); };
   const isWide = () => document.body.classList.contains('wide');
   function setWide(w) {
     document.body.classList.toggle('wide', w); $('#btnWide').setAttribute('aria-pressed', String(w));
     $('#btnWide').title = w ? 'Smaller chat (more map)' : 'Larger chat';
     setHist(w); // the large chat shows the conversation list beside it
     local.set('yf_wide', w ? '1' : '0');
+    requestAnimationFrame(mapResized);
     setTimeout(() => { if (state.cy) { state.cy.resize(); state.cy.fit(undefined, 18); } }, 60);
   }
   $('#btnWide').onclick = () => setWide(!isWide());
-  $('#q').addEventListener('focus', () => { if (document.body.classList.contains('collapsed')) document.body.classList.remove('collapsed'); });
+  $('#q').addEventListener('focus', () => { if (document.body.classList.contains('collapsed')) { document.body.classList.remove('collapsed'); requestAnimationFrame(mapResized); } });
 
   $('#btnAttach').onclick = () => $('#file').click();
   $('#file').onchange = async () => {
@@ -975,7 +1018,7 @@
     if (open) renderHist();
     setTimeout(() => { if (state.cy) state.cy.resize(); }, 60);
   }
-  $('#btnHist').onclick = () => { document.body.classList.remove('collapsed'); setHist(!document.body.classList.contains('hist-open')); };
+  $('#btnHist').onclick = () => { document.body.classList.remove('collapsed'); requestAnimationFrame(mapResized); setHist(!document.body.classList.contains('hist-open')); };
   $('#histNew').onclick = () => { if (state.demo) state.demo.stop = true; if (!state.busy) newConversation(); if (!isWide()) setHist(false); };
   $('#histClear').onclick = () => {
     const list = histLoad(); if (!list.length) return;
@@ -1062,7 +1105,7 @@
             await wait(hold / 2); switchTab('data'); await wait(hold / 2);
           } else if (st.action === 'handbook') { demoNote(st.note); openHandbook(st.ref, st.title); await wait(hold * 1.3); $('#dlg').close(); }
           else if (st.action === 'gis') { demoNote(st.note); setMode(true); await wait(hold * 1.4); setMode(false); }
-          else if (st.action === 'map') { demoNote(st.note); document.body.classList.add('collapsed'); await wait(hold); document.body.classList.remove('collapsed'); }
+          else if (st.action === 'map') { demoNote(st.note); document.body.classList.add('collapsed'); requestAnimationFrame(mapResized); await wait(hold); document.body.classList.remove('collapsed'); requestAnimationFrame(mapResized); }
           else if (st.action === 'watch') { demoNote(st.note); watchDialog(); await wait(hold); $('#dlg').close(); }
         }
       }

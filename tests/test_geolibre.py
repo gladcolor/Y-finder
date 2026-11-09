@@ -254,7 +254,8 @@ def test_picks_know_they_can_be_drawn():
 
 
 def test_catalog_browse_by_source(client):
-    r = client.get("/api/catalog/search?q=&source=GeoLibre&limit=60")
+    r = client.get("/api/catalog/search?q=&source=GeoLibre&limit=150")
     res = r.json["results"]
-    assert len(res) == 60 and all(c["source"].startswith("GeoLibre") for c in res)
+    assert len(res) == 111 and all(c["source"].startswith("GeoLibre") for c in res)
+    assert [c["source"] for c in res[:6]] == ["GeoLibre services"] * 6  # the few services are listed first
     assert client.get("/api/catalog/search?q=&source=evil").json["results"] == []

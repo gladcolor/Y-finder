@@ -66,6 +66,20 @@
     <div id="tab-frame" class="tab">
       <div class="tri"><span>Real world</span><i></i><span class="on">Influence graph</span><i></i><span class="on">Scope</span><i></i><span>Data</span></div>
       <div id="graphEmpty" class="empty">The factors behind your question appear here.</div>
+      <div id="graphBar" class="graph-bar" hidden>
+        <label for="layoutSel">Layout</label>
+        <select id="layoutSel" title="How the graph is arranged (your choice is remembered)">
+          <option value="dagre-tb">Top-down layers (fewest crossings)</option>
+          <option value="dagre-lr">Left-to-right layers</option>
+          <option value="cola">Elastic (drag a node, the rest follows)</option>
+          <option value="cose">Force-directed</option>
+          <option value="breadthfirst">Breadth-first tree</option>
+          <option value="concentric">Outcome in the center</option>
+          <option value="circle">Circle</option>
+          <option value="grid">Grid</option>
+        </select>
+        <button class="btn ghost" id="btnFitGraph" type="button" title="Fit the whole graph in view">Fit</button>
+      </div>
       <div id="graph" hidden></div>
       <div id="graphLegend" class="ra-legend" hidden>
         <div class="ra-lg"><div class="ra-lt">Graph roles</div>
@@ -185,6 +199,9 @@
 <script src="https://cdnjs.cloudflare.com/ajax/libs/cytoscape/3.30.2/cytoscape.min.js"></script>
 <script src="https://cdnjs.cloudflare.com/ajax/libs/dagre/0.8.5/dagre.min.js"></script>
 <script src="https://cdn.jsdelivr.net/npm/cytoscape-dagre@2.5.0/cytoscape-dagre.min.js"></script>
+<!-- webcola must load before cytoscape-cola (as in Research Architect) -->
+<script src="https://cdn.jsdelivr.net/npm/webcola@3.4.0/WebCola/cola.min.js"></script>
+<script src="https://cdn.jsdelivr.net/npm/cytoscape-cola@2.5.1/cytoscape-cola.min.js"></script>
 <script src="https://cdnjs.cloudflare.com/ajax/libs/marked/12.0.2/marked.min.js"></script>
 <script src="https://cdnjs.cloudflare.com/ajax/libs/dompurify/3.1.6/purify.min.js"></script>
 <script src="static/app.js"></script>
