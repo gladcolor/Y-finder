@@ -68,6 +68,7 @@
   map.addControl(new maplibregl.NavigationControl({ visualizePitch: false }), 'bottom-right');
   map.addControl(new maplibregl.ScaleControl({ unit: 'metric' }), 'bottom-right');
   map.on('load', () => {
+    map.resize(); // the panel may have changed size while the style loaded
     const firstSymbol = (map.getStyle().layers.find((l) => l.type === 'symbol') || {}).id;
     map.addSource('esri-imagery', {
       type: 'raster', tileSize: 256, maxzoom: 19,
@@ -1038,7 +1039,9 @@
   $('#ask').onsubmit = (e) => { e.preventDefault(); send($('#q').value); };
   // The map container changes size with the panel; keep the same place in view.
   function mapResized() {
-    if (!state.mapReady) return;
+    // the layout can change before the map has loaded (the large chat is chosen at startup): resize anyway,
+    // otherwise the canvas keeps its first width and every zoom centres too far to the right
+    if (!state.mapReady) { try { map.resize(); } catch { /* not ready to measure yet */ } return; }
     const c = map.getCenter(); map.resize(); map.setCenter(c);
   }
   $('#btnCollapse').onclick = () => { const c = document.body.classList.toggle('collapsed'); $('#btnCollapse').setAttribute('aria-expanded', String(!c)); requestAnimationFrame(mapResized); };
