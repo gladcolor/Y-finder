@@ -1311,13 +1311,17 @@
 
 **How it works (tri-projection).** Y-finder turns a research question into an *influence graph* of factors, agrees a *scope* with you (area, time window, resolution, unit of analysis), then searches for *data* and labels how each source fits that scope. The fit labels come from catalog metadata and simple rules, not from the language model.
 
-**Where the data comes from.** ${state.config ? state.config.catalog.counts?.total : '1,100+'} catalog cards (YCGS curated cards with Yale access routes, Microsoft Planetary Computer and Google Earth Engine), plus live searches of Yale Dataverse, Yale Library GeoBlacklight, ArcGIS Online, Data.gov, Planetary Computer STAC and the web.
+**Where the data comes from.** ${state.config ? Number(state.config.catalog.counts?.total || 0).toLocaleString() : '3,000+'} catalog cards: YCGS curated cards with Yale access routes, Microsoft Planetary Computer, Google Earth Engine and its community catalog, the layers collected in [GeoLibre](https://geolibre.app/), and World Bank indicators. Live searches cover Yale Dataverse, Harvard Dataverse, Yale Library GeoBlacklight, ArcGIS Online, Data.gov, US open data portals (including Connecticut Open Data), Planetary Computer imagery and the web (DeepSeek search).
+
+**Maps and tables.** Many factors are measured by tables (statistics, surveys, records) as well as maps; Y-finder looks for both and marks tables with a *Table* badge.
+
+**Previews.** For each recommended dataset Y-finder draws an online map service directly, or downloads a small slice for your study area (up to 100 MB) and shows it on the map or as a table preview with a CSV. Licensed and account-only sources say why there is no preview.
 
 **Map and GIS.** Layers you see can be downloaded as GeoJSON, or opened in [GeoLibre](https://web.geolibre.app/) with *Full GIS*. Influence graphs export to [Research Architect](https://app.researcharchitect.ai/).
 
 **Access handbooks.** Each data source can have a handbook in the style of an Agent Skill: access route, endpoint, a Python example and pitfalls. It extends the handbooks of [LLM-Find](https://github.com/gladcolor/llm-find).
 
-**Privacy.** Do not paste protected or confidential data. Questions are sent to an OpenAI model to generate answers. Your conversations are saved in this browser only; delete them from the conversation list. Data files you or Y-finder download are kept on the server only for your session (about 6 hours after your last action) and then deleted, along with their map layers.`);
+**Privacy.** Do not paste protected or confidential data. Questions are sent to an OpenAI model to generate answers, and web searches go to DeepSeek's search service. Your conversations are saved in this browser only; delete them from the conversation list. Data files you or Y-finder download are kept on the server only for your session (about 6 hours after your last action) and then deleted, along with their map layers.`);
     $('#dlg').showModal();
   };
   function askCode() {
