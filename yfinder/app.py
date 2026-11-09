@@ -18,13 +18,29 @@ from xml.sax.saxutils import escape
 
 from flask import Flask, Response, abort, jsonify, request, send_file, send_from_directory, stream_with_context
 
-from . import agent, catalog, fit, handbooks, session, watch
+from . import agent, catalog, fit, handbooks, janitor, session, watch
 from .config import (ACCESS_CODE, DAILY_CAP, DEFAULT_MODEL, MODEL_IDS, MODELS, RATE_PER_HOUR, STATIC_DIR,
                      UPLOAD_MAX_BYTES, openai_key)
 
 _rate: dict[str, deque] = defaultdict(deque)
 _day = {"date": time.strftime("%Y-%m-%d"), "n": 0}
 _rate_lock = threading.Lock()
+
+
+_dl_rate: dict[str, deque] = defaultdict(deque)
+
+
+def _allow_download() -> str | None:
+    """At most 20 downloads per hour from one address, so nobody can use the server as a file mirror."""
+    ip, now = _client_ip(), time.time()
+    with _rate_lock:
+        q = _dl_rate[ip]
+        while q and now - q[0] > 3600:
+            q.popleft()
+        if len(q) >= 20:
+            return "Too many downloads from your address this hour; try again later."
+        q.append(now)
+    return None
 
 
 def _client_ip() -> str:
@@ -60,6 +76,7 @@ def create_app() -> Flask:
     app = Flask(__name__, static_folder=None)
     app.config["MAX_CONTENT_LENGTH"] = UPLOAD_MAX_BYTES + 1024 * 64
     catalog.load()  # build the search index at startup, not on the first request
+    janitor.start()  # periodic cleanup of expired sessions, downloads and old layers (YFINDER_JANITOR=0 turns it off)
 
     @app.after_request
     def headers(resp):
@@ -177,11 +194,19 @@ def create_app() -> Flask:
         q = request.args.get("q", "")
         kind = request.args.get("kind", "any")
         access = request.args.get("access", "any")
+        source = request.args.get("source", "any")
+        source = source if source in ("any", "GeoLibre", "GEE community", "Planetary Computer", "Earth Engine", "YCGS curated") else "any"
         s = session.peek(request.args.get("sid", "")) if request.args.get("sid") else None
-        res = catalog.load().search(q, kind=kind if kind in ("any", "dataset", "tool", "method") else "any",
-                                    access=access if access in ("any", "open", "yale") else "any",
-                                    limit=min(int(request.args.get("limit", 30) or 30), 60),
-                                    scope=s.scope if s else None)
+        limit = min(int(request.args.get("limit", 30) or 30), 60)
+        cat = catalog.load()
+        if not q.strip() and source != "any":  # browse one source, e.g. everything collected in GeoLibre
+            items = sorted((it for it in cat.items if source.lower() in (it.get("source") or "").lower()),
+                           key=lambda it: (it.get("source") or "", it.get("title") or ""))
+            sc = s.scope if s and s.scope else None
+            return jsonify(results=[catalog.card(it, fit.assess(it, sc) if sc else None) for it in items[:limit]])
+        res = cat.search(q, kind=kind if kind in ("any", "dataset", "tool", "method") else "any",
+                         access=access if access in ("any", "open", "yale") else "any",
+                         limit=limit, scope=s.scope if s else None, source=source)
         return jsonify(results=res)
 
     @app.get("/api/catalog/item")
@@ -191,6 +216,42 @@ def create_app() -> Flask:
             return jsonify(error="Not found"), 404
         s = session.peek(request.args.get("sid", "")) if request.args.get("sid") else None
         return jsonify(item=catalog.card(it, fit.assess(it, s.scope) if s and s.scope else None))
+
+    @app.post("/api/map_layer")
+    def map_layer():
+        """Draw a GeoLibre gallery map or service from a card button, without a chat turn."""
+        _check_code()
+        b = request.get_json(silent=True) or {}
+        s = session.get(str(b.get("sid") or "") or None)
+        if not s.lock.acquire(blocking=False):
+            return jsonify(error="Wait for the current answer to finish."), 409
+        try:
+            res, events, summary = agent.h_map_catalog_layer(s, {"ref": str(b.get("ref") or "")[:200]})
+        except agent.ToolError as e:
+            return jsonify(error=str(e), sid=s.sid), 400
+        finally:
+            s.lock.release()
+        return jsonify(sid=s.sid, events=events, summary=summary, result=res)
+
+    @app.post("/api/download")
+    def download():
+        """Download a data file from a link for this session and draw it (the Layers panel's "Add from a link")."""
+        _check_code()
+        limit = _allow_download()
+        if limit:
+            return jsonify(error=limit), 429
+        b = request.get_json(silent=True) or {}
+        s = session.get(str(b.get("sid") or "") or None)
+        if not s.lock.acquire(blocking=False):
+            return jsonify(error="Wait for the current answer to finish."), 409
+        try:
+            res, events, summary = agent.h_download_data(s, {"url": str(b.get("url") or "")[:2000],
+                                                             "title": str(b.get("title") or "")[:100]})
+        except agent.ToolError as e:
+            return jsonify(error=str(e), sid=s.sid), 400
+        finally:
+            s.lock.release()
+        return jsonify(sid=s.sid, events=events, summary=summary, result=res)
 
     @app.get("/api/session/<sid>")
     def session_state(sid):

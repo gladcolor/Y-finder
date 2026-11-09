@@ -15,7 +15,7 @@ import traceback
 from openai import OpenAI
 
 from . import catalog as catalog_mod
-from . import fit, handbooks, sources
+from . import downloads, fit, geolibre, handbooks, sources
 from .config import DEFAULT_MODEL, LOG_TURNS, MAX_OUTPUT_TOKENS, MAX_STEPS, MODELS, RUNTIME_DIR, openai_key
 from .geo import bbox_size_km, clamp_bbox, coverage_fraction, valid_bbox
 from .geo import parse_resolution_m as geo_parse_res
@@ -35,7 +35,8 @@ Work in three projections (tri-projection), in order, and keep the user in the l
    units such as tracts), the unit of analysis and the temporal frequency. Call set_scope. If the user did not
    state an element, choose a sensible default, list it in "assumed", and say so. Do not stall on questions.
 3. Scope -> data. For each core factor, search. Start with search_catalog (YCGS curated cards with Yale access
-   routes, plus Planetary Computer and Earth Engine). Use live sources when they can add something:
+   routes, Planetary Computer, Earth Engine and its community catalog, and the layers collected in GeoLibre:
+   gallery maps "gl:" and web services "gls:"). Use live sources when they can add something:
    search_stac_items for imagery over the study area and dates, search_yale_dataverse and
    search_yale_geoblacklight for Yale holdings and historical maps, search_arcgis_online and search_datagov for
    local and government layers, and web_search for anything else. Then call recommend_data once with your picks
@@ -45,7 +46,11 @@ Work in three projections (tri-projection), in order, and keep the user in the l
    imagery, drone surveys through YCGS, or field data).
 Put useful data on the map: the study area appears after geocode; add one or two previews when they help
 (map_stac_preview for an imagery item, map_census_boundaries for reporting units, map_osm_features for
-local features such as water or parks, map_feature_service for an ArcGIS layer you found).
+local features such as water or parks, map_feature_service for an ArcGIS layer you found, map_catalog_layer for
+a GeoLibre gallery map or service marked "map": true in search_catalog, download_data for a direct link to a
+GeoJSON, CSV with coordinates, KML/KMZ or zipped shapefile file, from a search result or the user).
+Downloaded files stay on the server only for this conversation's session; say so when you use it. GeoLibre gallery maps are snapshots
+made for display: say so, and point to the original data source for analysis.
 
 Rules:
 - Recommend only datasets returned by a tool in this conversation. Use the exact id from search_catalog
@@ -109,7 +114,7 @@ TOOLS = [
         "assumed": {"type": "array", "items": {"type": "string", "enum": ["extent", "time", "resolution", "unit", "frequency"]},
                     "description": "scope elements you chose as defaults because the user did not state them"},
         "rationale": {"type": "string", "description": "one sentence on why this scope fits the question"}}),
-    _tool("search_catalog", "Search the YCGS catalog: curated cards with Yale access routes, Planetary Computer and Earth Engine datasets, tools and methods. Results include a fit label against the current scope.", {
+    _tool("search_catalog", "Search the YCGS catalog: curated cards with Yale access routes, Planetary Computer and Earth Engine datasets, Earth Engine community datasets, GeoLibre gallery maps (gl:) and GeoLibre web services (gls:), tools and methods. Results include a fit label against the current scope; \"map\": true means map_catalog_layer can draw it.", {
         "query": {"type": "string", "description": "a few keywords, e.g. 'tree canopy lidar'"},
         "kind": {"type": "string", "enum": ["any", "dataset", "tool", "method"]},
         "access": {"type": "string", "enum": ["any", "open", "yale"]},
@@ -133,6 +138,11 @@ TOOLS = [
     _tool("map_feature_service", "Fetch features from an ArcGIS FeatureServer or MapServer layer URL inside the study area and map them.", {
         "url": {"type": "string", "description": "service URL from a search result, e.g. https://.../FeatureServer/0"},
         "title": S}),
+    _tool("map_catalog_layer", "Draw a GeoLibre gallery map (ref gl:...) or GeoLibre web service (ref gls:...) from search_catalog on the map, in GeoLibre's colors. Large layers are cut to the study area.", {
+        "ref": {"type": "string", "description": "catalog id from search_catalog, e.g. gl:us-adult-asthma-copd-by-county or gls:nlcd-2021-wms"}}),
+    _tool("download_data", "Download a public data file to the Y-finder server for this conversation and draw it on the map: GeoJSON, CSV with latitude/longitude columns, KML/KMZ, or a zipped shapefile (any coordinate system), up to 50 MB. Needs a direct https file link, not a web page. Large layers are cut to the study area. The file is deleted when the session ends.", {
+        "url": {"type": "string", "description": "direct https link to the file"},
+        "title": {"type": "string", "description": "short layer name, e.g. 'New Haven tree inventory'"}}),
     _tool("map_census_boundaries", "Map US Census boundaries inside the study area.", {
         "level": {"type": "string", "enum": ["tract", "block_group", "town", "place", "county", "state"]}}),
     _tool("recommend_data", "Record your recommended datasets, methods and tools. The server labels each dataset's fit to the scope and updates graph coverage. The user sees them in the Data tab.", {
@@ -152,7 +162,8 @@ LABELS = {
     "search_yale_geoblacklight": "Searching Yale GeoBlacklight", "search_arcgis_online": "Searching ArcGIS Online",
     "search_datagov": "Searching Data.gov", "map_stac_preview": "Adding an imagery preview",
     "map_osm_features": "Fetching OpenStreetMap features", "map_feature_service": "Fetching an ArcGIS layer",
-    "map_census_boundaries": "Fetching Census boundaries", "recommend_data": "Checking each dataset against the scope",
+    "map_census_boundaries": "Fetching Census boundaries", "map_catalog_layer": "Adding layers collected in GeoLibre",
+    "download_data": "Downloading the file to the server", "recommend_data": "Checking each dataset against the scope",
     "get_access_handbook": "Opening the access handbook", "offer_choices": "Preparing quick replies",
 }
 
@@ -291,6 +302,8 @@ def h_search_catalog(s: Session, a: dict):
             c["fit"] = fit.short(r["fit"])
         if r.get("stac_collection"):
             c["stac_collection"] = r["stac_collection"]
+        if r.get("map"):
+            c["map"] = True
         compact.append(c)
     ui = [{"title": r["title"], "url": r.get("url"), "meta": r.get("source")} for r in res]
     return {"results": compact}, [{"type": "results", "items": ui}], f"{len(res)} matches for '{a['query']}'"
@@ -448,6 +461,102 @@ def h_map_feature_service(s: Session, a: dict):
     return _vector(s, fc, a.get("title") or "ArcGIS layer", "ArcGIS service")
 
 
+def _study_year(scope: dict) -> int | None:
+    m = re.match(r"\d{4}", str((scope or {}).get("time_end") or (scope or {}).get("time_start") or ""))
+    return int(m.group()) if m else None
+
+
+def mappable(meta: dict | None) -> bool:
+    meta = meta or {}
+    return bool((meta.get("geolibre") or {}).get("mappable") or meta.get("service"))
+
+
+def h_map_catalog_layer(s: Session, a: dict):
+    """Layers collected in GeoLibre: a gallery map's own layers, or one of its web services as tiles."""
+    ref = str(a.get("ref") or "").strip()
+    it = catalog_mod.load().get(ref)
+    if not it or not mappable(it):
+        raise ToolError("Only GeoLibre gallery maps (gl:...) and GeoLibre services (gls:...) marked \"map\": true "
+                        "in search_catalog can be drawn this way")
+    s.seen[ref] = it
+    sb = s.scope.get("bbox")
+    if it.get("service"):
+        sv = it["service"]
+        if sv.get("kind") == "arcgis":
+            try:
+                fc = sources.arcgis_query(sv["url"], sb)
+            except ValueError as e:
+                raise ToolError(str(e))
+            return _vector(s, fc, it["title"], it.get("provider") or "ArcGIS service")
+        t = geolibre.service_layer(sv)
+        layer = {"id": "gls-" + re.sub(r"[^a-z0-9]", "", ref.lower())[-36:], "kind": "raster", "title": it["title"],
+                 "source": it.get("provider") or "", "tiles": t["tiles"], "bbox": it.get("bbox"),
+                 "minzoom": t["minzoom"], "maxzoom": t["maxzoom"]}
+        s.layers.append(layer)
+        ev = [{"type": "layer", "layer": layer}]
+        if sb:
+            ev.append({"type": "zoom", "bbox": sb})
+        return {"ok": True, "layers": [it["title"]], "note": "Shown as map tiles; open the source for the data."}, ev, it["title"]
+    g = it["geolibre"]
+    try:
+        proj = geolibre.fetch_project(g["slug"])
+    except (ValueError, OSError) as e:
+        raise ToolError(f"Could not load this GeoLibre map: {e}")
+    src = f"GeoLibre gallery: {it['title']}" + (f" (data: {it['provider']})" if it.get("provider") else "")
+    ev, out = [], []
+    for k, L in enumerate(geolibre.map_layers(proj, sb, _study_year(s.scope))):
+        if L["kind"] == "geojson":
+            layer = save_layer(L["fc"], L["title"], src, style="geolibre")
+            if L.get("paint"):
+                layer["paint"] = L["paint"]
+            if L.get("hidden"):
+                layer["hidden"] = True
+        elif L["kind"] == "raster":
+            layer = {"id": f"gl-{g['slug'][:40]}-{k}", "kind": "raster", "title": L["title"],
+                     "source": L.get("attribution") or src, "tiles": L["tiles"], "bbox": L.get("bbox") or it.get("bbox"),
+                     "minzoom": L["minzoom"], "maxzoom": L["maxzoom"], "hidden": L.get("hidden", False)}
+        else:
+            out.append({"layer": L["title"], "shown": False, "note": L.get("note")})
+            continue
+        s.layers.append(layer)
+        ev.append({"type": "layer", "layer": layer})
+        out.append({k2: v for k2, v in {"layer": L["title"], "shown": True, "features": layer.get("n"),
+                                         "hidden_at_first": L.get("hidden") or None, "note": L.get("note")}.items() if v})
+    if not ev:
+        raise ToolError("None of this map's layers can be drawn here" +
+                        ("; none touch the study area" if any("touch" in (o.get("note") or "") for o in out) else "") +
+                        f". Open it in GeoLibre: {g.get('viewer')}")
+    zb = sb or (it.get("bbox") if it.get("bbox") and it["bbox"][2] - it["bbox"][0] < 300 else None)
+    if zb:
+        ev.append({"type": "zoom", "bbox": zb})
+    n = sum(1 for o in out if o.get("shown"))
+    return ({"ok": True, "map": it["title"], "layers": out, "styled_original": g.get("viewer"),
+             "note": "A display snapshot made for GeoLibre's gallery; cite the original data source."},
+            ev, f"{n} layer{'s' if n != 1 else ''} from {it['title']}")
+
+
+def h_download_data(s: Session, a: dict):
+    """A public file, downloaded for this session only, turned into map layers."""
+    try:
+        r = downloads.add(s, a.get("url") or "", (a.get("title") or "").strip()[:100] or None)
+    except downloads.DownloadError as e:
+        raise ToolError(str(e))
+    for l in r["layers"]:
+        s.layers.append(l)
+    ev = [{"type": "layer", "layer": l} for l in r["layers"]]
+    if ev:
+        b = s.scope.get("bbox") or r["layers"][0].get("bbox")
+        if b:
+            ev.append({"type": "zoom", "bbox": b})
+    mb = r["bytes"] / 1e6
+    res = {"ok": bool(ev), "file": r["file"], "size_mb": round(mb, 1), "format": r["format"], "layers": r["notes"],
+           "note": "Stored on the server for this conversation only; deleted when the session ends."}
+    if not ev:
+        res["note"] = "Nothing in the file could be drawn here. " + res["note"]
+    n = len(r["layers"])
+    return res, ev, f"{r['file']} ({mb:.1f} MB), {n} layer{'s' if n != 1 else ''}"
+
+
 def h_map_census_boundaries(s: Session, a: dict):
     if not s.scope.get("bbox"):
         raise ToolError("Set the scope first")
@@ -527,7 +636,7 @@ def h_recommend_data(s: Session, a: dict):
             "factors": [x for x in p.get("factors", []) if x in node_ids], "role": p.get("role", "supporting"),
             "why": p.get("why", ""), "limitations": p.get("limitations", ""), "fit": f, "verified": how,
             "metadata_from_model": filled, "yale_note": meta.get("yale_note") or "", "thumbnail": meta.get("thumbnail") or "",
-            "stac_collection": (meta.get("stac") or {}).get("collection") or "",
+            "stac_collection": (meta.get("stac") or {}).get("collection") or "", "map": mappable(meta),
             "t0": meta.get("t0"), "t1": meta.get("t1"), "bbox": fit.dataset_bbox(meta), "meta": meta})
     refs = {p["ref"] for p in new}
     s.picks = [p for p in s.picks if p["ref"] not in refs] + new
@@ -657,7 +766,8 @@ def restore(s: Session, b: dict) -> None:
             "t0": p.get("t0"), "t1": p.get("t1"), "unit": p.get("unit"),
             "res_m": geo_parse_res(p.get("resolution")), "bbox": p.get("bbox") if valid_bbox(p.get("bbox")) else None}
         # fit labels are recomputed by the rules, never taken from the browser
-        p.update(fit=fit.assess(meta, s.scope), meta=meta, verified=p.get("verified") if p.get("verified") in _VERIFIED else "unverified",
+        p.update(fit=fit.assess(meta, s.scope), meta=meta, map=mappable(meta) if it else False,
+                 verified=p.get("verified") if p.get("verified") in _VERIFIED else "unverified",
                  factors=[x for x in p.get("factors") or [] if isinstance(x, str)], role=p.get("role") or "supporting")
         picks.append(p)
         s.seen[p["ref"]] = meta

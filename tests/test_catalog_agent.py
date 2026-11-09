@@ -34,7 +34,7 @@ def test_search_hits_top5(cat, query, expected):
 def test_synonyms_reach_cards_without_the_query_word(cat):
     # CHIRPS says "precipitation", not "rainfall"; NDVI cards rarely say "greenness".
     assert any("CHIRPS" in r["id"] for r in cat.search("rainfall", limit=5))
-    green = cat.search("greenness", limit=5)
+    green = cat.search("greenness", limit=8)  # GeoLibre's "Seasonal greenness" map rightly ranks first
     assert len(green) >= 4 and any("NDVI" in r["id"] or "ndvi" in (r["title"] or "").lower() for r in green)
 
 

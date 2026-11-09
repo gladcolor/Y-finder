@@ -10,7 +10,7 @@ decision log and commit log when you change something important.
 - **Purpose:** working prototype for Huan Ning's answer to the YCGS written question on an *interactive data guide*
   (Lead, Geospatial AI & ML interview, Yale Job 138060WD). The answer text lives in
   `E:\OneDrive_Huan\OneDrive\Job_hunting\2026\Yale\written_exam.md` (Huan edits it himself; do not overwrite it).
-- **Tests:** `python -m pytest -q` (103 pass, no model calls); `scripts/mutation_check.py` (all 9 injected faults caught);
+- **Tests:** `python -m pytest -q` (141 pass, no model calls); `scripts/mutation_check.py` (all 12 injected faults caught);
   personas 190/195 checks across 3 models (Terra 9/10 personas fully, Sol 8/10, Luna 8/10; fixes after the run listed in
   `docs/persona_results.md`); demo cases 40/40 checks (`docs/demo_case_results.md`).
 - **Reviewed:** Codex CLI (gpt-6.1-sol) reviewed the code; all 15 findings fixed with regression tests (time-fit bug for
@@ -34,6 +34,8 @@ decision log and commit log when you change something important.
 | 2026-11-08 | The UI is crowded with too much text; make it concise. | Answers capped at about 90 words by the prompt (demo answers now 29 to 78 words, were about 250); one collapsible status line per answer instead of tool chips; result pills (Graph, Scope, Map, Data) instead of cards; tabs show progress (stepper removed); two-line welcome with a 2x3 demo grid and three short starters; one-line data cards that expand on click; shorter banner, demo personas and notes. |
 | 2026-11-08 | Enlarge the chat box like ChatGPT and show the conversation history. | Large chat by default on screens 1280 px and wider (the button toggles it, choice remembered): conversation list on the left, centered message column, ChatGPT-style composer at the bottom. Every conversation (live or demo) is saved in the browser and listed by day; reopening replays it in full, and a page reload restores the open one (it used to say "Earlier messages are not shown"). If the server session is gone, `/api/session/restore` rebuilds it so follow-ups keep their context. |
 | 2026-11-08 | Use Research Architect's style for the graph. | Frame tab ported from Research Architect `app_v2/static/app_v2.js`: node colour by graph role (source green, internal sky blue, sink violet), labels below on white chips, unbundled-bezier edges, coverage as opacity (1 / 0.5 / 0.18), dagre top-down layout (cytoscape-dagre from jsdelivr; concentric fallback), hover and tap-to-focus dimming, pulse on the outcome, dot-grid canvas and legend cards. Changes: coverage fades the circle but keeps labels readable; core factors get a dark outline (Y-finder concept). |
+| 2026-11-08 | Search and show the data layers collected in GeoLibre; add them to the internal catalog. | `scripts/build_catalog.py` now harvests GeoLibre: its open data gallery (105 maps, ids `gl:<slug>`; project files cached in `runtime/geolibre_cache`, ~290 MB on the first build), its built-in web services (6 of 8, `yfinder/data/geolibre_services.json`, ids `gls:`; OSM basemap and the GeoServer demo left out) and the Earth Engine community catalog it lists (4,401 assets grouped into 358 product cards, ids `geec:`; "Insiders only" left out). GeoLibre's Earth Engine (904) and Planetary Computer lists were already in the catalog. New tool `map_catalog_layer` and endpoint `POST /api/map_layer` draw a gallery map's GeoJSON and tile layers in GeoLibre's own colors (graduated `step` / categorized `match`, as in GeoLibre's `vectorColorExpression`), or a service as tiles; "Map" buttons on catalog and data cards; "GeoLibre" chip in the Catalog tab browses all of them. |
+| 2026-11-08 | Let the app download data to the server and load it on the map; delete downloaded data after the session ends; delete periodically so the server is not flooded. | Tool `download_data` and endpoint `POST /api/download` (Layers panel: "Add data from a link"): GeoJSON, CSV with lat/lon or WKT points, KML/KMZ, zipped shapefiles in any CRS (pyshp + pyproj), up to 50 MB. Files go to `runtime/downloads/<sid>/` with a manifest of the layers made from them; when the session ends (6 h idle, conversation deleted, or after a restart) the folder and those layers are deleted. `yfinder/janitor.py` runs every 10 min: ends expired sessions, removes orphaned download folders after 30 min, layers older than 3 days that no live session shows, a 500 MB layer-store cap, GeoLibre cache files older than 7 days. Limits: 6 files and 150 MB per session, 2 GB for all downloads, 20 downloads per hour per address. |
 | 2026-11-08 | Create realistic, easy-to-understand use cases to show the functions; use these synthetic cases for automatic testing. | Six demo cases (`yfinder/data/demo_cases.json`) with checks, recorded by `scripts/record_demos.py`, replayed in the app with narration, then continued live. |
 
 ## Agent decisions (change them if Huan disagrees)
@@ -45,6 +47,8 @@ decision log and commit log when you change something important.
 - Conversation history lives in the browser (`localStorage` key `yf_conversations_v1`, 30 conversations, 2.5 MB cap, oldest dropped), not on the server: no accounts, nothing kept server-side beyond the 6-hour session. Each turn is stored as the event stream the UI received (text deltas merged, only the last graph/scope/recommendations kept), so reopening replays the same view.
 - `POST /api/session/restore` rebuilds an expired session from what the browser shows (graph, scope, picks, layers, the OpenAI response id from the `done` event, and a recap of the last 4 turns). It never overwrites a live session; fit labels are recomputed by the rules, layers must be files in this server's store, and the response id must look like `resp_...`. The next message gets the Data-tab list once; the turn recap is used only when the response chain is missing or expired.
 - "New conversation" no longer deletes the server session (the old one stays reopenable); deleting a conversation from the list does.
+- GeoLibre gallery maps are display snapshots: cards say "Snapshot", the agent is told to cite the original source, and the map tool returns the styled original (`web.geolibre.app/?url=<project>`). Big layers are cut to the study area, time series keep one year (the scope's end year, else the latest), the rest becomes an even sample (`yfinder/vector.py`, shared with downloads). Vector-tile layers (signed, expiring URLs) open only in GeoLibre.
+- Project files are fetched only from `assets.geolibre.app` by a slug from the catalog, never from a model- or browser-supplied URL. Downloads accept public https only; every redirect hop is re-checked (`allow_redirects=False`), size is capped while streaming, zips are read in memory with a 300 MB unpacked cap, and downloaded files are never served back (only the GeoJSON layers made from them).
 - Demo cases are recorded and replayed so interviews do not depend on live latency; `/api/demo/<id>/load` restores the end state (including the OpenAI response id) so the conversation continues live.
 
 ## How to run, test, deploy
@@ -66,7 +70,7 @@ bash deploy/deploy.sh                       # sync code to the server and restar
 
 - Host `173.212.218.20` (Contabo, Ubuntu 24.04), SSH key auth as root. Research Architect runs on 127.0.0.1:8050 and must not be disturbed.
 - Y-finder: code `/opt/yfinder` (previous version kept in `/opt/yfinder.prev`), venv `/opt/yfinder/venv`, runtime data
-  `/var/lib/yfinder` (layers, watches), secrets `/etc/yfinder.env` (root, 0600), user `yfinder`.
+  `/var/lib/yfinder` (layers, watches, downloads, geolibre cache), secrets `/etc/yfinder.env` (root, 0600), user `yfinder`.
 - Services: `yfinder.service` (gunicorn, 127.0.0.1:8060, 1 worker, 16 threads) and `yfinder-watch.timer` (daily 07:30).
 - nginx: `/etc/nginx/snippets/yfinder.conf`, included in both server blocks of `/etc/nginx/sites-available/causalai`.
   The original vhost was backed up to `/root/causalai.nginx.bak-*`. Always run `nginx -t` before reloading.
@@ -81,6 +85,8 @@ bash deploy/deploy.sh                       # sync code to the server and restar
 - Codex CLI on this workstation cannot run its file tools (`codex-code-mode-host.exe` missing). For reviews, pipe the files
   in: `for f in yfinder/*.py static/app.js; do echo "== $f"; nl -ba $f; done | codex exec -s read-only "review ..."`.
 - GeoLibre iframe: iframes do not stretch between `left` and `right`; the CSS sets an explicit width.
+- Some sites answer a missing file with "200 OK" and a text body ("404 File Not Found"); download errors quote short replies like that.
+- A layer from an ended session's download returns 404; reopening an old conversation shows a toast instead of the layer.
 - Imagery previews: `map_stac_preview` adds same-week neighbor scenes until the study box is covered (NAIP quarter quads are small).
 
 - `localStorage` on `app.researcharchitect.ai` is shared with Research Architect (same origin); keep Y-finder keys prefixed `yf_` and the history under its 2.5 MB budget.
@@ -110,3 +116,4 @@ See `git log --oneline`. Add a line here for any commit that changes behavior us
 - `cfe44ee` (2026-11-08) Concise UI: shorter answers, status line, result pills, one-line data cards.
 - `c188b01` (2026-11-08) ChatGPT-style large chat, conversation history in the browser, session restore endpoint.
 - `9ae3990` (2026-11-08) Frame graph in Research Architect's style (roles, coverage opacity, dagre layout, tap-to-focus).
+- `GLHASH` (2026-11-08) GeoLibre layers in the catalog and on the map; session-only downloads with cleanup (janitor).

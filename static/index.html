@@ -105,6 +105,7 @@
           <button data-kind="dataset" data-access="open">Open data</button>
           <button data-kind="tool" data-access="any">Tools</button>
           <button data-kind="method" data-access="any">Methods</button>
+          <button data-kind="dataset" data-access="any" data-source="GeoLibre" title="Gallery maps and web services collected in GeoLibre">GeoLibre</button>
         </div>
         <div class="themes" id="catThemes">
           <span class="muted small">Browse:</span>
@@ -166,6 +167,11 @@
     </div>
     <div class="lp-head"><b>Layers</b><span id="nLayers" class="muted"></span></div>
     <div id="layerList"><div class="muted small">Layers that Y-finder adds appear here.</div></div>
+    <form id="dlForm" class="dl-form" title="GeoJSON, CSV with latitude and longitude, KML/KMZ or a zipped shapefile, up to 50 MB">
+      <input id="dlUrl" type="url" placeholder="Add data from a link (https://...)" aria-label="Link to a data file" required>
+      <button class="btn" id="dlGo" type="submit">Add</button>
+    </form>
+    <div class="dl-note muted">Downloaded files stay on the server for this session only.</div>
   </div>
 </div>
 

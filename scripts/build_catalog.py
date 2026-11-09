@@ -3,10 +3,16 @@
 Sources
   * Microsoft Planetary Computer STAC collections (API, ~140 collections)
   * Google Earth Engine public catalog (STAC, ~1,000 collections, crawled)
+  * GeoLibre's collected layers (opengeos/GeoLibre, MIT):
+      - its open data gallery and starter projects (~110 maps; project files cached in runtime/geolibre_cache,
+        about 290 MB on the first run)
+      - its built-in web services (yfinder/data/geolibre_services.json, copied from GeoLibre's TypeScript)
+      - the Earth Engine community catalog it lists (samapriya/awesome-gee-community-datasets, CC BY 4.0),
+        grouped into one card per product page
   * yfinder/data/curated.json (hand-maintained Yale and topic cards, tools, methods)
 
-Usage:  python scripts/build_catalog.py [--skip-gee] [--check-urls]
-Runtime: about 2 to 4 minutes (the Earth Engine crawl dominates).
+Usage:  python scripts/build_catalog.py [--skip-gee] [--skip-geolibre] [--check-urls]
+Runtime: about 2 to 4 minutes (the Earth Engine crawl dominates), plus the first GeoLibre download.
 """
 from __future__ import annotations
 
@@ -23,12 +29,16 @@ import requests
 
 ROOT = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
 sys.path.insert(0, ROOT)
+from yfinder import geolibre  # noqa: E402
 from yfinder.geo import parse_resolution_m, region_bbox  # noqa: E402
 
 DATA = os.path.join(ROOT, "yfinder", "data")
 UA = {"User-Agent": "Y-finder catalog builder/0.1 (+https://github.com/gladcolor)"}
 PC_URL = "https://planetarycomputer.microsoft.com/api/stac/v1/collections"
 GEE_ROOT = "https://storage.googleapis.com/earthengine-stac/catalog/catalog.json"
+GL_RAW = "https://raw.githubusercontent.com/opengeos/GeoLibre/main/"
+GEEC_URL = "https://raw.githubusercontent.com/samapriya/awesome-gee-community-datasets/master/community_datasets.json"
+GL_CACHE = os.path.join(ROOT, "runtime", "geolibre_cache")
 
 # Nominal resolutions for well-known collections whose STAC metadata lack gsd.
 KNOWN_RES = {
@@ -185,6 +195,159 @@ def harvest_gee() -> list[dict]:
     return out
 
 
+# ---------------------------------------------------------------------------- GeoLibre
+def _yrs(text: str) -> tuple[int | None, int | None]:
+    ys = [int(y) for y in re.findall(r"(?<![\d-])(19\d\d|20[0-4]\d)(?!\d)", text or "")]
+    return (min(ys), max(ys)) if ys else (None, None)
+
+
+_UNIT = (("census tract", "Census tract"), ("county", "County"), ("counties", "County"), ("state", "State"),
+         ("country", "Country"), ("countries", "Country"), ("city", "City"), ("cities", "City"))
+
+
+def _gallery_item(slug, title, caption, provider, url, topic="", theme=""):
+    try:
+        proj = geolibre.fetch_project(slug, cache_dir=GL_CACHE, timeout=180)
+    except (ValueError, requests.RequestException) as e:
+        print(f"  GeoLibre: skipped {slug}: {e}", flush=True)
+        return None
+    sm = geolibre.summarize(proj)
+    text = " ".join([title, caption, sm["description"]])
+    t0, t1 = _yrs(text)
+    live = re.search(r"last \d+ days|right now|today|live|forecast", text, re.I)
+    kinds = {l["type"] for l in sm["layers"] if l.get("map", True)}
+    typ = ("Map layers and imagery tiles" if {"geojson", "tiles"} <= kinds else "Imagery tiles" if kinds == {"tiles"}
+           else "Map layers (GeoJSON snapshot)" if kinds else "Map (opens in GeoLibre)")
+    low = text.lower()
+    unit = next((u for k, u in _UNIT if re.search(r"\b" + k + r"\b", low)), None)
+    desc = caption.rstrip(".")
+    if sm["description"] and sm["description"][:40].lower() not in desc.lower():
+        desc += ". " + sm["description"]
+    return {
+        "id": "gl:" + slug, "kind": "dataset", "title": title, "provider": provider or "GeoLibre",
+        "description": clip(desc),
+        "keywords": " ".join(filter(None, [theme.replace("-", " "), topic, provider, "geolibre map",
+                                           " ".join(l["name"] for l in sm["layers"]),
+                                           " ".join(f.replace("_", " ") for f in sm["fields"])])),
+        "source": "GeoLibre gallery", "access": f"Open (GeoLibre open data gallery; original data: {provider or 'see the map'})",
+        "access_class": "open", "url": url, "bbox": sm["bbox"],
+        # US maps with Alaska's Aleutians span the antimeridian, so their box alone reads as "Regional"
+        "region": ("US" if re.search(r"\b(US|U\.S\.|United States|American)\b", title + " " + caption)
+                   else region_label(sm["bbox"]) if sm["bbox"] else None),
+        "t0": t0, "t1": t1,
+        "time": ("Snapshot of a live feed" if live and not t0 else f"{t0}" if t0 and t0 == t1
+                 else f"{t0} to {t1}" if t0 else "Snapshot"),
+        "res_m": None, "res_source": None, "type": typ, "unit": unit,
+        "thumbnail": f"{geolibre.ASSET_HOST}/images/{slug}.webp",
+        "geolibre": {"slug": slug, "viewer": geolibre.viewer_url(slug), "layers": sm["layers"][:12],
+                     "mappable": sm["mappable"], "bbox_from": sm["bbox_from"]},
+    }
+
+
+def harvest_geolibre_gallery() -> list[dict]:
+    gal = _get_json(GL_RAW + "scripts/demo-gallery.json") or {}
+    starters = (_get_json(GL_RAW + "apps/geolibre-desktop/src/lib/starter-projects.json") or {}).get("examples", [])
+    owner = gal.get("owner") or "giswqs"
+    jobs = [(d["slug"], d.get("title") or d["slug"], d.get("caption") or "", d.get("source") or "",
+             f"https://share.geolibre.app/{owner}/{d['slug']}", d.get("topic") or "", d.get("theme") or "")
+            for d in gal.get("demos", []) if geolibre.SLUG_RE.fullmatch(d.get("slug") or "")]
+    have = {j[0] for j in jobs}
+    for st in starters:
+        m = re.fullmatch(re.escape(geolibre.ASSET_HOST) + r"/projects/([a-z0-9-]+)\.geolibre\.json", st.get("projectUrl") or "")
+        if m and m.group(1) not in have:
+            jobs.append((m.group(1), st.get("title") or m.group(1), st.get("description") or "", "",
+                         geolibre.viewer_url(m.group(1)), "", ""))
+    with cf.ThreadPoolExecutor(6) as ex:
+        out = [x for x in ex.map(lambda j: _gallery_item(*j), jobs) if x]
+    print(f"  GeoLibre gallery: {len(out)} of {len(jobs)} maps", flush=True)
+    return out
+
+
+def harvest_geolibre_services() -> list[dict]:
+    raw = json.load(open(os.path.join(DATA, "geolibre_services.json"), encoding="utf-8"))
+    src = ""
+    for f in ("apps/geolibre-desktop/src/components/layout/add-data/constants.ts",
+              "apps/geolibre-desktop/src/components/layout/add-data/service-library.ts"):
+        try:
+            src += requests.get(GL_RAW + f, headers=UA, timeout=40).text
+        except requests.RequestException:
+            pass
+    out = []
+    for c in raw["services"]:
+        sv = c["service"]
+        probe = sv.get("endpoint") or sv.get("tiles") or sv.get("url")
+        if src and probe not in src:
+            print(f"  GeoLibre services: {c['id']} endpoint no longer in GeoLibre's source; check it", flush=True)
+        c = dict(c)
+        c.update(kind="dataset", source="GeoLibre services", access="Open (public web service, listed in GeoLibre)",
+                 access_class="open", bbox=region_bbox({"contiguous us": "conus"}.get(c["region"].lower(), c["region"])),
+                 res_source="curated" if c.get("res_m") else None)
+        c.setdefault("t0", None)
+        c.setdefault("t1", None)
+        out.append(c)
+    return out
+
+
+def _common_title(titles: list[str]) -> str:
+    if len(titles) == 1:
+        return titles[0]
+    heads = {t.split(":")[0].strip() for t in titles}
+    if len(heads) == 1:
+        return heads.pop()
+    p = os.path.commonprefix(titles)
+    if not p.endswith(" "):
+        p = re.sub(r"\S*$", "", p)
+    p = p.strip(" :-_(")
+    return p if len(p) >= 12 else titles[0]
+
+
+def harvest_gee_community() -> list[dict]:
+    rows = _get_json(GEEC_URL) or []
+    groups: dict[str, list[dict]] = {}
+    for r in rows:
+        if r.get("thematic_group") == "Insiders only datasets" or not r.get("id"):
+            continue  # insiders datasets need a paid sponsorship
+        groups.setdefault(r.get("docs") or r["id"], []).append(r)
+    kind_of = {"table": "Vector table", "feature_collection": "Vector table"}
+    out = []
+    for docs, rs in groups.items():
+        slug = re.sub(r"[^a-z0-9]+", "-", docs.lower().rstrip("/").rsplit("/", 1)[-1]).strip("-")
+        slug = slug or re.sub(r"[^a-z0-9]+", "-", rs[0]["id"].lower()).strip("-")
+        titles = [r["title"] for r in rs]
+        title = _common_title(titles)
+        tags = list(dict.fromkeys(t.strip() for r in rs for t in (r.get("tags") or "").split(",") if t.strip()))[:30]
+        t0, t1 = _yrs(" ".join(titles))
+        blob = (title + " " + " ".join(tags)).lower()
+        region = ("Global" if re.search(r"\bglobal\b|\bworld", blob)
+                  else "US" if re.search(r"united states|\busa?\b|conus|\bnhd\b|\bnwi\b|\bepa\b", blob) else None)
+        kinds = [kind_of.get(r.get("type"), "Raster / imagery") for r in rs]
+        typ = max(set(kinds), key=kinds.count)
+        lic = rs[0].get("license") or "see the product page"
+        parts = (f"{len(rs)} Earth Engine assets (for example {rs[0]['id']})" if len(rs) > 1
+                 else f"Earth Engine asset {rs[0]['id']}")
+        out.append({
+            "id": "geec:" + slug[:60], "kind": "dataset", "title": title, "provider": (rs[0].get("provider") or "").strip(),
+            "description": clip(f"{rs[0].get('thematic_group') or 'Community dataset'}. {parts}. License: {lic}."),
+            "keywords": " ".join(tags + [rs[0].get("thematic_group") or "", "earth engine community"]),
+            "source": "GEE community catalog",
+            "access": "Open (Earth Engine account; community-contributed, not reviewed by Google)",
+            "access_class": "open", "url": docs if docs.startswith("http") else "https://gee-community-catalog.org/",
+            "region": region, "bbox": region_bbox(region), "t0": t0, "t1": t1,
+            "time": f"{t0} to {t1}" if t0 and t1 != t0 else f"{t0}" if t0 else "See the product page",
+            "res_m": parse_resolution_m(title + ". " + " ".join(tags)), "res_source": None, "type": typ,
+            "gee_id": rs[0]["id"], "gee_parts": len(rs), "thumbnail": rs[0].get("thumbnail"), "license": lic,
+            "sample_code": rs[0].get("sample_code"),
+        })
+    seen: dict[str, int] = {}
+    for it in out:  # two product pages can share a last path segment
+        n = seen.get(it["id"], 0)
+        seen[it["id"]] = n + 1
+        if n:
+            it["id"] += f"-{n + 1}"
+    print(f"  GEE community: {len(rows)} assets grouped into {len(out)} product cards", flush=True)
+    return out
+
+
 def load_curated() -> list[dict]:
     cur = json.load(open(os.path.join(DATA, "curated.json"), encoding="utf-8"))
     out = []
@@ -217,6 +380,7 @@ def check_urls(items):
 def main():
     ap = argparse.ArgumentParser()
     ap.add_argument("--skip-gee", action="store_true")
+    ap.add_argument("--skip-geolibre", action="store_true")
     ap.add_argument("--check-urls", action="store_true", help="check curated URLs (slow)")
     a = ap.parse_args()
     t = time.time()
@@ -226,7 +390,11 @@ def main():
     print("planetary computer", len(pc), flush=True)
     gee = [] if a.skip_gee else harvest_gee()
     print("earth engine", len(gee), flush=True)
-    items += pc + gee
+    gl = [] if a.skip_geolibre else harvest_geolibre_gallery()
+    gls = harvest_geolibre_services()
+    geec = [] if a.skip_geolibre else harvest_gee_community()
+    print("geolibre gallery", len(gl), "services", len(gls), "gee community", len(geec), flush=True)
+    items += pc + gee + gl + gls + geec
     if a.check_urls:
         st = check_urls([i for i in items if i["source"] == "YCGS curated"])
         for i in items:
@@ -236,7 +404,8 @@ def main():
         print("curated URLs not 200 (often bot blocks, check by hand):", bad)
     meta = {"built": dt.date.today().isoformat(), "counts": {
         "curated": sum(i["source"] == "YCGS curated" for i in items),
-        "planetary_computer": len(pc), "earth_engine": len(gee), "total": len(items)},
+        "planetary_computer": len(pc), "earth_engine": len(gee), "geolibre_gallery": len(gl),
+        "geolibre_services": len(gls), "gee_community": len(geec), "total": len(items)},
         "with_resolution": sum(1 for i in items if i.get("res_m"))}
     json.dump({"meta": meta, "items": items}, open(os.path.join(DATA, "catalog.json"), "w", encoding="utf-8"),
               ensure_ascii=False, separators=(",", ":"))

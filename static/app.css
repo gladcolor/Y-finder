@@ -309,6 +309,10 @@ body.collapsed .layers-box { left: 12px; }
 .lrow .sw { width: 12px; height: 12px; border-radius: 3px; flex: none; }
 .lrow .nm { flex: 1; min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
 .lrow button { border: 0; background: none; color: var(--navy-2); font-size: 12px; padding: 0 3px; }
+.lrow .tag { font-size: 10.5px; color: #8a5a00; background: #fff4dc; border-radius: 4px; padding: 0 4px; margin-left: 4px; }
+.dl-form { display: flex; gap: 6px; margin-top: 10px; padding-top: 8px; border-top: 1px solid var(--line); }
+.dl-form input { flex: 1; min-width: 0; border: 1px solid var(--line); border-radius: 8px; padding: 5px 8px; font: inherit; font-size: 12.5px; }
+.dl-note { font-size: 11px; margin-top: 4px; }
 .dlg { border: 0; border-radius: 14px; box-shadow: var(--shadow); padding: 0; width: min(760px, 94vw); max-height: 86vh; }
 .dlg::backdrop { background: rgba(15, 25, 45, .35); }
 .dlg-head { display: flex; justify-content: space-between; align-items: center; padding: 10px 14px; border-bottom: 1px solid var(--line); position: sticky; top: 0; background: #fff; }

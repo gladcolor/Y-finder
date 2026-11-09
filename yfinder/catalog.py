@@ -132,6 +132,8 @@ class Catalog:
                 continue
             if it.get("source") == "YCGS curated":
                 s *= 1.35
+            elif it.get("source") == "GEE community catalog":  # short cards, community-made: rank below official ones
+                s *= 0.85
             scored.append((s, i))
         scored.sort(reverse=True)
         out = []
@@ -168,6 +170,13 @@ def card(it: dict, f: dict | None = None) -> dict:
             c["thumbnail"] = it["thumbnail"]
         if it.get("stac"):
             c["stac_collection"] = it["stac"]["collection"]
+        if it.get("geolibre"):  # a GeoLibre gallery map: drawable here, styled original in GeoLibre
+            c["map"] = bool(it["geolibre"].get("mappable"))
+            c["viewer"] = it["geolibre"].get("viewer")
+        elif it.get("service"):
+            c["map"] = True
+        if it.get("gee_parts"):
+            c["parts"] = it["gee_parts"]
     if it.get("yale_note"):
         c["yale_note"] = it["yale_note"]
     if it.get("kind") == "method":

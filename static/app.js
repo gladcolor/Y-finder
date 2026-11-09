@@ -98,11 +98,35 @@
   const IS_LINE = ['in', ['geometry-type'], ['literal', ['LineString', 'MultiLineString']]];
   const IS_POINT = ['in', ['geometry-type'], ['literal', ['Point', 'MultiPoint']]];
 
+  // GeoLibre's own colors for a gallery layer (server-validated, checked again here): graduated stops are class
+  // lower bounds (a step), categorized stops exact values (a match), as in GeoLibre's vectorColorExpression.
+  const HEXC = /^#[0-9a-f]{3,8}$/i;
+  function glColor(P, fallback) {
+    if (!P) return fallback;
+    const base = HEXC.test(P.fill || '') ? P.fill : fallback;
+    const stops = (Array.isArray(P.stops) ? P.stops : []).filter((s) => Array.isArray(s) && HEXC.test(s[1] || ''));
+    if (typeof P.property !== 'string' || !P.property) return base;
+    if (P.mode === 'graduated') {
+      const st = stops.filter((s) => Number.isFinite(s[0])).sort((a, b) => a[0] - b[0]).filter((s, i, a) => !i || s[0] > a[i - 1][0]);
+      if (st.length >= 2) return ['step', ['to-number', ['get', P.property], st[0][0]], st[0][1], ...st.slice(1).flatMap((s) => [s[0], s[1]])];
+    } else if (P.mode === 'categorized') {
+      const seen = new Set(); const st = stops.filter((s) => { const k = String(s[0]); if (seen.has(k)) return false; seen.add(k); return true; });
+      if (st.length) return ['match', ['to-string', ['get', P.property]], ...st.flatMap((s) => [String(s[0]), s[1]]), base];
+    }
+    return base;
+  }
+  function swatchOf(P, fallback) {
+    if (!P) return fallback;
+    const st = (P.stops || []).filter((s) => HEXC.test((s || [])[1] || ''));
+    return st.length ? st[Math.floor(st.length * 0.7)][1] : HEXC.test(P.fill || '') ? P.fill : fallback;
+  }
+
   async function addLayer(d) {
     if (!state.mapReady) { state.pending.push(d); return null; }
     if (state.layers.has(d.id)) return state.layers.get(d.id);
     if (d.style === 'scope') for (const [id, e] of state.layers) if (e.d.style === 'scope') removeLayer(id);
-    const color = d.style === 'scope' ? '#2b4f8a' : d.style === 'boundary' ? '#1d2433' : d.style === 'footprint' ? '#d97706' : PALETTE[state.colorIdx++ % PALETTE.length];
+    let color = d.style === 'scope' ? '#2b4f8a' : d.style === 'boundary' ? '#1d2433' : d.style === 'footprint' ? '#d97706' : PALETTE[state.colorIdx++ % PALETTE.length];
+    if (d.paint) color = swatchOf(d.paint, color);
     const src = 'src-' + d.id; const entry = { d, color, ids: [], visible: true, fc: null };
     state.layers.set(d.id, entry);
     try {
@@ -113,7 +137,10 @@
         map.addLayer({ id: 'L-' + d.id, type: 'raster', source: src, paint: { 'raster-opacity': 0.92 } }, firstVectorId());
         entry.ids.push('L-' + d.id);
       } else {
-        const fc = d.data || await fetch(d.url).then((r) => r.json());
+        const fc = d.data || await fetch(d.url).then((r) => {
+          if (r.status === 404) throw new Error(d.session_only || d.style === 'download' ? 'gone' : 'missing');
+          return r.json();
+        });
         if (state.layers.get(d.id) !== entry) return null; // removed (or new conversation) while loading
         entry.fc = fc;
         map.addSource(src, { type: 'geojson', data: fc });
@@ -122,6 +149,17 @@
           map.addLayer({ id: 'F-' + d.id, type: 'fill', source: src, paint: { 'fill-color': color, 'fill-opacity': 0.04 } }, before);
           map.addLayer({ id: 'S-' + d.id, type: 'line', source: src, paint: { 'line-color': color, 'line-width': 2, 'line-dasharray': [2, 1.5] } }, before);
           entry.ids.push('F-' + d.id, 'S-' + d.id);
+        } else if (d.paint) { // a GeoLibre gallery layer, in GeoLibre's colors
+          const P = d.paint; const c = glColor(P, color); const edge = HEXC.test(P.stroke || '') ? P.stroke : '#ffffff';
+          const op = Math.min(0.8, Number.isFinite(P.opacity) ? P.opacity : 0.7);
+          map.addLayer({ id: 'F-' + d.id, type: 'fill', source: src, filter: IS_POLY, paint: { 'fill-color': c, 'fill-opacity': op } }, before);
+          map.addLayer({ id: 'S-' + d.id, type: 'line', source: src, filter: ['any', IS_POLY, IS_LINE],
+            paint: { 'line-color': ['case', IS_LINE, c, edge], 'line-width': ['case', IS_LINE, 1.8, Math.max(0.3, Math.min(2, P.width || 0.5))], 'line-opacity': 0.9 } }, before);
+          map.addLayer({ id: 'P-' + d.id, type: 'circle', source: src, filter: IS_POINT,
+            paint: { 'circle-radius': Math.max(2.5, Math.min(7, (P.radius || 6) * 0.7)), 'circle-color': c, 'circle-opacity': 0.9, 'circle-stroke-color': edge, 'circle-stroke-width': 0.6 } });
+          entry.ids.push('F-' + d.id, 'S-' + d.id, 'P-' + d.id);
+          ['F-', 'P-', 'S-'].forEach((p) => map.on('click', p + d.id, (e) => popup(e, d)));
+          ['F-', 'P-'].forEach((p) => { map.on('mouseenter', p + d.id, () => { map.getCanvas().style.cursor = 'pointer'; }); map.on('mouseleave', p + d.id, () => { map.getCanvas().style.cursor = ''; }); });
         } else {
           const fillOp = d.style === 'boundary' ? 0.02 : d.style === 'footprint' ? 0 : 0.33;  // footprints: outline only
           map.addLayer({ id: 'F-' + d.id, type: 'fill', source: src, filter: IS_POLY, paint: { 'fill-color': color, 'fill-opacity': fillOp } }, before);
@@ -135,7 +173,13 @@
         }
       }
     } catch (err) {
-      console.warn('layer failed', d, err); state.layers.delete(d.id); toast('Could not draw layer: ' + (d.title || d.id)); return null;
+      console.warn('layer failed', d, err); state.layers.delete(d.id);
+      toast(err.message === 'gone' ? `"${d.title}" was a downloaded file; it was deleted when its session ended.`
+        : err.message === 'missing' ? `"${d.title}" is no longer on the server.` : 'Could not draw layer: ' + (d.title || d.id));
+      return null;
+    }
+    if (d.hidden) { // hidden at first in the original GeoLibre map; Show in Layers turns it on
+      entry.visible = false; entry.ids.forEach((l) => map.getLayer(l) && map.setLayoutProperty(l, 'visibility', 'none'));
     }
     renderLayerList();
     return entry;
@@ -163,7 +207,7 @@
     list.innerHTML = [...state.layers.values()].reverse().map((e) => {
       const d = e.d; const dl = d.kind === 'geojson' ? `<a class="btn" style="padding:0 6px" href="${esc(d.url)}" download="${esc((d.title || 'layer').replace(/[^\w-]+/g, '_'))}.geojson" title="Download GeoJSON">&#8595;</a>` : '';
       return `<div class="lrow" data-id="${esc(d.id)}"><span class="sw" style="background:${e.color};opacity:${e.visible ? 1 : .3}"></span>
-        <span class="nm" title="${esc(d.title)} · ${esc(d.source || '')}">${esc(d.title)}${d.n ? ` <span class="muted">(${d.n})</span>` : ''}</span>
+        <span class="nm" title="${esc(d.title)} · ${esc(d.source || '')}">${esc(d.title)}${d.n ? ` <span class="muted">(${d.n})</span>` : ''}${d.session_only ? '<span class="tag" title="Downloaded to the server for this session; deleted when it ends">session</span>' : ''}</span>
         <button data-act="zoom" title="Zoom to">Zoom</button><button data-act="vis">${e.visible ? 'Hide' : 'Show'}</button>${dl}<button data-act="rm" title="Remove">&times;</button></div>`;
     }).join('');
     $$('.lrow', list).forEach((row) => {
@@ -549,7 +593,7 @@
             ${p.limitations ? `<div class="lim"><b>Limits:</b> ${esc(p.limitations)}</div>` : ''}
             ${p.yale_note ? `<div class="yale-note">${esc(p.yale_note)}</div>` : ''}
             ${p.factors && p.factors.length ? `<div class="factors">${p.factors.map((f) => `<span>${esc(nodeLabel(f))}</span>`).join('')}</div>` : ''}
-            <div class="row">${url ? `<a class="btn" href="${esc(url)}" target="_blank" rel="noopener">Source</a>` : ''}<button class="btn" data-act="hb">How to access</button><button class="btn" data-act="cov">Coverage</button>${p.stac_collection ? '<button class="btn" data-act="preview">Preview</button>' : ''}<button class="btn" data-act="ask">Ask</button>
+            <div class="row">${url ? `<a class="btn" href="${esc(url)}" target="_blank" rel="noopener">Source</a>` : ''}<button class="btn" data-act="hb">How to access</button><button class="btn" data-act="cov">Coverage</button>${p.stac_collection ? '<button class="btn" data-act="preview">Preview</button>' : ''}${p.map ? '<button class="btn" data-act="map" title="Draw its layers on the map">Map</button>' : ''}<button class="btn" data-act="ask">Ask</button>
               <span class="verified">${esc(verifiedText[p.verified] || '')}</span></div>
           </div></div>`;
       });
@@ -561,6 +605,7 @@
       c.querySelector('[data-act=hb]').onclick = () => openHandbook(p.ref, p.title);
       c.querySelector('[data-act=cov]').onclick = () => showCoverage(p);
       const pv = c.querySelector('[data-act=preview]'); if (pv) pv.onclick = () => send(`Show a recent preview of ${p.title} (${p.stac_collection}) for my study area on the map.`);
+      const mb = c.querySelector('[data-act=map]'); if (mb) mb.onclick = () => mapItem(p.ref, mb);
       c.querySelector('[data-act=ask]').onclick = () => { $('#q').value = `About ${p.title}: `; switchTab('chat'); $('#q').focus(); autosize(); };
     });
     const ms = state.methods || [];
@@ -666,28 +711,67 @@
   }
   $('#dlgClose').onclick = () => $('#dlg').close();
 
+  // ------------------------------------------------------------------ layers collected in GeoLibre, drawn from a card
+  async function mapItem(ref, btn) {
+    if (btn) { btn.disabled = true; btn.textContent = 'Loading...'; }
+    try {
+      if (state.restoring) await state.restoring;
+      const r = await fetch('api/map_layer', { method: 'POST', headers: headers(), body: JSON.stringify({ sid: state.sid, ref }) });
+      const j = await r.json().catch(() => ({}));
+      if (j.sid && j.sid !== state.sid) { state.sid = j.sid; store.set('yf_sid', j.sid); }
+      if (!r.ok) throw new Error(j.error || `Server error ${r.status}`);
+      const t = state.conv ? convTurn(null) : null;
+      (j.events || []).forEach((ev) => { if (t) convRecord(t, ev); handle(ev, {}); });
+      if (t) convSave();
+      const notes = ((j.result && j.result.layers) || []).map((l) => l.note).filter(Boolean);
+      toast(`Added ${j.summary}${notes.length ? ' · ' + notes[0] : ''}`);
+      $('#layerPanel').hidden = false;
+    } catch (err) { toast(err.message); }
+    finally { if (btn) { btn.disabled = false; btn.textContent = 'Map'; } }
+  }
+
+  // ------------------------------------------------------------------ data files from a link, kept on the server for this session
+  $('#dlForm').onsubmit = async (e) => {
+    e.preventDefault(); const url = $('#dlUrl').value.trim(); if (!url) return;
+    const b = $('#dlGo'); b.disabled = true; b.textContent = 'Downloading...';
+    try {
+      if (state.restoring) await state.restoring;
+      const r = await fetch('api/download', { method: 'POST', headers: headers(), body: JSON.stringify({ sid: state.sid, url }) });
+      const j = await r.json().catch(() => ({}));
+      if (j.sid && j.sid !== state.sid) { state.sid = j.sid; store.set('yf_sid', j.sid); }
+      if (!r.ok) throw new Error(j.error || `Server error ${r.status}`);
+      const t = state.conv ? convTurn(null) : null;
+      (j.events || []).forEach((ev) => { if (t) convRecord(t, ev); handle(ev, {}); });
+      if (t) convSave();
+      const notes = ((j.result && j.result.layers) || []).map((l) => l.note).filter(Boolean);
+      toast(`Added ${j.summary}${notes.length ? ' · ' + notes[0] : ''}`); $('#dlUrl').value = '';
+    } catch (err) { toast(err.message); }
+    finally { b.disabled = false; b.textContent = 'Add'; }
+  };
+
   // ------------------------------------------------------------------ catalog tab
   let catT = null;
   async function catSearch() {
-    const q = $('#catQ').value.trim();
-    if (!q) { $('#catRes').innerHTML = ''; $('#catMeta').textContent = state.config ? `${state.config.catalog.counts?.total || ''} cards: YCGS curated, Planetary Computer and Earth Engine. Built ${state.config.catalog.built}.` : ''; return; }
+    const q = $('#catQ').value.trim(); const srcF = state.catSource || 'any';
+    if (!q && srcF === 'any') { $('#catRes').innerHTML = ''; $('#catMeta').textContent = state.config ? `${state.config.catalog.counts?.total || ''} cards: YCGS curated, Planetary Computer, Earth Engine and its community catalog, and layers collected in GeoLibre. Built ${state.config.catalog.built}.` : ''; return; }
     try {
-      const j = await getJSON(`api/catalog/search?q=${encodeURIComponent(q)}&kind=${state.catKind}&access=${state.catAccess}&sid=${encodeURIComponent(state.sid)}&limit=30`);
+      const j = await getJSON(`api/catalog/search?q=${encodeURIComponent(q)}&kind=${state.catKind}&access=${state.catAccess}&source=${encodeURIComponent(srcF)}&sid=${encodeURIComponent(state.sid)}&limit=${q ? 30 : 60}`);
       $('#catMeta').textContent = `${j.results.length} results${state.scope ? ' · fit labels use your current scope' : ''}`;
       $('#catRes').innerHTML = j.results.map((c) => `<div class="ccard" data-id="${esc(c.id)}"><div class="t">${safeUrl(c.url) ? `<a href="${esc(safeUrl(c.url))}" target="_blank" rel="noopener">${esc(c.title)}</a>` : esc(c.title)}</div>
         <div class="src">${esc([c.kind !== 'dataset' ? c.kind : '', c.source, c.provider, c.resolution, c.time].filter(Boolean).join(' · '))}</div>
         <div class="d">${esc(c.description || '')}</div>
-        <div class="row">${c.fit ? fitBadges(c.fit) : badge(c.access_class || 'unknown', accessLabel[c.access_class] || c.access || '', c.access)}<button class="btn" data-act="ask">Ask Y-finder</button><button class="btn" data-act="hb">How to access</button></div></div>`).join('') || '<div class="empty">No matches. Try other words.</div>';
+        <div class="row">${c.fit ? fitBadges(c.fit) : badge(c.access_class || 'unknown', accessLabel[c.access_class] || c.access || '', c.access)}${c.map ? '<button class="btn primary" data-act="map" title="Draw its layers on the map">Map</button>' : ''}${safeUrl(c.viewer) ? `<a class="btn" href="${esc(safeUrl(c.viewer))}" target="_blank" rel="noopener" title="The original, styled map in GeoLibre">GeoLibre</a>` : ''}<button class="btn" data-act="ask">Ask Y-finder</button><button class="btn" data-act="hb">How to access</button></div></div>`).join('') || '<div class="empty">No matches. Try other words.</div>';
       $$('.ccard').forEach((el) => {
         const c = j.results.find((x) => x.id === el.dataset.id);
         el.querySelector('[data-act=ask]').onclick = () => send(`Does "${c.title}" (${c.id}) fit my study? If there is no study yet, tell me what it is good for.`);
         el.querySelector('[data-act=hb]').onclick = () => openHandbook(c.id, c.title);
+        const mb = el.querySelector('[data-act=map]'); if (mb) mb.onclick = () => mapItem(c.id, mb);
       });
     } catch (err) { $('#catRes').innerHTML = `<div class="empty">${esc(err.message)}</div>`; }
   }
   $('#catQ').oninput = () => { clearTimeout(catT); catT = setTimeout(catSearch, 250); };
   $$('#catThemes button').forEach((b) => { b.onclick = () => { $('#catQ').value = b.dataset.q; catSearch(); }; });
-  $$('#catChips button').forEach((b) => { b.onclick = () => { $$('#catChips button').forEach((x) => x.classList.remove('on')); b.classList.add('on'); state.catKind = b.dataset.kind; state.catAccess = b.dataset.access; catSearch(); }; });
+  $$('#catChips button').forEach((b) => { b.onclick = () => { $$('#catChips button').forEach((x) => x.classList.remove('on')); b.classList.add('on'); state.catKind = b.dataset.kind; state.catAccess = b.dataset.access; state.catSource = b.dataset.source || 'any'; catSearch(); }; });
 
   // ------------------------------------------------------------------ GeoLibre (full GIS)
   function geolibreURL() {
@@ -1002,7 +1086,7 @@
 
 **Access handbooks.** Each data source can have a handbook in the style of an Agent Skill: access route, endpoint, a Python example and pitfalls. It extends the handbooks of [LLM-Find](https://github.com/gladcolor/llm-find).
 
-**Privacy.** Do not paste protected or confidential data. Questions are sent to an OpenAI model to generate answers. Your conversations are saved in this browser only; delete them from the conversation list.`);
+**Privacy.** Do not paste protected or confidential data. Questions are sent to an OpenAI model to generate answers. Your conversations are saved in this browser only; delete them from the conversation list. Data files you or Y-finder download are kept on the server only for your session (about 6 hours after your last action) and then deleted, along with their map layers.`);
     $('#dlg').showModal();
   };
   function askCode() {

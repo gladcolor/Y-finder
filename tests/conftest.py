@@ -5,6 +5,7 @@ A good test suite must fail for every mutant. If a mutant survives, the tests ar
 import os
 import re
 
+os.environ.setdefault("YFINDER_JANITOR", "0")  # tests call janitor.sweep() themselves
 MUTANT = os.environ.get("YF_MUTANT")
 
 if MUTANT:
@@ -48,5 +49,14 @@ if MUTANT:
             res["edges"] = len(s.graph["edges"])
             return res, ev, label
         agent.h_update_influence_graph = graph
+    elif MUTANT == "downloads_kept_after_session":
+        from yfinder import downloads, session
+        session.END_HOOKS.clear()
+    elif MUTANT == "download_follows_redirects":
+        from yfinder import downloads
+        downloads._http_get = lambda url: downloads.requests.get(url, headers=downloads.UA, stream=True, allow_redirects=True)
+    elif MUTANT == "geolibre_any_url":
+        from yfinder import geolibre
+        geolibre.SLUG_RE = re.compile(r".+")
     else:
         raise SystemExit(f"unknown mutant {MUTANT}")

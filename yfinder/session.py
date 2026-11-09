@@ -37,6 +37,7 @@ class Session:
     stac_items: dict = field(default_factory=dict)  # item id -> STAC item summary
     layers: list = field(default_factory=list)      # layer descriptors sent to the UI
     proposal: dict | None = None                    # {"name", "text", "used"}
+    downloads: list = field(default_factory=list)   # files downloaded for this session (deleted when it ends)
     lock: threading.Lock = field(default_factory=threading.Lock)
 
     def remember(self, results: list[dict]) -> None:
@@ -56,24 +57,46 @@ _sessions: dict[str, Session] = {}
 _lock = threading.Lock()
 
 
+# Called with the session after it ends (expired, evicted, reset). downloads.py registers the cleanup of the
+# files and layers the session downloaded.
+END_HOOKS: list = []
+
+
+def _ended(gone: list[Session]) -> None:
+    for s in gone:
+        for hook in END_HOOKS:
+            try:
+                hook(s)
+            except Exception as e:  # cleanup must never break a request
+                print(f"session end hook failed for {s.sid}: {e}", flush=True)
+
+
+def _expire(now: float) -> list[Session]:
+    """Pop expired sessions (and the oldest quarter when there are too many). Caller holds _lock.
+    Never evicts a session whose turn is still running (its lock is held)."""
+    gone = []
+    if len(_sessions) > MAX_SESSIONS:
+        for k in sorted(_sessions, key=lambda k: _sessions[k].last)[: len(_sessions) // 4]:
+            if not _sessions[k].lock.locked():
+                gone.append(_sessions.pop(k))
+    for k in [k for k, s in _sessions.items() if now - s.last > SESSION_TTL and not s.lock.locked()]:
+        gone.append(_sessions.pop(k))
+    return gone
+
+
 def get(sid: str | None) -> Session:
     now = time.time()
     with _lock:
-        # Never evict a session whose turn is still running (its lock is held).
-        if len(_sessions) > MAX_SESSIONS:
-            for k in sorted(_sessions, key=lambda k: _sessions[k].last)[: len(_sessions) // 4]:
-                if not _sessions[k].lock.locked():
-                    _sessions.pop(k, None)
-        for k in [k for k, s in _sessions.items() if now - s.last > SESSION_TTL and not s.lock.locked()]:
-            _sessions.pop(k, None)
+        gone = _expire(now)
         if sid and sid in _sessions:
             s = _sessions[sid]
             s.last = now
-            return s
-        sid = sid if (sid and 8 <= len(sid) <= 64 and sid.replace("-", "").isalnum()) else secrets.token_hex(12)
-        s = Session(sid=sid)
-        _sessions[sid] = s
-        return s
+        else:
+            sid = sid if (sid and 8 <= len(sid) <= 64 and sid.replace("-", "").isalnum()) else secrets.token_hex(12)
+            s = Session(sid=sid)
+            _sessions[sid] = s
+    _ended(gone)
+    return s
 
 
 def peek(sid: str) -> Session | None:
@@ -81,9 +104,24 @@ def peek(sid: str) -> Session | None:
         return _sessions.get(sid)
 
 
+def live_ids() -> set[str]:
+    with _lock:
+        return set(_sessions)
+
+
+def sweep() -> int:
+    """End expired sessions even when nobody is using the app (the janitor calls this)."""
+    with _lock:
+        gone = _expire(time.time())
+    _ended(gone)
+    return len(gone)
+
+
 def reset(sid: str) -> None:
     with _lock:
-        _sessions.pop(sid, None)
+        s = _sessions.pop(sid, None)
+    if s:
+        _ended([s])
 
 
 # --------------------------------------------------------------------------- layers
