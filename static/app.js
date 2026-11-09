@@ -698,10 +698,11 @@
         const worst = ['resolution', 'extent', 'time'].map((k) => p.fit[k]).find((x) => x && (x.label === 'poor' || x.label === 'partial'));
         const dimName = { extent: 'area', time: 'time', resolution: 'detail' };
         const goods = Object.keys(dimName).filter((k) => p.fit[k]?.label === 'good').map((k) => dimName[k]);
-        const unknown = Object.keys(dimName).filter((k) => p.fit[k]?.label === 'unknown').map((k) => dimName[k]);
+        const tableNoDetail = p.data_type === 'table' && p.fit.resolution?.label === 'unknown'; // a table has no cell size to check
+        const unknown = Object.keys(dimName).filter((k) => p.fit[k]?.label === 'unknown' && !(k === 'resolution' && tableNoDetail)).map((k) => dimName[k]);
         const list = (xs) => xs.length > 1 ? xs.slice(0, -1).join(', ') + ' and ' + xs[xs.length - 1] : xs[0];
-        const one = worst ? worst.reason : !unknown.length ? 'Fits your area, time and detail'
-          : goods.length ? `Fits your ${list(goods)}; ${list(unknown)} not listed` : 'Details not listed; check the source';
+        const one = (worst ? worst.reason : !unknown.length ? (tableNoDetail ? `Fits your ${list(goods) || 'question'} (a table)` : 'Fits your area, time and detail')
+          : goods.length ? `Fits your ${list(goods)}; ${list(unknown)} not listed` : 'Details not listed; check the source');
         const reasons = ['extent', 'time', 'resolution'].map((k) => p.fit[k]).filter((x) => x && x.label !== 'unknown').map((x) => `<li>${esc(x.reason)}</li>`).join('');
         const url = safeUrl(p.url); const acc = p.fit.access?.label || 'unknown';
         html += `<div class="dcard ${p.fit.overall === 'poor' ? 'poorfit' : ''}" data-ref="${esc(p.ref)}">
@@ -930,7 +931,11 @@
       });
       if (fresh.length) {
         const t = state.conv ? convTurn(null) : null; // kept with the conversation, so reopening shows them
-        fresh.forEach((l) => { const ev = { type: 'layer', layer: l }; if (t) convRecord(t, ev); addLayer(l).then(refreshPreviewLines); });
+        let shown = [...state.layers.values()].some((e) => e.visible && e.d.paint && e.d.kind === 'geojson' && e.d.paint.mode);
+        fresh.forEach((l) => {
+          if (l.kind === 'geojson' && l.paint && l.paint.mode && !l.hidden) { if (shown) l.hidden = true; else shown = true; } // choropleths do not stack
+          const ev = { type: 'layer', layer: l }; if (t) convRecord(t, ev); addLayer(l).then(refreshPreviewLines);
+        });
         if (t) convSave();
       }
       refreshPreviewLines();
@@ -966,7 +971,7 @@
     try {
       const j = await getJSON(`api/catalog/search?q=${encodeURIComponent(q)}&kind=${state.catKind}&access=${state.catAccess}&source=${encodeURIComponent(srcF)}&sid=${encodeURIComponent(state.sid)}&limit=${q ? 30 : 150}`);
       $('#catMeta').textContent = `${j.results.length} results${state.scope ? ' · fit labels use your current scope' : ''}`;
-      $('#catRes').innerHTML = j.results.map((c) => `<div class="ccard" data-id="${esc(c.id)}"><div class="t">${safeUrl(c.url) ? `<a href="${esc(safeUrl(c.url))}" target="_blank" rel="noopener">${esc(c.title)}</a>` : esc(c.title)}</div>
+      $('#catRes').innerHTML = j.results.map((c) => `<div class="ccard" data-id="${esc(c.id)}"><div class="t">${safeUrl(c.url) ? `<a href="${esc(safeUrl(c.url))}" target="_blank" rel="noopener">${esc(c.title)}</a>` : esc(c.title)}${c.data_type === 'table' ? '<span class="tbl-badge" title="Non-spatial data: a table">Table</span>' : ''}</div>
         <div class="src">${esc([c.kind !== 'dataset' ? c.kind : '', c.source, c.provider, c.resolution, c.time].filter(Boolean).join(' · '))}</div>
         <div class="d">${esc(c.description || '')}</div>
         <div class="row">${c.fit ? fitBadges(c.fit) : badge(c.access_class || 'unknown', accessLabel[c.access_class] || c.access || '', c.access)}${c.map ? '<button class="btn primary" data-act="map" title="Draw its layers on the map">Map</button>' : ''}${safeUrl(c.viewer) ? `<a class="btn" href="${esc(safeUrl(c.viewer))}" target="_blank" rel="noopener" title="The original, styled map in GeoLibre">GeoLibre</a>` : ''}<button class="btn" data-act="ask">Ask Y-finder</button><button class="btn" data-act="hb">How to access</button></div></div>`).join('') || '<div class="empty">No matches. Try other words.</div>';

@@ -125,7 +125,11 @@ def short_title(t: str) -> str:
     head = t.split(":")[0].strip()
     if ":" in t and 2 <= len(head) <= 24:
         return head
-    return t if len(t) <= 40 else t[:40].rsplit(" ", 1)[0] + "..."
+    if len(t) <= 40:
+        return t
+    if "," in t[:44]:  # "Annual Housing Permit Data By Town, 1990-2025" -> before the comma
+        return t.split(",")[0].strip()
+    return t[:40].rsplit(" ", 1)[0] + "..."
 
 
 def _study_year(scope: dict) -> int | None:
