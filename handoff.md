@@ -10,7 +10,7 @@ decision log and commit log when you change something important.
 - **Purpose:** working prototype for Huan Ning's answer to the YCGS written question on an *interactive data guide*
   (Lead, Geospatial AI & ML interview, Yale Job 138060WD). The answer text lives in
   `E:\OneDrive_Huan\OneDrive\Job_hunting\2026\Yale\written_exam.md` (Huan edits it himself; do not overwrite it).
-- **Tests:** `python -m pytest -q` (97 pass, no model calls); `scripts/mutation_check.py` (all 9 injected faults caught);
+- **Tests:** `python -m pytest -q` (103 pass, no model calls); `scripts/mutation_check.py` (all 9 injected faults caught);
   personas 190/195 checks across 3 models (Terra 9/10 personas fully, Sol 8/10, Luna 8/10; fixes after the run listed in
   `docs/persona_results.md`); demo cases 40/40 checks (`docs/demo_case_results.md`).
 - **Reviewed:** Codex CLI (gpt-6.1-sol) reviewed the code; all 15 findings fixed with regression tests (time-fit bug for
@@ -32,6 +32,7 @@ decision log and commit log when you change something important.
 | 2026-11-08 | Focus this version on the demo: UI, data and user interaction. | Stepper, inline cards, quick replies, fit matrix, time bars, coverage preview, scope editor, catalog themes, consultation summary. |
 | 2026-11-08 | Add a Yale logo for the interview. | **Not added to the public site** (Yale restricts its marks; a Yale logo on researcharchitect.ai could read as endorsement). Instead: interview banner, Yale Blue theme, "independent prototype" note, and a local-only slot: put an image at `static/brand/logo.png` to show it when running locally (folder is git-ignored and excluded from deploys). |
 | 2026-11-08 | The UI is crowded with too much text; make it concise. | Answers capped at about 90 words by the prompt (demo answers now 29 to 78 words, were about 250); one collapsible status line per answer instead of tool chips; result pills (Graph, Scope, Map, Data) instead of cards; tabs show progress (stepper removed); two-line welcome with a 2x3 demo grid and three short starters; one-line data cards that expand on click; shorter banner, demo personas and notes. |
+| 2026-11-08 | Enlarge the chat box like ChatGPT and show the conversation history. | Large chat by default on screens 1280 px and wider (the button toggles it, choice remembered): conversation list on the left, centered message column, ChatGPT-style composer at the bottom. Every conversation (live or demo) is saved in the browser and listed by day; reopening replays it in full, and a page reload restores the open one (it used to say "Earlier messages are not shown"). If the server session is gone, `/api/session/restore` rebuilds it so follow-ups keep their context. |
 | 2026-11-08 | Create realistic, easy-to-understand use cases to show the functions; use these synthetic cases for automatic testing. | Six demo cases (`yfinder/data/demo_cases.json`) with checks, recorded by `scripts/record_demos.py`, replayed in the app with narration, then continued live. |
 
 ## Agent decisions (change them if Huan disagrees)
@@ -40,6 +41,9 @@ decision log and commit log when you change something important.
 - Fit labels are computed by rules in `fit.py`, never by the model. Unverified picks are shown but do not count toward graph coverage.
 - BM25 search with synonyms and sensor tokens instead of embeddings: zero cost, good enough (search tests pass); embeddings are the next step.
 - GeoLibre is embedded by URL parameters (`data=`, `layout=compact`, `panels=collapsed`); its postMessage API is off on the public site.
+- Conversation history lives in the browser (`localStorage` key `yf_conversations_v1`, 30 conversations, 2.5 MB cap, oldest dropped), not on the server: no accounts, nothing kept server-side beyond the 6-hour session. Each turn is stored as the event stream the UI received (text deltas merged, only the last graph/scope/recommendations kept), so reopening replays the same view.
+- `POST /api/session/restore` rebuilds an expired session from what the browser shows (graph, scope, picks, layers, the OpenAI response id from the `done` event, and a recap of the last 4 turns). It never overwrites a live session; fit labels are recomputed by the rules, layers must be files in this server's store, and the response id must look like `resp_...`. The next message gets the Data-tab list once; the turn recap is used only when the response chain is missing or expired.
+- "New conversation" no longer deletes the server session (the old one stays reopenable); deleting a conversation from the list does.
 - Demo cases are recorded and replayed so interviews do not depend on live latency; `/api/demo/<id>/load` restores the end state (including the OpenAI response id) so the conversation continues live.
 
 ## How to run, test, deploy
@@ -78,6 +82,7 @@ bash deploy/deploy.sh                       # sync code to the server and restar
 - GeoLibre iframe: iframes do not stretch between `left` and `right`; the CSS sets an explicit width.
 - Imagery previews: `map_stac_preview` adds same-week neighbor scenes until the study box is covered (NAIP quarter quads are small).
 
+- `localStorage` on `app.researcharchitect.ai` is shared with Research Architect (same origin); keep Y-finder keys prefixed `yf_` and the history under its 2.5 MB budget.
 - The Chrome connected to Claude Code on this workstation is on another computer, so it cannot open `127.0.0.1`. Test the UI on the deployed URL.
 - Bash sandbox: SSH works; a local server started inside the sandbox is not visible outside it (use `dangerouslyDisableSandbox`).
 - Never commit `OpenAI_key.txt` (git-ignored, also excluded by `deploy.sh`). Scan before pushing: `git grep -n "sk-"`.
@@ -101,3 +106,5 @@ See `git log --oneline`. Add a line here for any commit that changes behavior us
 
 - `8e58c88` (2026-11-08) First prototype: agent, catalog, fit rules, UI, handbooks, watches, tests, deploy files.
 - `98b1d85` (2026-11-08) Demo cases, UI pass (stepper, quick replies, fit matrix, time bars), Codex-review and persona fixes, cache-busting.
+- `cfe44ee` (2026-11-08) Concise UI: shorter answers, status line, result pills, one-line data cards.
+- `5c6d181` (2026-11-08) ChatGPT-style large chat, conversation history in the browser, session restore endpoint.

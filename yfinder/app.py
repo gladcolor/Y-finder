@@ -233,6 +233,28 @@ def create_app() -> Flask:
         agent._coverage(s)
         return jsonify(scope=s.scope, picks=agent._ui_picks(s), graph=s.graph)
 
+    @app.post("/api/session/restore")
+    def session_restore():
+        """Bring back a conversation saved in the browser after its server session expired or the server restarted.
+
+        A session that is still in memory is never overwritten."""
+        _check_code()
+        if (request.content_length or 0) > 2_000_000:
+            return jsonify(error="This conversation is too large to restore."), 413
+        b = request.get_json(silent=True) or {}
+        sid = str(b.get("sid") or "")
+        live = session.peek(sid) if sid else None
+        if live:
+            return jsonify(sid=live.sid, restored=False)
+        s = session.get(sid or None)
+        if not s.lock.acquire(blocking=False):
+            return jsonify(error="Busy"), 409
+        try:
+            agent.restore(s, b)
+        finally:
+            s.lock.release()
+        return jsonify(sid=s.sid, restored=True)
+
     @app.post("/api/session/<sid>/reset")
     def reset(sid):
         session.reset(sid)

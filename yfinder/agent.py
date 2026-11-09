@@ -18,7 +18,8 @@ from . import catalog as catalog_mod
 from . import fit, handbooks, sources
 from .config import DEFAULT_MODEL, LOG_TURNS, MAX_OUTPUT_TOKENS, MAX_STEPS, MODELS, RUNTIME_DIR, openai_key
 from .geo import bbox_size_km, clamp_bbox, coverage_fraction, valid_bbox
-from .session import Session, save_layer
+from .geo import parse_resolution_m as geo_parse_res
+from .session import Session, layer_path, save_layer
 
 SYSTEM = """You are Y-finder, the geospatial data guide of the Yale Center for Geospatial Solutions (YCGS).
 Your users are Yale students, faculty and staff. Many are new to GIS. Help them turn a research question
@@ -603,6 +604,106 @@ def _state_note(s: Session) -> str:
     return ("[Y-finder state: " + "; ".join(bits) + "]") if bits else ""
 
 
+# --------------------------------------------------------------------------- restore a conversation saved in the browser
+_VERIFIED = {"catalog", "search", "web", "unverified"}
+
+
+def _plain(v, depth: int = 0):
+    """JSON-shaped copy with size limits (strings, numbers, short lists, small dicts)."""
+    if isinstance(v, str):
+        return v[:2000]
+    if v is None or isinstance(v, (bool, int, float)):
+        return v
+    if depth >= 5:
+        return None
+    if isinstance(v, list):
+        return [_plain(x, depth + 1) for x in v[:200]]
+    if isinstance(v, dict):
+        return {str(k)[:60]: _plain(x, depth + 1) for k, x in list(v.items())[:60]}
+    return None
+
+
+def restore(s: Session, b: dict) -> None:
+    """Rebuild a session from a conversation the browser kept (server sessions expire after 6 hours or a restart).
+
+    The client sends the end state it shows (graph, scope, picks, layers) plus a short recap of the last turns.
+    Everything is size-limited and re-checked: catalog picks get their catalog metadata back, layers must be
+    files in this server's layer store (or https tiles), and a bad response id is dropped."""
+    b = _plain(b) or {}
+    g = b.get("graph")
+    if isinstance(g, dict) and isinstance(g.get("nodes"), list) and isinstance(g.get("edges"), list):
+        nodes = [n for n in g["nodes"][:60] if isinstance(n, dict) and isinstance(n.get("id"), str)]
+        ids = {n["id"] for n in nodes}
+        edges = [e for e in g["edges"][:200] if isinstance(e, dict) and e.get("source") in ids and e.get("target") in ids]
+        if nodes:
+            s.graph = {"question": str(g.get("question") or "")[:300], "outcome": str(g.get("outcome") or ""),
+                       "nodes": nodes, "edges": edges}
+    sc = b.get("scope")
+    if isinstance(sc, dict) and valid_bbox(sc.get("bbox")):
+        sc["bbox"] = [float(x) for x in sc["bbox"]]
+        r = sc.get("spatial_resolution_m")
+        sc["spatial_resolution_m"] = float(r) if isinstance(r, (int, float)) and not isinstance(r, bool) and r > 0 else None
+        sc["assumed"] = [x for x in sc.get("assumed") or [] if isinstance(x, str)]
+        s.scope = sc
+    cat = catalog_mod.load()
+    picks = []
+    for p in (b.get("picks") or [])[:25]:
+        if not (isinstance(p, dict) and isinstance(p.get("ref"), str) and p["ref"]):
+            continue
+        it = cat.get(p["ref"])
+        meta = dict(it) if it else {
+            "title": p.get("title"), "url": p.get("url"), "source": p.get("source"), "provider": p.get("provider"),
+            "access": p.get("access"), "access_class": p.get("access_class"), "time": p.get("time"),
+            "t0": p.get("t0"), "t1": p.get("t1"), "unit": p.get("unit"),
+            "res_m": geo_parse_res(p.get("resolution")), "bbox": p.get("bbox") if valid_bbox(p.get("bbox")) else None}
+        # fit labels are recomputed by the rules, never taken from the browser
+        p.update(fit=fit.assess(meta, s.scope), meta=meta, verified=p.get("verified") if p.get("verified") in _VERIFIED else "unverified",
+                 factors=[x for x in p.get("factors") or [] if isinstance(x, str)], role=p.get("role") or "supporting")
+        picks.append(p)
+        s.seen[p["ref"]] = meta
+    s.picks = picks
+    s.methods = [m for m in (b.get("methods") or [])[:8] if isinstance(m, dict) and m.get("name")]
+    s.next_steps = [x for x in (b.get("next_steps") or [])[:5] if isinstance(x, str)]
+    layers = []
+    for l in (b.get("layers") or [])[:40]:
+        if not isinstance(l, dict):
+            continue
+        if l.get("kind") == "geojson":
+            m = re.fullmatch(r"api/layers/([0-9a-f]{16})\.geojson", str(l.get("url") or ""))
+            if not (m and layer_path(m.group(1))):
+                continue
+            l.pop("data", None)
+        elif l.get("kind") == "raster":
+            tiles = l.get("tiles")
+            if not (isinstance(tiles, list) and tiles and all(isinstance(t, str) and t.startswith("https://") for t in tiles)):
+                continue
+        else:
+            continue
+        layers.append(l)
+    s.layers = layers
+    rid = b.get("prev_response_id")
+    s.prev_response_id = rid if isinstance(rid, str) and re.fullmatch(r"resp_[A-Za-z0-9_-]{8,200}", rid) else None
+    s.model = b.get("model") if b.get("model") in {m["id"] for m in MODELS} else None
+    s.citations = set()
+    lines, qs = [], []
+    for t in (b.get("recap") or [])[-4:]:
+        if isinstance(t, dict) and isinstance(t.get("q"), str) and t["q"].strip():
+            qs.append(t["q"].strip())
+            lines.append("User: " + t["q"].strip()[:500])
+            if isinstance(t.get("a"), str) and t["a"].strip():
+                lines.append("Y-finder: " + t["a"].strip()[:700])
+    s.recap = ("[Earlier in this conversation (restored from the user's browser):\n" + "\n".join(lines) + "]") if lines else None
+    # Sent once with the next message, chain or not: the model may not have seen every pick in its own context.
+    s.data_note = ("[Datasets shown in the Data tab: " + "; ".join(
+        f"{p.get('title') or p['ref']} (ref {p['ref']}; {p['fit']['overall']} fit; access {p['fit']['access']['label']})"
+        for p in picks[:15]) + "]") if picks else None
+    if qs:
+        s.first_message = qs[0][:300]
+    s.turns = max(1, len(qs))
+    if s.graph:
+        _coverage(s)
+
+
 def _model_cfg(model: str) -> dict:
     return next((m for m in MODELS if m["id"] == model), {"id": model, "effort": "low"})
 
@@ -623,8 +724,14 @@ def run_turn(s: Session, text: str, model: str | None = None, web: bool = True):
         content += (f"\n\n[The user attached '{s.proposal['name']}'. Excerpt:]\n" + s.proposal["text"][:14000])
         s.proposal["used"] = True
     note = _state_note(s)
+    if getattr(s, "data_note", None):  # first message after a restore
+        note = (note + "\n" + s.data_note).strip()
+        s.data_note = None
     if note:
         content = note + "\n\n" + content
+    if getattr(s, "recap", None) and not s.prev_response_id:  # restored conversation without a response chain
+        content = s.recap + "\n\n" + content
+        s.recap = None
     inputs: list = [{"role": "user", "content": content}]
     usage = {"input": 0, "output": 0, "steps": 0, "tools": 0}
     tool_log = []
@@ -649,6 +756,9 @@ def run_turn(s: Session, text: str, model: str | None = None, web: bool = True):
                 if prev and "previous_response" in str(e):
                     kwargs.pop("previous_response_id")
                     prev = None
+                    if getattr(s, "recap", None) and step == 0:  # restored conversation whose chain has expired
+                        inputs[0] = {"role": "user", "content": s.recap + "\n\n" + inputs[0]["content"]}
+                        s.recap = None
                     stream = client().responses.create(**kwargs)
                 else:
                     raise
@@ -733,7 +843,9 @@ def run_turn(s: Session, text: str, model: str | None = None, web: bool = True):
                 inputs.append({"type": "function_call_output", "call_id": c.call_id,
                                "output": json.dumps(result, ensure_ascii=False, default=str)[:24000]})
         s.prev_response_id = prev
-        yield {"type": "done", "usage": usage, "elapsed": round(time.time() - t_start, 1), "model": model}
+        s.recap = None  # the response chain carries the context from here on
+        # response_id lets the browser restore this conversation after the server session expires
+        yield {"type": "done", "usage": usage, "elapsed": round(time.time() - t_start, 1), "model": model, "response_id": prev}
     except Exception as e:
         # The last response may be waiting for tool outputs we never sent; continuing from it would fail,
         # so drop the chain. The next turn starts fresh with the state note (scope, graph, picks).

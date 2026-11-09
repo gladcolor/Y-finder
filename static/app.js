@@ -6,6 +6,8 @@
   const esc = (s) => String(s ?? '').replace(/[&<>"']/g, (c) => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[c]));
   const safeUrl = (u) => { try { const x = new URL(u, location.href); return /^https?:$/.test(x.protocol) ? x.href : ''; } catch { return ''; } };
   const store = { get(k) { try { return sessionStorage.getItem(k); } catch { return null; } }, set(k, v) { try { sessionStorage.setItem(k, v); } catch { /* private mode */ } } };
+  // localStorage keeps conversations across visits (this browser only)
+  const local = { get(k) { try { return localStorage.getItem(k); } catch { return null; } }, set(k, v) { try { localStorage.setItem(k, v); return true; } catch { return false; } } };
 
   const PALETTE = ['#2563eb', '#db2777', '#059669', '#7c3aed', '#ea580c', '#0891b2', '#65a30d', '#be123c'];
   // Short starters; the demo cases cover the longer stories.
@@ -19,7 +21,7 @@
     sid: store.get('yf_sid') || '', model: '', busy: false, code: store.get('yf_code') || '',
     layers: new Map(), colorIdx: 0, mapReady: false, pending: [],
     graph: null, scope: null, picks: [], methods: [], nextSteps: [], cy: null, config: null,
-    gisMode: false, gisFull: false, catKind: 'any', catAccess: 'any',
+    gisMode: false, gisFull: false, catKind: 'any', catAccess: 'any', conv: null, restoring: null,
   };
 
   // ------------------------------------------------------------------ helpers
@@ -74,6 +76,7 @@
     state.firstSymbol = firstSymbol;
     state.mapReady = true;
     const p = state.pending.splice(0); p.forEach((d) => addLayer(d));
+    if (p.length && state.scope && state.scope.bbox) fit(state.scope.bbox);
   });
   map.on('error', (e) => { if (e && e.error && /tiles|style/i.test(String(e.error.message))) console.warn(e.error); });
 
@@ -244,9 +247,10 @@
   async function send(text) {
     text = (text || '').trim(); if (!text || state.busy) return;
     state.busy = true; $('#btnSend').disabled = true; switchTab('chat');
+    if (state.restoring) await state.restoring;
     if (!state.graph) step('frame', 'active');
     userMsg(text); $('#q').value = ''; autosize();
-    const m = botMsg();
+    const m = botMsg(); const turn = convTurn(text);
     try {
       const r = await fetch('api/chat', { method: 'POST', headers: headers(), body: JSON.stringify({ sid: state.sid, message: text, model: state.model }) });
       if (!r.ok) {
@@ -261,13 +265,14 @@
         let i;
         while ((i = buf.indexOf('\n\n')) >= 0) {
           const chunk = buf.slice(0, i); buf = buf.slice(i + 2);
-          chunk.split('\n').forEach((line) => { if (line.startsWith('data: ')) { try { handle(JSON.parse(line.slice(6)), m); } catch (err) { console.warn(err); } } });
+          chunk.split('\n').forEach((line) => { if (line.startsWith('data: ')) { try { const ev = JSON.parse(line.slice(6)); convRecord(turn, ev); handle(ev, m); } catch (err) { console.warn(err); } } });
         }
       }
     } catch (err) {
       m.seg('md').innerHTML = `<p style="color:var(--poor)">${esc(err.message || err)}</p>`;
+      convRecord(turn, { type: 'error', message: String(err.message || err) });
     } finally {
-      m.thinking.remove(); state.busy = false; $('#btnSend').disabled = false; scrollChat();
+      m.thinking.remove(); state.busy = false; $('#btnSend').disabled = false; scrollChat(); convSave();
     }
   }
 
@@ -307,6 +312,7 @@
       } break;
       case 'error': m.seg('err').innerHTML = `<p style="color:var(--poor)">${esc(ev.message)}</p>`; break;
       case 'done': {
+        if (ev.response_id && state.conv) state.conv.rid = ev.response_id;
         if (m.act) {
           const st = $('.st', m.act); st.className = 'st ok';
           $('.lbl', m.act).textContent = `${m.tools} step${m.tools === 1 ? '' : 's'}`;
@@ -378,6 +384,12 @@
           time_start: $('#sc_t0').value, time_end: $('#sc_t1').value, spatial_resolution_m: $('#sc_res').value, unit_of_analysis: $('#sc_unit').value }) });
         const j = await r.json(); if (!r.ok) throw new Error(j.error);
         state.scope = j.scope; state.picks = j.picks; state.graph = j.graph; renderScope(); renderData(); renderGraph(); toast('Scope updated. Fit labels re-checked.');
+        if (state.conv) {
+          const t = convTurn(null);
+          [{ type: 'scope', scope: j.scope }, j.graph && { type: 'graph', graph: j.graph }, { type: 'recommendations', picks: j.picks, methods: state.methods, next_steps: state.nextSteps }]
+            .filter(Boolean).forEach((e) => convRecord(t, e));
+          convSave();
+        }
       } catch (err) { toast(err.message); }
     };
   }
@@ -629,15 +641,20 @@
     if (name === 'catalog') catSearch();
   }
   $$('.tabs button').forEach((b) => { b.onclick = () => switchTab(b.dataset.tab); });
-  function autosize() { const q = $('#q'); q.style.height = 'auto'; q.style.height = Math.min(q.scrollHeight, 140) + 'px'; }
+  function autosize() { const q = $('#q'); q.style.height = 'auto'; q.style.height = Math.min(q.scrollHeight, 220) + 'px'; }
   $('#q').addEventListener('input', autosize);
   $('#q').addEventListener('keydown', (e) => { if (e.key === 'Enter' && !e.shiftKey && !e.isComposing) { e.preventDefault(); send($('#q').value); } });
   $('#ask').onsubmit = (e) => { e.preventDefault(); send($('#q').value); };
   $('#btnCollapse').onclick = () => { const c = document.body.classList.toggle('collapsed'); $('#btnCollapse').setAttribute('aria-expanded', String(!c)); };
-  $('#btnWide').onclick = () => {
-    const w = document.body.classList.toggle('wide'); $('#btnWide').setAttribute('aria-pressed', String(w));
+  const isWide = () => document.body.classList.contains('wide');
+  function setWide(w) {
+    document.body.classList.toggle('wide', w); $('#btnWide').setAttribute('aria-pressed', String(w));
+    $('#btnWide').title = w ? 'Smaller chat (more map)' : 'Larger chat';
+    setHist(w); // the large chat shows the conversation list beside it
+    local.set('yf_wide', w ? '1' : '0');
     setTimeout(() => { if (state.cy) { state.cy.resize(); state.cy.fit(undefined, 18); } }, 60);
-  };
+  }
+  $('#btnWide').onclick = () => setWide(!isWide());
   $('#q').addEventListener('focus', () => { if (document.body.classList.contains('collapsed')) document.body.classList.remove('collapsed'); });
 
   $('#btnAttach').onclick = () => $('#file').click();
@@ -660,18 +677,146 @@
   };
 
   $('#btnNew').onclick = () => { if (state.demo) state.demo.stop = true; if (!state.busy) newConversation(); };
+  // A new conversation keeps the old one in the history (and its server session, until it expires).
   function newConversation() {
-    if (state.sid) fetch(`api/session/${encodeURIComponent(state.sid)}/reset`, { method: 'POST', headers: headers() }).catch(() => {});
-    state.sid = ''; store.set('yf_sid', '');
+    clearView();
+    state.sid = ''; store.set('yf_sid', ''); store.set('yf_conv', '');
+    renderHist();
+  }
+  function clearView() {
+    state.pending.length = 0;
     [...state.layers.keys()].forEach(removeLayer);
-    Object.assign(state, { graph: null, scope: null, picks: [], methods: [], nextSteps: [] });
+    Object.assign(state, { graph: null, scope: null, picks: [], methods: [], nextSteps: [], conv: null });
     if (state.cy) { state.cy.destroy(); state.cy = null; }
     msgs.innerHTML = ''; $('#welcome').hidden = false; $('#nodeInfo').hidden = true; $('#attachInfo').hidden = true;
     STEPS.forEach((s) => step(s, null));
-    if (map.getSource('coverage')) map.getSource('coverage').setData({ type: 'FeatureCollection', features: [] });
+    if (state.mapReady && map.getSource('coverage')) map.getSource('coverage').setData({ type: 'FeatureCollection', features: [] });
     if (state.gisMode) setMode(false);
     renderGraph(); renderScope(); renderData(); switchTab('chat');
   }
+
+  // ------------------------------------------------------------------ conversation history (ChatGPT-style list, this browser only)
+  // Each conversation keeps its turns as the event stream the UI received, so reopening it replays the same view.
+  const HKEY = 'yf_conversations_v1', HMAX = 30, HBYTES = 2.5e6;
+  function histLoad() {
+    try { const a = JSON.parse(local.get(HKEY) || '[]'); return Array.isArray(a) ? a.filter((x) => x && x.id && Array.isArray(x.turns)) : []; } catch { return []; }
+  }
+  function histWrite(list) {
+    list = list.slice().sort((a, b) => b.updated - a.updated).slice(0, HMAX);
+    for (;;) {
+      const s = JSON.stringify(list);
+      if ((s.length <= HBYTES || list.length <= 1) && local.set(HKEY, s)) return true;
+      if (list.length <= 1) return false; // even one conversation does not fit
+      list.pop(); // over the budget: drop the oldest
+    }
+  }
+  function histPut(c, bump = true) {
+    if (!c || !c.turns.length) return;
+    if (bump) c.updated = Date.now();
+    const list = histLoad().filter((x) => x.id !== c.id); list.push(c);
+    if (!histWrite(list)) toast('This conversation is too large to keep in the browser.');
+    renderHist();
+  }
+  function convStart(title, extra = {}) {
+    const now = Date.now();
+    state.conv = { id: 'c' + now.toString(36) + Math.random().toString(36).slice(2, 6), title: String(title || 'Conversation').slice(0, 90), created: now, updated: now, sid: state.sid, turns: [], ...extra };
+    store.set('yf_conv', state.conv.id);
+  }
+  function convTurn(q) { if (!state.conv) convStart(q); const t = { q, ev: [] }; state.conv.turns.push(t); return t; }
+  const KEEP_LAST = new Set(['graph', 'scope', 'recommendations']); // only the final value matters for these
+  function convRecord(t, ev) {
+    if (!t || !ev || ev.type === 'status' || ev.type === 'session') return;
+    const last = t.ev[t.ev.length - 1];
+    if (ev.type === 'text') { if (last && last.type === 'text') last.delta += ev.delta; else t.ev.push({ type: 'text', delta: ev.delta }); return; }
+    if (ev.type === 'layer' && ev.layer && ev.layer.data) {
+      if (!ev.layer.url) return; // inline-only layer: too big to keep
+      const { data, ...rest } = ev.layer; ev = { ...ev, layer: rest };
+    }
+    if (KEEP_LAST.has(ev.type)) { const i = t.ev.findIndex((x) => x.type === ev.type); if (i >= 0) { t.ev[i] = ev; return; } }
+    t.ev.push(ev);
+  }
+  function convSave() { const c = state.conv; if (!c) return; c.sid = state.sid; c.model = state.model; histPut(c); }
+
+  function replayConv(c) {
+    $('#welcome').hidden = true;
+    const quiet = { chip() {}, addText() {}, seg() { return document.createElement('div'); } };
+    for (const t of c.turns) {
+      if (t.q == null) { t.ev.forEach((ev) => handle(ev, quiet)); continue; }
+      userMsg(t.q); const m = botMsg();
+      t.ev.forEach((ev) => handle(ev, m));
+      if (!t.ev.some((e) => e.type === 'done')) { $('.st', m.act).className = 'st ok'; $('.lbl', m.act).textContent = 'Interrupted'; }
+    }
+    $$('.choices', msgs).slice(0, -1).forEach((b) => b.classList.add('used')); // only the latest quick replies stay active
+    scrollChat();
+  }
+  async function openConv(id) {
+    if (state.conv && state.conv.id === id) { if (!isWide()) setHist(false); return; }
+    if (state.busy) { toast('Wait for the current answer to finish.'); return; }
+    const c = histLoad().find((x) => x.id === id); if (!c) return;
+    clearView();
+    state.conv = c; store.set('yf_conv', c.id);
+    state.sid = c.sid || ''; store.set('yf_sid', state.sid);
+    replayConv(c); renderHist();
+    if (!isWide()) setHist(false);
+    if (state.sid) { const p = ensureSession(c); state.restoring = p; p.finally(() => { if (state.restoring === p) state.restoring = null; }); }
+  }
+  // Server sessions end after 6 hours or a restart; rebuild one from what this browser kept so follow-ups keep their context.
+  async function ensureSession(c) {
+    try { await getJSON(`api/session/${encodeURIComponent(c.sid)}`); return; } catch (err) { if (err.status !== 404) return; }
+    const said = (t) => t.ev.filter((e) => e.type === 'text').map((e) => e.delta).join('').trim().slice(0, 700);
+    const layers = []; const ids = new Set();
+    c.turns.forEach((t) => t.ev.forEach((e) => { if (e.type === 'layer' && e.layer && !ids.has(e.layer.id)) { ids.add(e.layer.id); layers.push(e.layer); } }));
+    const body = { sid: c.sid, model: c.model || state.model, prev_response_id: c.rid || null, graph: state.graph, scope: state.scope,
+      picks: state.picks, methods: state.methods, next_steps: state.nextSteps, layers,
+      recap: c.turns.filter((t) => t.q).slice(-4).map((t) => ({ q: t.q.slice(0, 500), a: said(t) })) };
+    try {
+      const r = await fetch('api/session/restore', { method: 'POST', headers: headers(), body: JSON.stringify(body) });
+      const j = await r.json(); if (!r.ok) throw new Error(j.error || r.statusText);
+      if (state.conv === c) { state.sid = j.sid; store.set('yf_sid', j.sid); }
+      if (c.sid !== j.sid) { c.sid = j.sid; histPut(c, false); }
+    } catch (err) { console.warn('Could not restore the server session', err); }
+  }
+  function deleteConv(id) {
+    const c = histLoad().find((x) => x.id === id); if (!c) return;
+    if (!confirm(`Delete "${c.title}"?\nIt is removed from this browser and from the server. This cannot be undone.`)) return;
+    histWrite(histLoad().filter((x) => x.id !== id));
+    if (c.sid) fetch(`api/session/${encodeURIComponent(c.sid)}/reset`, { method: 'POST', headers: headers() }).catch(() => {});
+    if (state.conv && state.conv.id === id) { if (state.busy) state.conv = null; else newConversation(); }
+    renderHist();
+  }
+  function renderHist() {
+    const list = histLoad().sort((a, b) => b.updated - a.updated); const cur = state.conv && state.conv.id; const box = $('#histList');
+    $('#histClear').hidden = !list.length;
+    if (!list.length) { box.innerHTML = '<div class="hist-empty muted small">Your conversations appear here, including the demos you watch.</div>'; return; }
+    const t0 = new Date(); t0.setHours(0, 0, 0, 0); const today = t0.getTime(), day = 864e5;
+    const grp = (u) => (u >= today ? 'Today' : u >= today - day ? 'Yesterday' : u >= today - 6 * day ? 'Previous 7 days' : 'Older');
+    let html = '', last = '';
+    list.forEach((c) => {
+      const g = grp(c.updated); if (g !== last) { html += `<div class="hist-grp">${g}</div>`; last = g; }
+      const n = c.turns.filter((t) => t.q).length;
+      const when = new Date(c.updated).toLocaleString([], g === 'Today' || g === 'Yesterday' ? { hour: 'numeric', minute: '2-digit' } : { month: 'short', day: 'numeric' });
+      html += `<div class="hitem${c.id === cur ? ' on' : ''}" data-id="${esc(c.id)}"><button class="hopen" title="${esc(c.title)}"><span class="ht">${esc(c.title)}</span>
+        <span class="hm">${c.demo ? 'Demo · ' : ''}${n} question${n === 1 ? '' : 's'} · ${esc(when)}</span></button><button class="hdel" title="Delete" aria-label="Delete conversation">&times;</button></div>`;
+    });
+    box.innerHTML = html;
+    $$('.hitem', box).forEach((el) => { $('.hopen', el).onclick = () => openConv(el.dataset.id); $('.hdel', el).onclick = () => deleteConv(el.dataset.id); });
+  }
+  function setHist(open) {
+    document.body.classList.toggle('hist-open', open); $('#btnHist').setAttribute('aria-expanded', String(open));
+    if (open) renderHist();
+    setTimeout(() => { if (state.cy) state.cy.resize(); }, 60);
+  }
+  $('#btnHist').onclick = () => { document.body.classList.remove('collapsed'); setHist(!document.body.classList.contains('hist-open')); };
+  $('#histNew').onclick = () => { if (state.demo) state.demo.stop = true; if (!state.busy) newConversation(); if (!isWide()) setHist(false); };
+  $('#histClear').onclick = () => {
+    const list = histLoad(); if (!list.length) return;
+    if (!confirm(`Delete all ${list.length} conversations?\nThey are removed from this browser and from the server. This cannot be undone.`)) return;
+    list.forEach((c) => { if (c.sid) fetch(`api/session/${encodeURIComponent(c.sid)}/reset`, { method: 'POST', headers: headers() }).catch(() => {}); });
+    histWrite([]); if (!state.busy) newConversation(); else state.conv = null; renderHist();
+  };
+  $('.pmain').addEventListener('pointerdown', () => { if (!isWide() && document.body.classList.contains('hist-open')) setHist(false); });
+  // Large chat by default on big screens; the choice is remembered.
+  { const pref = local.get('yf_wide'); if (innerWidth > 980 && (pref === '1' || (pref == null && innerWidth >= 1280))) setWide(true); else renderHist(); }
 
   // ------------------------------------------------------------------ demo cases (recorded runs, replayed, then live)
   const wait = (ms) => new Promise((r) => setTimeout(r, ms));
@@ -700,7 +845,7 @@
     if (state.busy) return;
     let demo;
     try { demo = await getJSON(`static/demos/${encodeURIComponent(id)}.json?v=${window.YF_VERSION || ''}`); } catch { toast('Demo not found.'); return; }
-    newConversation();
+    newConversation(); convStart(demo.title, { demo: id });
     state.busy = true; $('#btnSend').disabled = true; $('#welcome').hidden = true;
     state.demo = { stop: false, speed: +(store.get('yf_demo_speed') || 2) };
     const head = document.createElement('div'); head.className = 'demo-head';
@@ -729,8 +874,11 @@
           demoNote(`${demo.who.split(' (')[0]} attaches a proposal (${st.words} words). Y-finder reads it with the next message.`); await wait(2200 / sp());
         } else if (st.type === 'turn') {
           switchTab('chat'); userMsg(st.message); await wait(500 / sp());
-          const m = botMsg();
-          for (const ev of st.events) { if (state.demo.stop) break; await pace(ev); if (ev.type === 'done') ev.model = 'recorded · ' + (ev.model || ''); handle(sub(ev), m); }
+          const m = botMsg(); const t = convTurn(st.message);
+          for (const ev of st.events) {
+            if (state.demo.stop) break; await pace(ev); if (ev.type === 'done') ev.model = 'recorded · ' + (ev.model || '');
+            const e2 = sub(ev); convRecord(t, e2); handle(e2, m);
+          }
           m.thinking.remove(); $('#attachInfo').hidden = true; await wait(900 / sp());
         } else if (st.type === 'ui') {
           const hold = Math.max(1200, 5600 / sp());
@@ -740,7 +888,8 @@
             Object.entries(st.set).forEach(([k, v]) => { const inp = { time_start: '#sc_t0', time_end: '#sc_t1', spatial_resolution_m: '#sc_res', unit_of_analysis: '#sc_unit' }[k]; if (inp && $(inp)) { $(inp).value = v; $(inp).animate([{ background: '#fff4c2' }, { background: '#fff' }], { duration: 1800 }); } });
             demoNote(st.note); await wait(hold / 2);
             const quiet = { graphCard: true, card(html) { const d = document.createElement('div'); d.innerHTML = html; return d; }, chip() {}, addText() {}, seg() { return document.createElement('div'); } };
-            for (const ev of st.events) handle(ev, quiet);
+            const t = convTurn(null);
+            for (const ev of st.events) { convRecord(t, ev); handle(ev, quiet); }
             await wait(hold / 2); switchTab('data'); await wait(hold / 2);
           } else if (st.action === 'handbook') { demoNote(st.note); openHandbook(st.ref, st.title); await wait(hold * 1.3); $('#dlg').close(); }
           else if (st.action === 'gis') { demoNote(st.note); setMode(true); await wait(hold * 1.4); setMode(false); }
@@ -752,7 +901,7 @@
       const end = document.createElement('div'); end.className = 'demo-end';
       end.textContent = state.demo.stop ? 'Demo stopped. Keep asking from here.' : 'Demo done. Ask a follow-up; it continues live.';
       msgs.appendChild(end); scrollChat();
-      state.demo = null; state.busy = false; $('#btnSend').disabled = false;
+      state.demo = null; state.busy = false; $('#btnSend').disabled = false; convSave();
     }
   }
   loadDemos();
@@ -768,7 +917,7 @@
 
 **Access handbooks.** Each data source can have a handbook in the style of an Agent Skill: access route, endpoint, a Python example and pitfalls. It extends the handbooks of [LLM-Find](https://github.com/gladcolor/llm-find).
 
-**Privacy.** Do not paste protected or confidential data. Questions are sent to an OpenAI model to generate answers.`);
+**Privacy.** Do not paste protected or confidential data. Questions are sent to an OpenAI model to generate answers. Your conversations are saved in this browser only; delete them from the conversation list.`);
     $('#dlg').showModal();
   };
   function askCode() {
@@ -790,8 +939,10 @@
     if (c.access_code && !state.code) askCode();
   }).catch(() => toast('Could not reach the Y-finder server.'));
 
-  // restore an open session after a page reload
-  if (state.sid) getJSON(`api/session/${encodeURIComponent(state.sid)}`).then((s) => {
+  // restore this tab's conversation after a page reload (full history), or an older session without one
+  const lastConv = store.get('yf_conv');
+  if (lastConv && histLoad().some((x) => x.id === lastConv)) openConv(lastConv);
+  else if (state.sid) getJSON(`api/session/${encodeURIComponent(state.sid)}`).then((s) => {
     if (!s.turns) return;
     state.graph = s.graph; state.scope = s.scope && Object.keys(s.scope).length ? s.scope : null; state.picks = s.picks || []; state.methods = s.methods || [];
     renderGraph(); renderScope(); renderData(); (s.layers || []).forEach((l) => addLayer(l));

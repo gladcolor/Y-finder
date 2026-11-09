@@ -16,29 +16,31 @@
 <section id="panel" class="panel" aria-label="Y-finder assistant">
   <div class="interview-banner">YCGS interview prototype · Huan Ning</div>
   <header class="brand">
+    <button id="btnHist" class="icon-btn" title="Your conversations" aria-expanded="false" aria-controls="hist">
+      <svg viewBox="0 0 24 24" width="20" height="20"><rect x="3.5" y="4.5" width="17" height="15" rx="3" fill="none" stroke="currentColor" stroke-width="1.7"/><path d="M9 4.5v15" stroke="currentColor" stroke-width="1.7"/></svg>
+    </button>
     <img class="brand-logo" src="static/brand/logo.png" alt="" onerror="this.remove()">
     <div class="logo" aria-hidden="true">Y</div>
     <div class="brand-text"><b>Y-finder</b><span>Geospatial data guide</span></div>
-    <button id="btnWide" class="icon-btn" title="Widen panel" aria-pressed="false">
-      <svg viewBox="0 0 24 24" width="18" height="18"><path d="M4 12h16M8 8l-4 4 4 4M16 8l4 4-4 4" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round"/></svg>
+    <button id="btnNew" class="icon-btn" title="New conversation">
+      <svg viewBox="0 0 24 24" width="19" height="19"><path d="M12 4H6.5A2.5 2.5 0 004 6.5v11A2.5 2.5 0 006.5 20h11a2.5 2.5 0 002.5-2.5V12" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round"/><path d="M17.6 3.6a1.9 1.9 0 012.8 2.8L13 13.8l-3.6.8.8-3.6z" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linejoin="round"/></svg>
+    </button>
+    <button id="btnWide" class="icon-btn" title="Larger chat" aria-pressed="false">
+      <svg viewBox="0 0 24 24" width="18" height="18"><path d="M14 4h6v6M10 20H4v-6M20 4l-7 7M4 20l7-7" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"/></svg>
     </button>
     <button id="btnCollapse" class="icon-btn" title="Collapse panel" aria-expanded="true">
       <svg viewBox="0 0 24 24" width="20" height="20"><path d="M15 6l-6 6 6 6" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"/></svg>
     </button>
   </header>
 
-  <form id="ask" class="ask" autocomplete="off">
-    <button type="button" id="btnAttach" class="icon-btn" title="Attach a proposal (PDF, DOCX, TXT)">
-      <svg viewBox="0 0 24 24" width="20" height="20"><path d="M21 11.5l-8.6 8.6a5 5 0 01-7.1-7.1l8.6-8.6a3.3 3.3 0 014.7 4.7l-8.6 8.6a1.7 1.7 0 01-2.4-2.4l7.9-7.9" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round"/></svg>
-    </button>
-    <textarea id="q" rows="1" placeholder="Describe your research question..." aria-label="Research question"></textarea>
-    <button id="btnSend" type="submit" class="send" title="Send">
-      <svg viewBox="0 0 24 24" width="20" height="20"><path d="M4 12l16-8-6 16-2.5-6.5z" fill="currentColor"/></svg>
-    </button>
-    <input type="file" id="file" accept=".pdf,.docx,.txt,.md" hidden>
-  </form>
-  <div id="attachInfo" class="attach-info" hidden></div>
-
+  <div class="pbody">
+  <aside id="hist" class="hist" aria-label="Your conversations">
+    <button id="histNew" class="hist-new" type="button">
+      <svg viewBox="0 0 24 24" width="16" height="16"><path d="M12 5v14M5 12h14" stroke="currentColor" stroke-width="2" stroke-linecap="round"/></svg>New conversation</button>
+    <div id="histList" class="hist-list"></div>
+    <div class="hist-foot">Saved in this browser only. <button id="histClear" type="button" class="linkbtn">Clear all</button></div>
+  </aside>
+  <div class="pmain">
   <nav class="tabs" role="tablist">
     <button data-tab="chat" class="on" role="tab">Chat</button>
     <button data-tab="frame" role="tab">Frame</button>
@@ -108,6 +110,23 @@
       <div id="catRes"></div>
     </div>
   </div>
+
+  <div id="attachInfo" class="attach-info" hidden></div>
+  <form id="ask" class="ask" autocomplete="off">
+    <textarea id="q" rows="2" placeholder="Ask about data for your research question" aria-label="Research question"></textarea>
+    <div class="ask-bar">
+      <button type="button" id="btnAttach" class="icon-btn" title="Attach a proposal (PDF, DOCX, TXT)">
+        <svg viewBox="0 0 24 24" width="20" height="20"><path d="M21 11.5l-8.6 8.6a5 5 0 01-7.1-7.1l8.6-8.6a3.3 3.3 0 014.7 4.7l-8.6 8.6a1.7 1.7 0 01-2.4-2.4l7.9-7.9" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round"/></svg>
+      </button>
+      <span class="grow"></span>
+      <button id="btnSend" type="submit" class="send" title="Send (Enter)">
+        <svg viewBox="0 0 24 24" width="18" height="18"><path d="M12 19V5M6 11l6-6 6 6" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"/></svg>
+      </button>
+    </div>
+    <input type="file" id="file" accept=".pdf,.docx,.txt,.md" hidden>
+  </form>
+  </div>
+  </div>
 </section>
 
 <div class="topright">
@@ -116,7 +135,6 @@
     <button id="modeMap" class="on">Map</button>
     <button id="modeGIS" title="Open the same layers in GeoLibre, a full web GIS">Full GIS</button>
   </div>
-  <button id="btnNew" class="pill" title="Start a new conversation">New</button>
   <button id="btnAbout" class="pill" title="About Y-finder">About</button>
 </div>
 
