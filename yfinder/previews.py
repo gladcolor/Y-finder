@@ -1526,7 +1526,7 @@ def _osm(s, pick, meta):
         return {"status": "none", "note": "OpenStreetMap has many feature types; ask Y-finder for the ones you need (villages, schools, roads...)"}
     tags, lim = hit
     try:
-        fc = sources.osm_features(tags, sb, max_elements=4000, max_area_km2=lim)
+        fc = sources.osm_features(tags, sb, max_elements=4000, max_area_km2=lim, timeout_s=100)  # a background preview can wait
     except ValueError as e:
         return {"status": "none", "note": str(e)}
     feats = fc.get("features", [])

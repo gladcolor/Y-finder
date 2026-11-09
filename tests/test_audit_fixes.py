@@ -280,7 +280,7 @@ def test_usgs_gages_show_annual_mean_flow_from_the_latest_published_year(s, monk
 def test_openstreetmap_previews_the_features_the_factor_names(s, monkeypatch):
     seen = {}
 
-    def osm(tags, bbox, max_elements=4000, max_area_km2=2500):
+    def osm(tags, bbox, max_elements=4000, max_area_km2=2500, timeout_s=65):
         seen.update(tags=tags, area=max_area_km2)
         return {"type": "FeatureCollection", "features": [{"type": "Feature", "geometry": {"type": "Point", "coordinates": [34.7 + i * 0.01, -0.1]},
                                                            "properties": {"place": "village", "name": f"V{i}"}} for i in range(5)]}

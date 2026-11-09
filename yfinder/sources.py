@@ -425,7 +425,7 @@ AREA_KEYS = {"building", "landuse", "leisure", "natural", "amenity", "water", "w
              "boundary", "area", "man_made", "parking", "shop", "tourism", "historic", "aeroway"}
 
 
-def osm_features(tag_filters: list[str], bbox, max_elements: int = 4000, max_area_km2: float = 2500) -> dict:
+def osm_features(tag_filters: list[str], bbox, max_elements: int = 4000, max_area_km2: float = 2500, timeout_s: int = 65) -> dict:
     if not bbox or not valid_bbox(bbox):
         raise ValueError("Set a study area first")
     wkm, hkm = bbox_size_km(bbox)
@@ -442,12 +442,12 @@ def osm_features(tag_filters: list[str], bbox, max_elements: int = 4000, max_are
         sel = f'["{k}"="{v}"]' if v else f'["{k}"]'
         kind = "node" if k == "place" else "nwr"  # settlements are points; asking for ways too is slow
         parts.append(f"{kind}{sel}({s},{w},{n},{e});")
-    q = f"[out:json][timeout:50];({''.join(parts)});out geom {int(max_elements)};"
+    q = f"[out:json][timeout:{max(25, timeout_s - 10)}];({''.join(parts)});out geom {int(max_elements)};"
     data, last_err = None, None
     for endpoint in OVERPASS:  # the main server is often busy; fall back to a mirror
         try:
             # Overpass stalls when asked for "Accept: application/json"; the query itself sets the format
-            r = requests.post(endpoint, data={"data": q}, headers={"User-Agent": USER_AGENT}, timeout=65)
+            r = requests.post(endpoint, data={"data": q}, headers={"User-Agent": USER_AGENT}, timeout=timeout_s)
             if r.status_code == 200:
                 data = r.json()
                 break
