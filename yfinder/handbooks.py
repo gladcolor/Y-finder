@@ -123,10 +123,10 @@ def generate(ref: str, meta: dict, model: str | None = None) -> dict:
     prompt = PROMPT.format(meta=_describe(meta))
     md, problems = "", ["not generated"]
     for attempt in range(2):
-        r = client.responses.create(model=model, input=prompt if attempt == 0 else
-                                    prompt + "\n\nYour previous draft had these problems; fix them:\n- " + "\n- ".join(problems),
-                                    tools=[{"type": "web_search"}], reasoning={"effort": "low"}, max_output_tokens=5000)
-        md = (r.output_text or "").strip()
+        from . import websearch  # DeepSeek Search/Fetch when configured, else OpenAI's web search
+        md = websearch.respond(client, model, prompt if attempt == 0 else
+                               prompt + "\n\nYour previous draft had these problems; fix them:\n- " + "\n- ".join(problems),
+                               max_output_tokens=5000).strip()
         md = re.sub(r"^```(?:markdown)?\n|\n```$", "", md)
         md = re.sub(r"[?&]utm_source=openai", "", md)  # drop tracking parameters from cited links
         problems = validate(md)

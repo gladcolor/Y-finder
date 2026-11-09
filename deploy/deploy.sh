@@ -25,6 +25,12 @@ import re, sys
 key = re.search(r"sk-[A-Za-z0-9_\-]{20,}", open(sys.argv[1], encoding="utf-8").read()).group(0)
 print("OPENAI_API_KEY=" + key)
 print("YFINDER_HANDBOOK_ONDEMAND=1")
+import os
+ds = os.path.join(os.path.dirname(sys.argv[1]), "Deepseek_key.txt")
+if os.path.exists(ds):  # web search through DeepSeek Search/Fetch (yfinder/websearch.py)
+    m = re.search(r"sk-[A-Za-z0-9_\-]{16,}", open(ds, encoding="utf-8").read())
+    if m:
+        print("DEEPSEEK_API_KEY=" + m.group(0))
 PY
   scp "$ROOT/deploy/yfinder.service" "$ROOT/deploy/yfinder-watch.service" "$ROOT/deploy/yfinder-watch.timer" "$HOST:/etc/systemd/system/"
   scp "$ROOT/deploy/nginx-yfinder.conf" "$HOST:/etc/nginx/snippets/yfinder.conf"

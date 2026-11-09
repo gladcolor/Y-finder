@@ -79,11 +79,12 @@ def _stops(values: list[float], ramp: str) -> list[list]:
     return out
 
 
-def _paint(prop: str, values: list[float], ramp: str) -> dict | None:
+def _paint(prop: str, values: list[float], ramp: str, label: str = "") -> dict | None:
     st = _stops(values, ramp)
     if len(st) < 2:
         return None
-    return {"mode": "graduated", "property": prop, "stops": st, "fill": st[-1][1], "stroke": "#ffffff", "opacity": 0.75, "width": 0.5}
+    return {"mode": "graduated", "property": prop, "stops": st, "fill": st[-1][1], "stroke": "#ffffff", "opacity": 0.75,
+            "width": 0.5, "label": label or prop.replace("_", " ")}
 
 
 def _vector_layer(s, pick, fc_feats: list[dict], title: str, source: str, paint: dict | None = None,
@@ -158,6 +159,8 @@ def _service(s, pick, meta):
     layer = {"id": "pv-" + re.sub(r"[^a-z0-9]", "", pick["ref"].lower())[-40:], "kind": "raster",
              "title": (meta.get("title") or pick.get("title") or "Service")[:100], "source": meta.get("provider") or "",
              "tiles": t["tiles"], "bbox": meta.get("bbox"), "minzoom": t["minzoom"], "maxzoom": t["maxzoom"]}
+    if t.get("legend"):
+        layer["legend"] = t["legend"]
     return {"status": "ready", "kind": "service", "layers": [layer], "note": "Live map service"}
 
 
@@ -272,7 +275,7 @@ def _acs(s, pick, meta):
                                      "moe": p.get("B19049_001M")}})
     vals = [f["properties"]["median_household_income"] for f in feats if f["properties"]["median_household_income"] is not None]
     layer, note = _vector_layer(s, pick, feats, f"ACS median household income by {unit}", "ACS 5-year, latest (Esri Living Atlas)",
-                                _paint("median_household_income", vals, "greens"), "ACS preview")
+                                _paint("median_household_income", vals, "greens", "Median household income (US$)"), "ACS preview")
     if not layer:
         return {"status": "none", "note": note or "No areas found"}
     rows = [["GEOID", "name", "median_household_income", "moe"]] + [[f["properties"][k] for k in ("GEOID", "name", "median_household_income", "moe")] for f in feats]
@@ -383,7 +386,7 @@ def _nclimgrid(s, pick, meta):
         return {"status": "none", "note": "No nClimGrid counties in the study area"}
     vals = [f["properties"]["mean_tmax_c"] for f in feats if f["properties"]["mean_tmax_c"] is not None]
     layer, note = _vector_layer(s, pick, feats, f"nClimGrid mean daily max temperature, {y}-{m:02d}",
-                                "NOAA nClimGrid-Daily county averages (downloaded for this session)", _paint("mean_tmax_c", vals, "reds"),
+                                "NOAA nClimGrid-Daily county averages (downloaded for this session)", _paint("mean_tmax_c", vals, "reds", "Mean daily max temperature (°C)"),
                                 "nClimGrid preview")
     if not layer:
         return {"status": "none", "note": note}
@@ -421,7 +424,7 @@ def _places(s, pick, meta):
         rows.append([g, name, val, x.get("low_confidence_limit"), x.get("high_confidence_limit"), x.get("totalpopulation")])
     vals = [f["properties"]["value_pct"] for f in feats if f["properties"]["value_pct"] is not None]
     layer, note = _vector_layer(s, pick, feats, f"CDC PLACES: {name}"[:100], "CDC PLACES 2025 release (downloaded for this session)",
-                                _paint("value_pct", vals, "purples"), "PLACES preview")
+                                _paint("value_pct", vals, "purples", f"{name} (%)"), "PLACES preview")
     if not layer:
         return {"status": "none", "note": note or "No tracts matched"}
     return {"status": "ready", "kind": "slice", "layers": [layer], "csv": _csv(s, pick, rows),

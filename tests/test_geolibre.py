@@ -151,6 +151,9 @@ def test_service_tiles():
     wms13 = geolibre.service_layer({"kind": "wms", "endpoint": "https://w.example/wms", "layers": "x", "version": "1.3.0"})["tiles"][0]
     assert "SRS=EPSG%3A3857" in wms11 and "LAYERS=a%3Ab" in wms11 and wms11.endswith("&BBOX={bbox-epsg-3857}")
     assert "CRS=EPSG%3A3857" in wms13 and "SRS=" not in wms13
+    lg = geolibre.service_layer({"kind": "wms", "endpoint": "https://w.example/wms", "layers": "a:b"})["legend"]
+    assert lg.startswith("https://w.example/wms?") and "REQUEST=GetLegendGraphic" in lg and "LAYER=a%3Ab" in lg  # for the map legend
+    assert "legend" not in geolibre.service_layer({"kind": "wms", "endpoint": "https://w.example/wms", "layers": "x", "legend": False})
     assert geolibre.service_layer({"kind": "wmts", "tiles": "https://t/{z}/{y}/{x}.jpg"})["tiles"] == ["https://t/{z}/{y}/{x}.jpg"]
     with pytest.raises(ValueError):
         geolibre.service_layer({"kind": "xyz", "tiles": "http://plain/{z}/{x}/{y}"})

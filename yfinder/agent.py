@@ -15,7 +15,7 @@ import traceback
 from openai import OpenAI
 
 from . import catalog as catalog_mod
-from . import downloads, fit, geolibre, handbooks, sources
+from . import downloads, fit, geolibre, handbooks, sources, websearch
 from .config import DEFAULT_MODEL, LOG_TURNS, MAX_OUTPUT_TOKENS, MAX_STEPS, MODELS, RUNTIME_DIR, openai_key
 from .geo import bbox_size_km, clamp_bbox, coverage_fraction, valid_bbox
 from .geo import parse_resolution_m as geo_parse_res
@@ -61,6 +61,8 @@ Rules:
   one line each. No headings, no tables. The interface already shows the graph, scope, map layers and every data
   card with its fit label, so do not list datasets or restate the scope; name at most two key sources, and say
   "see Data" for the rest. Do not narrate what you are about to do.
+- When you rely on a web page, link it inline as [short name](url). Read a page with read_web_page before quoting
+  a number, date or access rule from it.
 - End with one short question (under 15 words) that would most improve the study, unless the user only asked a
   quick factual question. Before it, call offer_choices with 2 to 4 short answers (2 to 5 words each).
 - If the user asks something outside geospatial research, answer briefly and steer back.
@@ -153,7 +155,9 @@ TOOLS = [
     _tool("get_access_handbook", "Get the data access handbook (endpoint, authentication, Python example, pitfalls) for a catalog dataset, when one exists. Use when the user asks how to download or access a dataset.", {
         "ref": {"type": "string", "description": "catalog id, e.g. cur:acs or pc:naip"}}),
 ]
-TOOLS_WITH_WEB = TOOLS + [{"type": "web_search"}]
+def tools_with_web() -> list[dict]:
+    """The agent's tools plus web search: DeepSeek Search/Fetch as function tools, or OpenAI's built-in tool."""
+    return TOOLS + websearch.tool_specs()
 
 LABELS = {
     "update_influence_graph": "Building the influence graph", "geocode": "Finding the place",
@@ -165,6 +169,7 @@ LABELS = {
     "map_census_boundaries": "Fetching Census boundaries", "map_catalog_layer": "Adding layers collected in GeoLibre",
     "download_data": "Downloading the file to the server", "recommend_data": "Checking each dataset against the scope",
     "get_access_handbook": "Opening the access handbook", "offer_choices": "Preparing quick replies",
+    "web_search": "Searching the web", "read_web_page": "Reading a web page",
 }
 
 
@@ -501,6 +506,8 @@ def h_map_catalog_layer(s: Session, a: dict):
         layer = {"id": "gls-" + re.sub(r"[^a-z0-9]", "", ref.lower())[-36:], "kind": "raster", "title": it["title"],
                  "source": it.get("provider") or "", "tiles": t["tiles"], "bbox": it.get("bbox"),
                  "minzoom": t["minzoom"], "maxzoom": t["maxzoom"]}
+        if t.get("legend"):
+            layer["legend"] = t["legend"]
         s.layers.append(layer)
         ev = [{"type": "layer", "layer": layer}]
         if sb:
@@ -564,6 +571,51 @@ def h_download_data(s: Session, a: dict):
         res["note"] = "Nothing in the file could be drawn here. " + res["note"]
     n = len(r["layers"])
     return res, ev, f"{r['file']} ({mb:.1f} MB), {n} layer{'s' if n != 1 else ''}"
+
+
+def _web(s: Session, name: str, a: dict):
+    try:
+        result, pages = websearch.run_tool(name, a, getattr(s, "first_message", None))
+    except websearch.WebError as e:
+        raise ToolError(str(e))
+    if not hasattr(s, "citations"):
+        s.citations = set()
+    titles = s.__dict__.setdefault("web_titles", {})
+    for p in pages:  # pages the search returned count as found, so picks from them are verifiable
+        s.citations.add(p["url"])
+        titles[p["url"]] = p["title"]
+    return result
+
+
+def h_web_search(s: Session, a: dict):
+    result = _web(s, "web_search", a)
+    ui = [{"title": r.get("title") or r["url"], "url": r["url"], "meta": r.get("site") or r.get("date") or "web"}
+          for r in result["results"]]
+    return result, ([{"type": "results", "items": ui}] if ui else []), f"{len(ui)} results for '{str(a.get('query', ''))[:60]}'"
+
+
+def h_read_web_page(s: Session, a: dict):
+    result = _web(s, "read_web_page", a)
+    return result, [], (result.get("title") or result["url"])[:80]
+
+
+_MD_LINK = re.compile(r"\[([^\]\n]{1,200})\]\((https?://[^)\s]+)\)")
+_BARE = re.compile(r"(?<![(\[])https?://[^\s)\]>\"']+")
+
+
+def text_citations(s: Session, text: str) -> list[dict]:
+    """Sources list for answers written with function-tool search: links in the text that a search returned."""
+    found = {norm_url(c): c for c in getattr(s, "citations", set())}
+    titles = getattr(s, "web_titles", {})
+    out, seen = [], set()
+    for label, url in _MD_LINK.findall(text or "") + [("", u) for u in _BARE.findall(text or "")]:
+        url = url.rstrip(".,;")
+        n = norm_url(url)
+        if n in seen or n not in found:
+            continue
+        seen.add(n)
+        out.append({"url": url, "title": titles.get(found[n]) or label or url})
+    return out[:10]
 
 
 def h_map_census_boundaries(s: Session, a: dict):
@@ -862,13 +914,14 @@ def run_turn(s: Session, text: str, model: str | None = None, web: bool = True):
     prev = s.prev_response_id
     instructions = SYSTEM.format(today=dt.date.today().isoformat())
     emitted_text = False
+    answer_parts: list[str] = []
     yield {"type": "status", "text": "Thinking"}
     try:
         for step in range(MAX_STEPS):
             last = step == MAX_STEPS - 1
-            kwargs = dict(model=model, instructions=instructions, input=inputs, tools=TOOLS_WITH_WEB if web else TOOLS,
+            kwargs = dict(model=model, instructions=instructions, input=inputs, tools=tools_with_web() if web else TOOLS,
                           reasoning={"effort": cfg.get("effort", "low")}, max_output_tokens=MAX_OUTPUT_TOKENS, stream=True)
-            if web:
+            if web and websearch.provider() == "openai":
                 kwargs["include"] = ["web_search_call.action.sources"]
             if prev:
                 kwargs["previous_response_id"] = prev
@@ -894,6 +947,7 @@ def run_turn(s: Session, text: str, model: str | None = None, web: bool = True):
                     if not step_text and emitted_text:  # text from a new step starts a new paragraph
                         yield {"type": "text", "delta": "\n\n"}
                     step_text = emitted_text = True
+                    answer_parts.append(ev.delta)
                     yield {"type": "text", "delta": ev.delta}
                 elif et == "response.output_item.added" and getattr(ev.item, "type", "") == "web_search_call":
                     yield {"type": "tool", "id": ev.item.id, "name": "web_search", "label": "Searching the web", "state": "start"}
@@ -968,6 +1022,10 @@ def run_turn(s: Session, text: str, model: str | None = None, web: bool = True):
                                "output": json.dumps(result, ensure_ascii=False, default=str)[:24000]})
         s.prev_response_id = prev
         s.recap = None  # the response chain carries the context from here on
+        if web and websearch.provider() == "deepseek":  # OpenAI's tool annotates citations itself
+            cites = text_citations(s, "".join(answer_parts))
+            if cites:
+                yield {"type": "citations", "items": cites}
         # response_id lets the browser restore this conversation after the server session expires
         yield {"type": "done", "usage": usage, "elapsed": round(time.time() - t_start, 1), "model": model, "response_id": prev}
     except Exception as e:

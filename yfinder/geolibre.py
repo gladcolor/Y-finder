@@ -168,6 +168,7 @@ def paint_hint(style: dict | None) -> dict | None:
             h[out] = max(lo, min(hi, float(v)))
     mode, prop = style.get("vectorStyleMode"), style.get("vectorStyleProperty")
     if mode in ("graduated", "categorized") and isinstance(prop, str) and 0 < len(prop) <= 80:
+        h["label"] = prop.replace("_", " ")
         stops = []
         for st in (style.get("vectorStyleStops") or [])[:40]:
             if not (isinstance(st, dict) and isinstance(st.get("color"), str) and _HEX.match(st["color"])):
@@ -245,5 +246,9 @@ def service_layer(svc: dict) -> dict:
         raise ValueError(f"{kind} services are not drawn as tiles")
     if not all(t.startswith("https://") for t in tiles):
         raise ValueError("Only https services are drawn")
-    return {"tiles": tiles, "minzoom": int(svc.get("minzoom") or 0), "maxzoom": int(svc.get("maxzoom") or 18)}
+    out = {"tiles": tiles, "minzoom": int(svc.get("minzoom") or 0), "maxzoom": int(svc.get("maxzoom") or 18)}
+    if kind == "wms" and svc.get("legend", True):  # the service's own legend image, shown in the map legend
+        out["legend"] = svc["endpoint"] + "?" + urlencode({"SERVICE": "WMS", "REQUEST": "GetLegendGraphic", "VERSION": "1.1.1",
+                                                           "FORMAT": "image/png", "LAYER": svc["layers"]})
+    return out
 

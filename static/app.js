@@ -242,7 +242,44 @@
     dl: '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M12 4v11M7 10l5 5 5-5M5 20h14"/></svg>',
     x: '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round"><path d="M6 6l12 12M18 6 6 18"/></svg>',
   };
+  // ------------------------------------------------------------------ map legend: visible data layers, top-most first
+  const fmtNum = (v) => (Math.abs(v) >= 1000 ? Math.round(v).toLocaleString() : String(+Number(v).toFixed(1)));
+  function legendItem(e) {
+    const d = e.d, P = d.paint;
+    const head = `<div class="ml-t"><span>${esc(d.title)}</span>${P && P.label ? `<small>${esc(P.label)}</small>` : ''}</div>`;
+    if (P && P.mode === 'graduated' && Array.isArray(P.stops) && P.stops.length >= 2) {
+      const st = P.stops.filter((s) => Array.isArray(s) && HEXC.test(s[1] || '') && Number.isFinite(s[0]));
+      const rows = st.map((s, i) => {
+        const range = i < st.length - 1 ? `${fmtNum(s[0])} – ${fmtNum(st[i + 1][0])}` : `≥ ${fmtNum(s[0])}`;
+        return `<div class="ml-r"><i style="background:${s[1]}"></i>${esc(range)}</div>`;
+      }).join('');
+      return `<div class="ml-i">${head}${rows}</div>`;
+    }
+    if (P && P.mode === 'categorized' && Array.isArray(P.stops) && P.stops.length) {
+      const rows = P.stops.slice(0, 12).filter((s) => HEXC.test((s || [])[1] || '')).map((s) => `<div class="ml-r"><i style="background:${s[1]}"></i>${esc(String(s[0]))}</div>`).join('');
+      return `<div class="ml-i">${head}${rows}${P.stops.length > 12 ? `<div class="ml-r muted">+ ${P.stops.length - 12} more</div>` : ''}</div>`;
+    }
+    if (d.kind === 'raster') {
+      const img = d.legend && safeUrl(d.legend) ? `<img src="${esc(safeUrl(d.legend))}" alt="Legend for ${esc(d.title)}" loading="lazy" onerror="this.remove()">` : '';
+      return `<div class="ml-i"><div class="ml-r"><i class="ml-img"></i><span>${esc(d.title)}</span></div>${img}</div>`;
+    }
+    const geom = (e.fc && e.fc.features && e.fc.features[0] && e.fc.features[0].geometry || {}).type || '';
+    const shape = /Point/.test(geom) ? 'dot' : /Line/.test(geom) ? 'line' : '';
+    return `<div class="ml-i"><div class="ml-r"><i class="${shape}" style="background:${e.color}"></i><span>${esc(d.title)}</span></div></div>`;
+  }
+  function renderLegend() {
+    const items = [...state.layers.values()].reverse().filter((e) => e.visible && !['scope', 'boundary', 'footprint'].includes(e.d.style)).slice(0, 8);
+    $('#mapLegend').hidden = !items.length || state.gisMode;
+    $('#mlBody').innerHTML = items.map(legendItem).join('');
+  }
+  $('#mlToggle').onclick = () => {
+    const open = $('#mapLegend').classList.toggle('closed') === false;
+    $('#mlToggle').setAttribute('aria-expanded', String(open)); local.set('yf_legend', open ? '1' : '0');
+  };
+  if (local.get('yf_legend') === '0') { $('#mapLegend').classList.add('closed'); $('#mlToggle').setAttribute('aria-expanded', 'false'); }
+
   function renderLayerList() {
+    renderLegend();
     const list = $('#layerList'); const n = state.layers.size;
     $('#nLayers').textContent = n ? `${n}` : '';
     $('#nLayersBadge').textContent = n; $('#nLayersBadge').hidden = !n;
@@ -933,7 +970,7 @@
   }
   function setMode(gis) {
     state.gisMode = gis; $('#modeGIS').classList.toggle('on', gis); $('#modeMap').classList.toggle('on', !gis);
-    $('#geolibre').hidden = !gis; $('#gisBar').hidden = !gis; $('.layers-box').hidden = gis;
+    $('#geolibre').hidden = !gis; $('#gisBar').hidden = !gis; $('.layers-box').hidden = gis; renderLegend();
     if (gis) loadGeoLibre();
   }
   $('#modeMap').onclick = () => setMode(false);
