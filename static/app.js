@@ -15,6 +15,7 @@
     ['Tree canopy and heat', 'How has tree canopy changed in New Haven neighborhoods since 2012, and is canopy loss linked to summer heat?'],
     ['Polling place access', 'How long do people travel to their polling places in Connecticut, and does it differ by income?'],
     ['Rooftop solar', 'Which Yale campus buildings in New Haven have the best rooftop solar potential?'],
+    ['Permits and income', 'How did new housing permits change in Connecticut towns after the 2021 zoning reform, and do they track median household income?'],
   ];
 
   const state = {
