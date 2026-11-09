@@ -423,11 +423,15 @@
         m.pill('scope', `<b>Scope</b> ${esc((s.extent_name || 'Study area').split(',')[0])} · ${esc(t0)}${t1 && t1 !== t0 ? '–' + esc(t1) : ''}${s.spatial_resolution_m ? ' · ' + esc(s.spatial_resolution_m) + ' m' : ''}`,
           () => { switchTab('frame'); setTimeout(() => $('#scopeCard').scrollIntoView({ behavior: 'smooth' }), 60); });
       } break;
-      case 'layer': addLayer(ev.layer).then((e) => {
-        if (!e || ev.layer.style === 'scope' || !m.pill) return;
-        m.layers++;
-        m.pill('map', `${e.fc ? thumbSVG(e.fc, e.color) : ''}<b>Map</b> ${m.layers} layer${m.layers > 1 ? 's' : ''}`, () => { fit(ev.layer.bbox); $('#layerPanel').hidden = false; });
-      }); break;
+      case 'layer': {
+        const pill = (e) => {
+          if (ev.layer.style === 'scope' || !m.pill) return;
+          m.layers++;
+          m.pill('map', `${e && e.fc ? thumbSVG(e.fc, e.color) : ''}<b>Map</b> ${m.layers} layer${m.layers > 1 ? 's' : ''}`, () => { fit(ev.layer.bbox); $('#layerPanel').hidden = false; });
+        };
+        if (!state.mapReady) { addLayer(ev.layer); pill(null); } // queued until the map loads (a replay right after a reload)
+        else addLayer(ev.layer).then((e) => { if (e) pill(e); });
+      } break;
       case 'zoom': fit(ev.bbox); break;
       case 'recommendations': state.picks = ev.picks || []; state.methods = ev.methods || []; state.nextSteps = ev.next_steps || []; renderData(); step('data', 'done');
         if (state.graph) renderGraph(); // coverage shows once datasets are known (a replay may bring the graph first)
