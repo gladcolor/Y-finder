@@ -248,7 +248,8 @@
   const fmtNum = (v) => (Math.abs(v) >= 1000 ? Math.round(v).toLocaleString() : String(+Number(v).toFixed(1)));
   function legendItem(e) {
     const d = e.d, P = d.paint;
-    const head = `<div class="ml-t"><span>${esc(d.title)}</span>${P && P.label ? `<small>${esc(P.label)}</small>` : ''}</div>`;
+    const sub = P && P.label && !String(d.title).toLowerCase().includes(String(P.label).toLowerCase()) ? P.label : ''; // no repeats
+    const head = `<div class="ml-t"><span>${esc(d.title)}</span>${sub ? `<small>${esc(sub)}</small>` : ''}</div>`;
     if (P && P.mode === 'graduated' && Array.isArray(P.stops) && P.stops.length >= 2) {
       const st = P.stops.filter((s) => Array.isArray(s) && HEXC.test(s[1] || '') && Number.isFinite(s[0]));
       const rows = st.map((s, i) => {
