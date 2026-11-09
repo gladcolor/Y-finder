@@ -21,7 +21,7 @@
     sid: store.get('yf_sid') || '', model: '', busy: false, code: store.get('yf_code') || '',
     layers: new Map(), colorIdx: 0, mapReady: false, pending: [],
     graph: null, scope: null, picks: [], methods: [], nextSteps: [], cy: null, config: null,
-    gisMode: false, gisFull: false, catKind: 'any', catAccess: 'any', conv: null, restoring: null,
+    gisMode: false, gisFull: true, catKind: 'any', catAccess: 'any', conv: null, restoring: null,
   };
 
   // ------------------------------------------------------------------ helpers
