@@ -127,20 +127,54 @@ def stac_tiles(tilejson_url: str) -> dict | None:
 
 
 # --------------------------------------------------------------------------- Yale Dataverse
-def yale_dataverse(query: str, limit: int = 8) -> list[dict]:
-    d = _cached("dv:" + query, 3600, lambda: _get("https://dataverse.yale.edu/api/search",
-                                                  {"q": query, "type": "dataset", "per_page": limit}))
+def dataverse(query: str, host: str = "dataverse.harvard.edu", source: str = "Harvard Dataverse", limit: int = 8) -> list[dict]:
+    """Datasets in a Dataverse repository (Harvard's is the largest academic one; Yale has its own)."""
+    d = _cached(f"dv:{host}:{query}", 3600, lambda: _get(f"https://{host}/api/search", {"q": query, "type": "dataset", "per_page": limit}))
     out = []
     for it in d.get("data", {}).get("items", []):
-        t0, t1 = _years(it.get("published_at"))
         url = it.get("url") or ""
         out.append({
-            "ref": url, "title": it.get("name"), "source": "Yale Dataverse",
-            "provider": ", ".join(it.get("authors", [])[:2]) or it.get("publisher") or "Yale Dataverse",
+            "ref": url, "title": it.get("name"), "source": source,
+            "provider": ", ".join(it.get("authors", [])[:2]) or it.get("publisher") or source,
             "description": _clip(it.get("description")), "url": url, "access": "Open to download (check terms)",
             "access_class": "open", "region": None, "time": "Published " + (it.get("published_at") or "")[:10],
             "t0": None, "t1": None, "res_m": None, "unit": None, "type": "Repository dataset",
-            "citation": _clip(it.get("citation"), 200),
+            "citation": _clip(it.get("citation"), 200), "data_type": "table",
+            "doi": it.get("global_id") if str(it.get("global_id", "")).startswith("doi:") else None,
+            "dataverse_host": host, "files": it.get("fileCount"),
+        })
+    return out
+
+
+def yale_dataverse(query: str, limit: int = 8) -> list[dict]:
+    return dataverse(query, "dataverse.yale.edu", "Yale Dataverse", limit)
+
+
+# Socrata powers many US open data portals (CDC, CMS, states, cities); its catalog API searches them all.
+SOCRATA_CATALOG = "https://api.us.socrata.com/api/catalog/v1"
+_SOC_ID = re.compile(r"^[a-z0-9]{4}-[a-z0-9]{4}$")
+
+
+def socrata(query: str, limit: int = 8, domains: str | None = None) -> list[dict]:
+    params = {"q": query, "only": "dataset", "limit": limit}
+    if domains:
+        params["domains"] = domains
+    d = _cached(f"soc:{domains}:{query}", 3600, lambda: _get(SOCRATA_CATALOG, params))
+    out = []
+    for r in d.get("results") or []:
+        res, md = r.get("resource") or {}, r.get("metadata") or {}
+        dom, rid = md.get("domain") or "", res.get("id") or ""
+        if not dom or not _SOC_ID.match(rid) or not re.fullmatch(r"[a-z0-9.-]+", dom):
+            continue
+        link = r.get("permalink") or r.get("link") or f"https://{dom}/d/{rid}"
+        upd = (res.get("data_updated_at") or res.get("updatedAt") or "")[:10]
+        out.append({
+            "ref": link, "title": res.get("name"), "source": f"Open data portal ({dom})",
+            "provider": res.get("attribution") or dom, "description": _clip(res.get("description")), "url": link,
+            "access": "Open (Socrata API)", "access_class": "open", "region": None, "time": f"Updated {upd}" if upd else "",
+            "t0": None, "t1": None, "res_m": None, "unit": None, "type": "Table", "data_type": "table",
+            "columns": [c for c in (res.get("columns_name") or [])[:30] if isinstance(c, str)],
+            "soda": f"https://{dom}/resource/{rid}.csv", "rows_updated": upd,
         })
     return out
 

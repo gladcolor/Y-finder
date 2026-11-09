@@ -39,7 +39,11 @@ Work in three projections (tri-projection), in order, and keep the user in the l
    gallery maps "gl:" and web services "gls:"). Use live sources when they can add something:
    search_stac_items for imagery over the study area and dates, search_yale_dataverse and
    search_yale_geoblacklight for Yale holdings and historical maps, search_arcgis_online and search_datagov for
-   local and government layers, and web_search for anything else. Then call recommend_data once with your picks
+   local and government layers, and web_search for anything else. Many factors are measured by non-spatial data:
+   statistics, surveys, health or administrative records, prices, program or policy data, economic series. For those,
+   call search_tables (research repositories and government open data portals) and search_catalog (World Bank
+   indicators), and set data_type "table" on the pick. A table with a place column (country, state, county, FIPS,
+   town, tract) can still be joined to a map. Then call recommend_data once with your picks
    (usually 4 to 8 datasets, plus 2 to 4 methods and tools). The server checks every pick against the scope and
    returns fit labels for extent, time and resolution. Those labels are authoritative: report them, and explain
    poor fits plainly (for example, 10 m Sentinel-2 cannot resolve individual larval habitats; suggest sub-meter
@@ -84,7 +88,7 @@ NODE = {"type": "object", "additionalProperties": False, "required": ["id", "lab
 EDGE = {"type": "object", "additionalProperties": False, "required": ["source", "target", "note"],
         "properties": {"source": S, "target": S, "note": {"type": "string", "description": "why this influence exists, one short clause"}}}
 PICK = {"type": "object", "additionalProperties": False,
-        "required": ["ref", "title", "factors", "role", "why", "limitations", "spatial_resolution_m", "time_start", "time_end", "coverage"],
+        "required": ["ref", "title", "factors", "role", "why", "limitations", "spatial_resolution_m", "time_start", "time_end", "coverage", "data_type"],
         "properties": {
             "ref": {"type": "string", "description": "exact catalog id (e.g. cur:planet, pc:naip, gee:USDA/NAIP/DOQQ) or the exact ref/url from a live search result"},
             "title": S,
@@ -95,7 +99,9 @@ PICK = {"type": "object", "additionalProperties": False,
             "spatial_resolution_m": {"type": ["number", "null"], "description": "only for web results without catalog metadata; else null"},
             "time_start": {"type": ["string", "null"], "description": "only for web results; else null"},
             "time_end": {"type": ["string", "null"], "description": "only for web results; else null"},
-            "coverage": {"type": ["string", "null"], "description": "only for web results, e.g. 'US' or 'Connecticut'; else null"}}}
+            "coverage": {"type": ["string", "null"], "description": "only for web results, e.g. 'US' or 'Connecticut'; else null"},
+            "data_type": {"type": "string", "enum": ["spatial", "table"],
+                          "description": "table for non-spatial data (statistics, surveys, records, prices), even with a place column"}}}
 METHOD = {"type": "object", "additionalProperties": False, "required": ["name", "why", "tools"],
           "properties": {"name": S, "why": S, "tools": {"type": "string", "description": "Yale or open tools to do it"}}}
 
@@ -133,6 +139,10 @@ TOOLS = [
         "query": S, "types": {"type": "string", "enum": ["any", "feature", "imagery", "map"]},
         "within_study_area": {"type": "boolean"}}),
     _tool("search_datagov", "Search Data.gov, the US government open data catalog.", {"query": S}),
+    _tool("search_tables", "Search non-spatial data: statistics, surveys, health and administrative records, prices, program "
+          "data. Sources: Harvard Dataverse (research datasets) and US open data portals (CDC, CMS, state and city portals, "
+          "Connecticut Open Data when the study is in Connecticut). Results list their columns when known; a place column "
+          "(country, state, county, FIPS, town, tract) means the table can be mapped.", {"query": S}),
     _tool("map_stac_preview", "Show one imagery item from search_stac_items on the map.", {"item_id": S, "title": S}),
     _tool("map_osm_features", "Fetch OpenStreetMap features inside the study area (up to about 50 x 50 km) and map them.", {
         "tags": {"type": "array", "items": S, "description": "1 to 4 filters like natural=water, leisure=park, amenity=school, building"},
@@ -164,7 +174,7 @@ LABELS = {
     "set_scope": "Setting the study scope", "search_catalog": "Searching the YCGS catalog",
     "search_stac_items": "Searching imagery on Planetary Computer", "search_yale_dataverse": "Searching Yale Dataverse",
     "search_yale_geoblacklight": "Searching Yale GeoBlacklight", "search_arcgis_online": "Searching ArcGIS Online",
-    "search_datagov": "Searching Data.gov", "map_stac_preview": "Adding an imagery preview",
+    "search_datagov": "Searching Data.gov", "search_tables": "Searching tables and statistics", "map_stac_preview": "Adding an imagery preview",
     "map_osm_features": "Fetching OpenStreetMap features", "map_feature_service": "Fetching an ArcGIS layer",
     "map_census_boundaries": "Fetching Census boundaries", "map_catalog_layer": "Adding layers collected in GeoLibre",
     "download_data": "Downloading the file to the server", "recommend_data": "Checking each dataset against the scope",
@@ -390,6 +400,46 @@ def h_search_arcgis_online(s, a):
 
 def h_search_datagov(s, a):
     return _live(s, sources.datagov(a["query"]), a["query"])
+
+
+STATE_PORTALS = {"data.ct.gov": [-73.73, 40.95, -71.78, 42.06], "data.ny.gov": [-79.76, 40.5, -71.85, 45.02]}
+
+
+def h_search_tables(s, a):
+    """Tables and statistics: Harvard Dataverse plus Socrata open data portals (the study's state portal first)."""
+    q = a["query"]
+    sb = s.scope.get("bbox")
+    local = ""
+    if sb:  # the smallest state box holding the study's centre (New York's box also covers most of Connecticut)
+        cx, cy = (sb[0] + sb[2]) / 2, (sb[1] + sb[3]) / 2
+        inside = [(abs((b[2] - b[0]) * (b[3] - b[1])), d) for d, b in STATE_PORTALS.items() if b[0] <= cx <= b[2] and b[1] <= cy <= b[3]]
+        local = min(inside)[1] if inside else ""
+    jobs = [lambda: sources.socrata(q, 6, local)] if local else []
+    jobs += [lambda: sources.dataverse(q, limit=6), lambda: sources.socrata(q, 6)]
+    import concurrent.futures as cf
+    results, seen = [], set()
+    with cf.ThreadPoolExecutor(3) as ex:
+        for part in ex.map(lambda f: _safe_call(f), jobs):
+            for r in part:
+                if r["ref"] not in seen:
+                    seen.add(r["ref"])
+                    results.append(r)
+    results = results[:12]
+    s.remember(results)
+    out = _compact_results(results, s.scope)
+    for c, r in zip(out, results):  # columns tell the model whether a table can be mapped
+        c["data_type"] = "table"
+        if r.get("columns"):
+            c["columns"] = r["columns"][:10]
+    ui = [{"title": r["title"], "url": r.get("url"), "meta": r.get("source")} for r in results]
+    return {"results": out}, [{"type": "results", "items": ui}], f"{len(results)} tables for '{q[:60]}'"
+
+
+def _safe_call(fn):
+    try:
+        return fn()
+    except Exception:  # one repository being down must not hide the others
+        return []
 
 
 def _mosaic_partners(s: Session, it: dict, max_extra: int = 5) -> list[dict]:
@@ -688,6 +738,8 @@ def h_recommend_data(s: Session, a: dict):
                 if v and not meta.get(k) and not (k == "region" and meta.get("bbox")):
                     meta[k] = v
                     filled = True
+        if p.get("data_type") == "table":
+            meta.setdefault("data_type", "table")
         f = fit.assess(meta, s.scope)
         new.append({
             "ref": p.get("ref"), "title": meta.get("title") or p.get("title"), "url": meta.get("url") or "",
@@ -698,6 +750,7 @@ def h_recommend_data(s: Session, a: dict):
             "why": p.get("why", ""), "limitations": p.get("limitations", ""), "fit": f, "verified": how,
             "metadata_from_model": filled, "yale_note": meta.get("yale_note") or "", "thumbnail": meta.get("thumbnail") or "",
             "stac_collection": (meta.get("stac") or {}).get("collection") or "", "map": mappable(meta),
+            "data_type": "table" if (meta.get("data_type") == "table" or p.get("data_type") == "table") else "spatial",
             "t0": meta.get("t0"), "t1": meta.get("t1"), "bbox": fit.dataset_bbox(meta), "meta": meta})
     refs = {p["ref"] for p in new}
     s.picks = [p for p in s.picks if p["ref"] not in refs] + new

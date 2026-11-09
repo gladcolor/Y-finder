@@ -67,7 +67,8 @@ body.wide .demo-grid { grid-template-columns: 1fr 1fr 1fr; }
 .more-demos summary { cursor: pointer; font-size: 12.5px; color: var(--navy-2); margin-bottom: 6px; }
 .demo-head .based { font-size: 12px; color: var(--ink-2); margin-top: 3px; }
 .demo-card { text-align: left; border: 1px solid var(--line); border-left: 3px solid var(--navy); background: #fff; border-radius: 8px; padding: 7px 9px; min-height: 52px; }
-.demo-card:hover { background: var(--soft); border-color: var(--navy-2); }
+.demo-card { transition: transform .12s ease, box-shadow .12s ease, background .12s ease; }
+.demo-card:hover { background: #fff; border-color: var(--navy-2); transform: translateY(-1px); box-shadow: 0 4px 14px rgba(20, 30, 50, .09); }
 .demo-card .field { font-size: 10.5px; text-transform: uppercase; letter-spacing: .05em; color: var(--navy-2); font-weight: 700; }
 .demo-card .title { font-weight: 600; font-size: 13px; margin-top: 1px; line-height: 1.25; }
 .examples { flex-direction: row !important; flex-wrap: wrap; gap: 6px !important; }
@@ -152,7 +153,14 @@ body.collapsed #btnCollapse svg { transform: rotate(180deg); }
 .empty { color: var(--muted); padding: 28px 8px; text-align: center; line-height: 1.5; }
 
 /* ---------- welcome ---------- */
-.welcome h2 { font-size: 17px; margin: 4px 0 4px; }
+.welcome h2 { font-size: 20px; margin: 4px 0 4px; letter-spacing: -.01em; }
+body.wide .welcome h2 { font-size: 24px; }
+.how { display: grid; grid-template-columns: repeat(2, 1fr); gap: 7px; margin: 14px 0 4px; }
+body.wide .how { grid-template-columns: repeat(4, 1fr); }
+.how-s { display: grid; grid-template-columns: 20px 1fr; column-gap: 7px; align-items: center; padding: 8px 10px; border-radius: 10px;
+  background: var(--soft); font-size: 11.5px; color: var(--ink-2); line-height: 1.3; }
+.how-s svg { width: 18px; height: 18px; color: var(--navy-2); grid-row: span 2; }
+.how-s b { color: var(--ink); font-size: 12.5px; }
 .welcome p { line-height: 1.5; color: var(--ink-2); margin: 6px 0; }
 .examples { display: flex; flex-direction: column; gap: 8px; margin-top: 8px; }
 .example { text-align: left; border: 1px solid var(--line); background: #fff; border-radius: 10px; padding: 9px 11px; line-height: 1.4; }
@@ -354,6 +362,14 @@ body.collapsed .layers-box { left: 12px; }
 .pv-dot.ok { background: #16a34a; }
 .pv-dot.run { background: #f59e0b; animation: pvblink 1s ease-in-out infinite; }
 @keyframes pvblink { 50% { opacity: .35; } }
+.tbl-badge { font-size: 10.5px; font-weight: 600; color: #6b4e16; background: #fbf1dc; border-radius: 4px; padding: 0 5px; margin-left: 6px; }
+.pv-spark { flex-basis: 100%; margin-top: 4px; }
+.pv-spark .pv-sl { font-size: 11.5px; color: var(--ink-2); margin-bottom: 1px; }
+.pv-spark svg { width: 100%; max-width: 320px; height: 46px; display: block; }
+.pv-tbl { flex-basis: 100%; overflow-x: auto; margin-top: 5px; border: 1px solid var(--line); border-radius: 6px; }
+.pv-tbl table { border-collapse: collapse; font-size: 11.5px; white-space: nowrap; }
+.pv-tbl th, .pv-tbl td { padding: 3px 7px; border-bottom: 1px solid var(--line); text-align: left; }
+.pv-tbl th { background: var(--soft); font-weight: 600; }
 .pv-a { border: 0; background: none; color: var(--navy-2); font-size: 12px; padding: 0 2px; cursor: pointer; text-decoration: underline; }
 .dlg { border: 0; border-radius: 14px; box-shadow: var(--shadow); padding: 0; width: min(760px, 94vw); max-height: 86vh; }
 .dlg::backdrop { background: rgba(15, 25, 45, .35); }

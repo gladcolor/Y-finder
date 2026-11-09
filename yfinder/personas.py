@@ -17,7 +17,7 @@ def record_from_events(events: list[dict], session, elapsed: float) -> dict:
     done = next((e for e in reversed(events) if e["type"] == "done"), {})
     return {
         "graph": session.graph, "scope": session.scope,
-        "picks": [{k: p.get(k) for k in ("ref", "title", "role", "verified", "fit", "source")} for p in session.picks],
+        "picks": [{k: p.get(k) for k in ("ref", "title", "role", "verified", "fit", "source", "data_type")} for p in session.picks],
         "methods": session.methods,
         "tools": [e["name"] for e in events if e["type"] == "tool" and e.get("state") in ("done", "error")],
         "tool_errors": [f"{e['name']}: {e.get('summary', '')}" for e in events if e["type"] == "tool" and e.get("state") == "error"],

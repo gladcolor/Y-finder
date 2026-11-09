@@ -152,6 +152,8 @@ def check_resolution(meta: dict, scope: dict) -> dict:
         return {"label": "unknown", "reason": "Point or site records: their spacing, not a cell size, sets the detail"}
     if have and not need:
         return {"label": "unknown", "reason": f"{_fmt_res(have)} data; set a needed resolution to compare"}
+    if meta.get("data_type") == "table":
+        return {"label": "unknown", "reason": "A table without spatial detail; join it by its place column if it has one"}
     return {"label": "unknown", "reason": "Resolution not listed"}
 
 

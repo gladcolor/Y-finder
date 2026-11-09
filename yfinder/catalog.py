@@ -110,6 +110,7 @@ class Catalog:
         q = self._expand(query)
         if not q:
             return []
+        phrase = re.sub(r"\s+", " ", query.lower()).strip()
         k1, b = 1.2, 0.75
         scored = []
         for i, d in enumerate(self.docs):
@@ -130,10 +131,15 @@ class Catalog:
                     s += w * self.idf.get(t, 0) * f * (k1 + 1) / (f + k1 * (1 - b + b * dl / self.avgdl))
             if s <= 0:
                 continue
+            title = (it.get("title") or "").lower()
+            if len(phrase) > 4 and phrase in title:  # the query as a phrase in the title: "GDP per capita (current US$)"
+                s *= 1.5 if title.startswith(phrase) else 1.2
             if it.get("source") == "YCGS curated":
                 s *= 1.35
             elif it.get("source") == "GEE community catalog":  # short cards, community-made: rank below official ones
                 s *= 0.85
+            elif it.get("source") == "World Bank WDI":  # national statistics: context for most geospatial questions
+                s *= 0.9
             scored.append((s, i))
         scored.sort(reverse=True)
         out = []
@@ -177,6 +183,8 @@ def card(it: dict, f: dict | None = None) -> dict:
             c["map"] = True
         if it.get("gee_parts"):
             c["parts"] = it["gee_parts"]
+        if it.get("data_type") == "table":
+            c["data_type"] = "table"
     if it.get("yale_note"):
         c["yale_note"] = it["yale_note"]
     if it.get("kind") == "method":

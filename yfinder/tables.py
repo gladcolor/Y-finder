@@ -175,6 +175,74 @@ def detect_key(header: list[str], rows: list[list[str]], iso3: set[str] | None =
     return best
 
 
+TOWN_COLUMN = re.compile(r"^(towns?|town[ _]?name|municipalit(y|ies)|municipality[ _]name|city|city[/_ ]town|jurisdiction|community|place)$", re.I)
+YEAR_NAME = re.compile(r"^[_ ]?((?:19|20)\d\d)$")
+
+
+def year_columns(header: list[str]) -> list[tuple[int, int]]:
+    """Wide tables with one column per year (1990, _1991, ...): [(year, column)], oldest first."""
+    out = [(int(m.group(1)), j) for j, h in enumerate(header) if (m := YEAR_NAME.match(h.strip()))]
+    return sorted(out) if len(out) >= 3 else []
+
+
+def wide_series(header: list[str], rows: list[list[str]], label: str = "") -> dict | None:
+    """The trend across year columns: the sum over rows when all values are whole numbers (counts), else the mean."""
+    yc = year_columns(header)
+    if not yc:
+        return None
+    pts, whole = [], True
+    for y, j in yc:
+        vals = [v for v in (_num(r[j]) for r in rows if len(r) > j) if v is not None]
+        if vals:
+            whole = whole and all(float(v).is_integer() for v in vals)
+            pts.append([y, vals])
+    if len(pts) < 3:
+        return None
+    agg = (lambda v: sum(v)) if whole else (lambda v: sum(v) / len(v))
+    return {"label": (label or "value") + (" (sum over rows)" if whole else " (mean over rows)"),
+            "points": [[y, round(agg(v), 4)] for y, v in pts][-60:]}
+
+
+def detect_town(header: list[str], rows: list[list[str]], towns: set[str]) -> int | None:
+    """A town-name column (Connecticut data is often by town) whose values match the towns in the area."""
+    for j, name in enumerate(header):
+        if not TOWN_COLUMN.match(name.strip()):
+            continue
+        vals = [r[j].strip().lower() for r in rows[:400] if len(r) > j and r[j].strip()]
+        if len(vals) >= 3 and sum(v in towns for v in vals) >= 0.5 * len(vals):
+            return j
+    return None
+
+
+def preview(header: list[str], rows: list[list[str]], k: int = 6) -> dict:
+    """First rows of a table for the data card (at most 8 columns, cells trimmed)."""
+    cols = list(range(min(8, len(header))))
+    return {"columns": [header[c][:40] for c in cols], "rows": [[(r[c] if len(r) > c else "")[:40] for c in cols] for r in rows[:k]],
+            "n_rows": len(rows), "n_cols": len(header)}
+
+
+_YEAR_COL = re.compile(r"^(year|yr|date|period|time|fiscal year|calendar year|data year)$", re.I)
+
+
+def series(header: list[str], rows: list[list[str]], value_col: int) -> dict | None:
+    """A trend line when the table has a year (or date) column: the value per year (mean over rows of that year)."""
+    yc = next((j for j, h in enumerate(header) if _YEAR_COL.match(h.strip())), None)
+    if yc is None:
+        return None
+    by: dict[int, list[float]] = {}
+    for r in rows:
+        if len(r) <= max(yc, value_col):
+            continue
+        m = re.match(r"(1[89]\d\d|20\d\d)", r[yc].strip())
+        v = _num(r[value_col])
+        if m and v is not None:
+            by.setdefault(int(m.group(1)), []).append(v)
+    if len(by) < 3:
+        return None
+    pts = [[y, round(sum(v) / len(v), 4)] for y, v in sorted(by.items())]
+    return {"label": header[value_col], "points": pts[-60:]}
+
+
 def key_value(kind: str, v: str) -> str:
     v = re.sub(r"\.0$", "", v.strip())
     if kind == "county":

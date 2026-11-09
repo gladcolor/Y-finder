@@ -348,6 +348,28 @@ def harvest_gee_community() -> list[dict]:
     return out
 
 
+def harvest_worldbank() -> list[dict]:
+    """World Development Indicators (about 1,500 country-year statistics), non-spatial tables joinable by country."""
+    data = _get_json("https://api.worldbank.org/v2/sources/2/indicators?format=json&per_page=3000") or []
+    rows = data[1] if isinstance(data, list) and len(data) > 1 else []
+    out = []
+    for r in rows:
+        iid = r.get("id")
+        if not iid or not r.get("name"):
+            continue
+        topics = " ".join(t.get("value", "") for t in (r.get("topics") or []) if isinstance(t, dict))
+        out.append({
+            "id": "wb:" + iid, "kind": "dataset", "title": r["name"], "provider": "World Bank (World Development Indicators)",
+            "description": clip(r.get("sourceNote")), "keywords": f"{topics} world bank wdi country statistics indicator",
+            "source": "World Bank WDI", "access": "Open (World Bank API, no key)", "access_class": "open",
+            "url": f"https://data.worldbank.org/indicator/{iid}", "region": "Global", "bbox": [-180.0, -90.0, 180.0, 90.0],
+            "t0": 1960, "t1": None, "time": "1960 to latest year (varies by country)", "res_m": None, "res_source": None,
+            "type": "Table (country-year statistics)", "unit": "Country", "data_type": "table", "wb_indicator": iid,
+        })
+    print(f"  World Bank WDI: {len(out)} indicators", flush=True)
+    return out
+
+
 def load_curated() -> list[dict]:
     cur = json.load(open(os.path.join(DATA, "curated.json"), encoding="utf-8"))
     out = []
@@ -393,8 +415,9 @@ def main():
     gl = [] if a.skip_geolibre else harvest_geolibre_gallery()
     gls = harvest_geolibre_services()
     geec = [] if a.skip_geolibre else harvest_gee_community()
-    print("geolibre gallery", len(gl), "services", len(gls), "gee community", len(geec), flush=True)
-    items += pc + gee + gl + gls + geec
+    wb = harvest_worldbank()
+    print("geolibre gallery", len(gl), "services", len(gls), "gee community", len(geec), "world bank", len(wb), flush=True)
+    items += pc + gee + gl + gls + geec + wb
     if a.check_urls:
         st = check_urls([i for i in items if i["source"] == "YCGS curated"])
         for i in items:
@@ -405,7 +428,7 @@ def main():
     meta = {"built": dt.date.today().isoformat(), "counts": {
         "curated": sum(i["source"] == "YCGS curated" for i in items),
         "planetary_computer": len(pc), "earth_engine": len(gee), "geolibre_gallery": len(gl),
-        "geolibre_services": len(gls), "gee_community": len(geec), "total": len(items)},
+        "geolibre_services": len(gls), "gee_community": len(geec), "world_bank": len(wb), "total": len(items)},
         "with_resolution": sum(1 for i in items if i.get("res_m"))}
     json.dump({"meta": meta, "items": items}, open(os.path.join(DATA, "catalog.json"), "w", encoding="utf-8"),
               ensure_ascii=False, separators=(",", ":"))

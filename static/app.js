@@ -705,7 +705,7 @@
         const reasons = ['extent', 'time', 'resolution'].map((k) => p.fit[k]).filter((x) => x && x.label !== 'unknown').map((x) => `<li>${esc(x.reason)}</li>`).join('');
         const url = safeUrl(p.url); const acc = p.fit.access?.label || 'unknown';
         html += `<div class="dcard ${p.fit.overall === 'poor' ? 'poorfit' : ''}" data-ref="${esc(p.ref)}">
-          <div class="t"><span class="fitdot ${esc(p.fit.overall)}"></span><span class="tt">${esc(p.title)}</span>${acc !== 'open' && acc !== 'unknown' ? badge(acc, accessLabel[acc], p.fit.access?.reason) : ''}${p.verified === 'unverified' ? badge('poor', 'Not verified', verifiedText.unverified) : ''}<span class="chev">›</span></div>
+          <div class="t"><span class="fitdot ${esc(p.fit.overall)}"></span><span class="tt">${esc(p.title)}</span>${p.data_type === 'table' ? '<span class="tbl-badge" title="Non-spatial data: a table (statistics, survey, records). It is joined to a map when it has place codes.">Table</span>' : ''}${acc !== 'open' && acc !== 'unknown' ? badge(acc, accessLabel[acc], p.fit.access?.reason) : ''}${p.verified === 'unverified' ? badge('poor', 'Not verified', verifiedText.unverified) : ''}<span class="chev">›</span></div>
           <div class="src">${esc([p.source, p.resolution, p.time].filter(Boolean).join(' · '))}</div>
           <div class="one ${esc(worst ? worst.label : unknown.length ? 'unknown' : p.fit.overall)}">${esc(one)}</div>
           <div class="pv" data-pv="${esc(p.ref)}">${pvLine(p.ref)}</div>
@@ -857,22 +857,53 @@
   // ------------------------------------------------------------------ map previews of the recommended datasets
   // The server builds them in the background (previews.py): online services are drawn directly; open data
   // without a service is downloaded in a small slice for this session. Core datasets show, the rest wait hidden.
-  state.previews = {};
+  state.previews = {}; state.pvOpen = new Set();
+  // a small trend line for tables with years (World Bank countries, town tables, survey series)
+  function sparkSVG(sr) {
+    const pts = (sr && Array.isArray(sr.points) ? sr.points : []).filter((p) => Array.isArray(p) && Number.isFinite(+p[0]) && Number.isFinite(+p[1]));
+    if (pts.length < 2) return '';
+    const W = 240, H = 46, L = 4, R = 4, T = 6, B = 14;
+    const xs = pts.map((p) => +p[0]), ys = pts.map((p) => +p[1]);
+    const x0 = Math.min(...xs), x1 = Math.max(...xs), y0 = Math.min(...ys), y1 = Math.max(...ys);
+    const X = (x) => (L + ((x - x0) / Math.max(1e-9, x1 - x0)) * (W - L - R)).toFixed(1);
+    const Y = (y) => (T + (1 - (y - y0) / Math.max(1e-9, y1 - y0)) * (H - T - B)).toFixed(1);
+    const d = pts.map((p, i) => `${i ? 'L' : 'M'}${X(+p[0])},${Y(+p[1])}`).join('');
+    const last = pts[pts.length - 1];
+    return `<div class="pv-spark"><div class="pv-sl">${esc(sr.label || '')} · ${esc(fmtNum(+pts[0][1]))} (${esc(String(pts[0][0]))}) → <b>${esc(fmtNum(+last[1]))}</b> (${esc(String(last[0]))})</div>
+      <svg viewBox="0 0 ${W} ${H}" preserveAspectRatio="none" aria-label="Trend"><path d="${d}" fill="none" stroke="#286dc0" stroke-width="1.8" vector-effect="non-scaling-stroke"/>
+      <circle cx="${X(+last[0])}" cy="${Y(+last[1])}" r="2.6" fill="#286dc0"/><text x="${L}" y="${H - 2}" font-size="9" fill="#64748b">${esc(String(x0))}</text>
+      <text x="${W - R}" y="${H - 2}" font-size="9" fill="#64748b" text-anchor="end">${esc(String(x1))}</text></svg></div>`;
+  }
+  function tableHTML(t) {
+    if (!t || !Array.isArray(t.columns)) return '';
+    const head = t.columns.map((c) => `<th>${esc(c)}</th>`).join('');
+    const rows = (t.rows || []).map((r) => `<tr>${r.map((c) => `<td>${esc(c)}</td>`).join('')}</tr>`).join('');
+    const more = t.n_rows > (t.rows || []).length ? `<div class="muted small">${Number(t.n_rows).toLocaleString()} rows, ${t.n_cols} columns; the CSV has them all</div>` : '';
+    return `<div class="pv-tbl"><table><thead><tr>${head}</tr></thead><tbody>${rows}</tbody></table></div>${more}`;
+  }
   function pvLine(ref) {
     const it = state.previews[ref]; if (!it) return '';
     if (it.status === 'pending') return '<span class="pv-dot run"></span><span class="muted">Preparing a map preview...</span>';
     if (it.status !== 'ready') return `<span class="pv-dot"></span><span class="muted">No map preview: ${esc(it.note || '')}</span>`;
+    const csv0 = it.csv ? ` <a class="pv-a" href="api/session/${encodeURIComponent(state.sid)}/sample/${encodeURIComponent(it.csv)}" download>CSV</a>` : '';
+    const open = state.pvOpen.has(ref);
+    const tblBtn = it.table ? ` <button class="pv-a" data-pvact="table" data-ref="${esc(ref)}">${open ? 'Hide table' : 'View table'}</button>` : '';
+    const extra = `${sparkSVG(it.series)}${open ? tableHTML(it.table) : ''}`;
+    if (it.kind === 'table') return `<span class="pv-dot ok"></span><span>Table preview</span><span class="muted"> · ${esc(it.note || '')}</span>${tblBtn}${csv0}${extra}`;
     if (!(it.layers || []).length) return `<span class="pv-dot ok"></span><span class="muted">${esc(it.note || 'Already on the map')}</span>`;
     const ids = (it.layers || []).map((l) => l.id); const vis = ids.some((id) => state.layers.get(id)?.visible);
     const csv = it.csv ? ` <a class="pv-a" href="api/session/${encodeURIComponent(state.sid)}/sample/${encodeURIComponent(it.csv)}" download>CSV</a>` : '';
     return `<span class="pv-dot ok"></span><span>${it.kind === 'slice' ? 'Sample on map' : 'On map'}</span><span class="muted"> · ${esc(it.note || '')}</span>
-      <button class="pv-a" data-pvact="toggle" data-ref="${esc(ref)}">${vis ? 'Hide' : 'Show'}</button>${csv}`;
+      <button class="pv-a" data-pvact="toggle" data-ref="${esc(ref)}">${vis ? 'Hide' : 'Show'}</button>${tblBtn}${csv}${extra}`;
   }
   function refreshPreviewLines() {
     $$('.pv[data-pv]').forEach((el) => { el.innerHTML = pvLine(el.dataset.pv); });
     bindPreviewButtons();
   }
   function bindPreviewButtons() {
+    $$('[data-pvact=table]').forEach((b) => { b.onclick = (e) => {
+      e.stopPropagation(); const r = b.dataset.ref; state.pvOpen.has(r) ? state.pvOpen.delete(r) : state.pvOpen.add(r); refreshPreviewLines();
+    }; });
     $$('[data-pvact=toggle]').forEach((b) => { b.onclick = (e) => {
       e.stopPropagation(); const it = state.previews[b.dataset.ref]; if (!it) return;
       const ids = (it.layers || []).map((l) => l.id).filter((id) => state.layers.has(id));

@@ -712,6 +712,201 @@ def _aqs(s, pick, meta):
             "note": "; ".join(notes) + " (EPA daily values, downloaded for this session)"}
 
 
+# ---------------------------------------------------------------------------- non-spatial tables
+def _towns(s) -> dict[str, dict]:
+    """Town (county subdivision) shapes in and around the study area, keyed by lower-case name."""
+    sb = s.scope.get("bbox")
+    if not sb:
+        return {}
+    fc = _retry(lambda: sources.arcgis_query(f"{sources.TIGER}/22", sb, max_features=3000,
+                                             simplify_deg=max(0.0001, min(0.003, (sb[2] - sb[0]) / 4000))))
+    out = {}
+    for f in fc.get("features", []):
+        p = f.get("properties") or {}
+        name = str(p.get("BASENAME") or p.get("NAME") or "").strip()
+        if name:
+            out[name.lower()] = {"type": "Feature", "geometry": f["geometry"], "properties": {"name": name}}
+    return out
+
+
+def _table_result(s, pick, meta, raw: bytes, fname: str, src: str):
+    """A downloaded table: points if it has coordinates, a joined map if it has place codes or town names,
+    otherwise a table preview (and a trend line when it has years). Always a CSV of what was read."""
+    low = fname.lower()
+    if low.endswith((".csv", ".tsv", ".tab", ".txt")):
+        try:
+            feats = downloads._csv(raw)
+            layer, note = _vector_layer(s, pick, feats, short_title(meta.get("title") or pick.get("title") or fname), src)
+            if layer:
+                return {"status": "ready", "kind": "slice", "layers": [layer], "note": note or f"{layer['n']} points"}
+        except downloads.DownloadError:
+            pass  # no coordinates: try place codes next
+    joined = _table_layers(s, pick, meta, raw, fname if not low.endswith(".tab") else fname[:-4] + ".csv", src)
+    if joined:
+        return joined
+    tbls = tables.read_tables(raw, fname if not low.endswith((".tab", ".tsv")) else fname.rsplit(".", 1)[0] + ".csv")
+    tname, rows = max(tbls, key=lambda t: len(t[1]), default=("", []))
+    if len(rows) < 2:
+        return None
+    h = tables._header_row(rows)
+    header, body = rows[h], rows[h + 1:]
+    towns = _towns(s) if any(tables.TOWN_COLUMN.match(c.strip()) for c in header) else {}
+    if towns:
+        tc = tables.detect_town(header, body, set(towns))
+        if tc is not None:
+            nodes = {n["id"]: n.get("label", "") for n in (s.graph or {}).get("nodes", [])}
+            text = " ".join([_scope_text(s), " ".join(nodes.get(f, "") for f in pick.get("factors") or []), pick.get("why") or ""])
+            years = tables.year_columns(header)
+            end = _study_year(s.scope) or 9999
+            cols = ([max((j for y, j in years if y <= end), default=years[-1][1])] if years
+                    else tables.value_columns(header, body, tc, {}, text, k=1))
+            if cols:
+                c = cols[0]
+                agg: dict[str, list[float]] = {}
+                for r in body:
+                    if len(r) > max(tc, c) and r[tc].strip().lower() in towns and tables._num(r[c]) is not None:
+                        agg.setdefault(r[tc].strip().lower(), []).append(tables._num(r[c]))
+                feats = [{"type": "Feature", "geometry": towns[t]["geometry"],
+                          "properties": {"town": towns[t]["properties"]["name"], header[c]: round(sum(v) / len(v), 4), "rows": len(v)}}
+                         for t, v in agg.items()]
+                layer, _n = _vector_layer(s, pick, feats, f"{short_title(meta.get('title') or '')}: {header[c].strip('_ ')}"[:100], src,
+                                          _paint(header[c], [f["properties"][header[c]] for f in feats], "blues",
+                                                 f"{header[c].strip('_ ')} (per town)"), "table preview")
+                if layer:
+                    town_rows = [r for r in body if len(r) > tc and r[tc].strip().lower() in towns]
+                    return {"status": "ready", "kind": "slice", "layers": [layer], "csv": _csv(s, pick, [header] + body[:50000]),
+                            "table": tables.preview(header, body), "series": tables.wide_series(header, town_rows, "Towns in the area"),
+                            "note": f"{fname}: {len(feats)} towns, {header[c].strip('_ ')}"}
+    nodes = {n["id"]: n.get("label", "") for n in (s.graph or {}).get("nodes", [])}
+    text = " ".join([_scope_text(s), " ".join(nodes.get(f, "") for f in pick.get("factors") or []), pick.get("why") or ""])
+    vc = tables.value_columns(header, body, -1, tables.dictionary(tbls), text, k=1)
+    trend = tables.wide_series(header, body) or (tables.series(header, body, vc[0]) if vc else None)
+    return {"status": "ready", "kind": "table", "layers": [], "csv": _csv(s, pick, [header] + body[:50000]),
+            "table": tables.preview(header, body), "series": trend,
+            "note": f"{fname}: {len(body):,} rows, {len(header)} columns (a table without places to map)"}
+
+
+def _download_table(s, pick, meta, url: str, fname: str, src: str):
+    d = downloads.session_dir(s.sid)
+    d.mkdir(parents=True, exist_ok=True)
+    raw_path = d / ("pv-" + re.sub(r"[^a-z0-9.]+", "-", fname.lower())[-60:])
+    try:
+        downloads.fetch(url, raw_path, MAX_RAW_BYTES)
+        return _table_result(s, pick, meta, raw_path.read_bytes(), fname, src)
+    finally:
+        raw_path.unlink(missing_ok=True)
+
+
+def _socrata(s, pick, meta):
+    """A table on a Socrata open data portal: its CSV (up to 50,000 rows) through the SODA API."""
+    soda = meta.get("soda") or ""
+    if not re.fullmatch(r"https://[a-z0-9.-]+/resource/[a-z0-9]{4}-[a-z0-9]{4}\.csv", soda):
+        return None
+    dom = soda.split("/")[2]
+    return _download_table(s, pick, meta, soda + "?$limit=50000", soda.rsplit("/", 1)[-1],
+                           f"{dom} open data (downloaded for this session)")
+
+
+def _dataverse(s, pick, meta):
+    """A Dataverse dataset: its first public tabular file (CSV, TSV, Excel) under 100 MB."""
+    doi, host = meta.get("doi") or "", meta.get("dataverse_host") or "dataverse.harvard.edu"
+    if not doi.startswith("doi:") or host not in ("dataverse.harvard.edu", "dataverse.yale.edu"):
+        return None
+    j = requests.get(f"https://{host}/api/datasets/:persistentId/", params={"persistentId": doi}, headers=UA, timeout=30).json()
+    files = (((j.get("data") or {}).get("latestVersion") or {}).get("files")) or []
+    cands = []
+    for f in files:
+        df = f.get("dataFile") or {}
+        name = df.get("originalFileName") or df.get("filename") or ""
+        size = df.get("originalFileSize") or df.get("filesize") or 0
+        if f.get("restricted") or size > MAX_RAW_BYTES or not name.lower().endswith((".csv", ".tab", ".tsv", ".xlsx", ".zip")):
+            continue
+        cands.append((name.lower().endswith((".csv", ".tab", ".tsv", ".xlsx")), -size, df.get("id"), name))
+    if not cands:
+        return {"status": "none", "note": "No public table file under 100 MB in this dataset"}
+    cands.sort(reverse=True)
+    _ok, _sz, fid, name = cands[0]
+    return _download_table(s, pick, meta, f"https://{host}/api/access/datafile/{fid}?format=original", name,
+                           f"{host} file {name} (downloaded for this session)")
+
+
+def _in_ring(x, y, ring) -> bool:
+    inside = False
+    for i in range(len(ring) - 1):
+        (x1, y1), (x2, y2) = ring[i][:2], ring[i + 1][:2]
+        if (y1 > y) != (y2 > y) and x < (x2 - x1) * (y - y1) / (y2 - y1 + 1e-12) + x1:
+            inside = not inside
+    return inside
+
+
+def _contains(geom: dict, x: float, y: float) -> bool:
+    polys = [geom["coordinates"]] if geom.get("type") == "Polygon" else geom.get("coordinates", []) if geom.get("type") == "MultiPolygon" else []
+    return any(p and _in_ring(x, y, p[0]) and not any(_in_ring(x, y, h) for h in p[1:]) for p in polys)
+
+
+def _countries_at(sb, shapes: dict, keep) -> list[str]:
+    """Countries containing the study area's centre and a grid of points inside it, most points first (at most two)."""
+    pts = [(sb[0] + (sb[2] - sb[0]) * fx, sb[1] + (sb[3] - sb[1]) * fy) for fx in (0.5, 0.25, 0.75) for fy in (0.5, 0.25, 0.75)]
+    count: dict[str, int] = {}
+    for iso, f in shapes.items():
+        if iso not in keep:
+            continue
+        fb = geojson_bbox(f["geometry"])
+        if not fb or fb[2] < sb[0] or fb[0] > sb[2] or fb[3] < sb[1] or fb[1] > sb[3]:
+            continue
+        n = sum(_contains(f["geometry"], x, y) for x, y in pts)
+        if n:
+            count[iso] = n
+    return [iso for iso, _n in sorted(count.items(), key=lambda kv: -kv[1])[:2]]
+
+
+def _worldbank(s, pick, meta):
+    """A World Development Indicator: latest value per country in the study window, and the trend for the study's countries."""
+    iid = meta.get("wb_indicator") or ""
+    if not re.fullmatch(r"[A-Za-z0-9._]{3,40}", iid):
+        return None
+    a = re.match(r"\d{4}", str(s.scope.get("time_start") or ""))
+    b = re.match(r"\d{4}", str(s.scope.get("time_end") or ""))
+    y1 = min(int(b.group()) if b else dt.date.today().year, dt.date.today().year)
+    y0 = int(a.group()) if a else y1 - 15
+    y0 = min(y0, y1 - 4)  # at least five years for a trend
+    r = requests.get(f"https://api.worldbank.org/v2/country/all/indicator/{iid}",
+                     params={"format": "json", "date": f"{y0}:{y1}", "per_page": 20000}, headers=UA, timeout=40)
+    r.raise_for_status()
+    data = r.json()
+    rows = data[1] if isinstance(data, list) and len(data) > 1 and data[1] else []
+    shapes = tables.countries()
+    latest: dict[str, tuple[int, float]] = {}
+    by_country: dict[str, list] = {}
+    for x in rows:
+        iso, v = x.get("countryiso3code"), x.get("value")
+        if iso not in shapes or v is None or not str(x.get("date", "")).isdigit():
+            continue
+        yr = int(x["date"])
+        by_country.setdefault(iso, []).append([yr, v])
+        if iso not in latest or yr > latest[iso][0]:
+            latest[iso] = (yr, v)
+    if not latest:
+        return {"status": "none", "note": f"No World Bank values for {y0} to {y1}"}
+    name = meta.get("title") or iid
+    feats = [{"type": "Feature", "geometry": shapes[k]["geometry"],
+              "properties": {"iso": k, "name": shapes[k]["properties"]["name"], "value": v, "year": yr}} for k, (yr, v) in latest.items()]
+    layer, _n = _vector_layer(s, pick, feats, f"World Bank: {short_title(name)}"[:100], "World Bank WDI (API)",
+                              _paint("value", [f["properties"]["value"] for f in feats], "greens", f"{name}, latest year in {y0} to {y1}"),
+                              "World Bank preview")
+    sb = s.scope.get("bbox")
+    near = _countries_at(sb, shapes, by_country) if sb else []  # the study's countries get a trend line in the card
+    series = [{"label": shapes[iso]["properties"]["name"], "points": sorted(by_country[iso])} for iso in near]
+    rows_out = [["iso", "country", "year", "value"]] + [[k, shapes[k]["properties"]["name"], yr, v]
+                                                       for k, pts in by_country.items() for yr, v in sorted(pts)]
+    res = {"status": "ready", "kind": "slice", "layers": [layer] if layer else [], "csv": _csv(s, pick, rows_out),
+           "note": f"{len(latest)} countries, {y0} to {y1}"}
+    if series:
+        res["series"] = series[0] if len(series) == 1 else {"label": series[0]["label"], "points": series[0]["points"],
+                                                            "others": series[1:]}
+    return res
+
+
 BY_REF = {"cur:acs": _acs, "cur:tiger": _tiger, "cur:nclimgrid": _nclimgrid, "cur:places": _places, "cur:aqs": _aqs}
 
 
@@ -729,7 +924,8 @@ def _reason(pick, meta) -> str:
 
 def build(s, pick) -> dict:
     meta = pick.get("meta") or catalog_mod.load().get(pick["ref"]) or {}
-    for fn in (_geolibre, _service, BY_REF.get(pick["ref"]), _arcgis, _stac, _direct_file, _landing):
+    for fn in (_geolibre, _service, BY_REF.get(pick["ref"]), _worldbank, _socrata, _dataverse, _arcgis, _stac,
+               _direct_file, _landing):
         if fn is None:
             continue
         r = fn(s, pick, meta)
@@ -795,6 +991,6 @@ def start(s, refs: list[str] | None = None, sync: bool = False) -> bool:
 
 def public(s) -> dict:
     with s.plock:
-        items = {ref: {k: v for k, v in r.items() if k in ("status", "kind", "note", "layers", "csv")}
+        items = {ref: {k: v for k, v in r.items() if k in ("status", "kind", "note", "layers", "csv", "table", "series")}
                  for ref, r in s.previews.items()}
         return {"running": s.preview_running, "items": items}
