@@ -98,7 +98,7 @@
     "Block-group scope with ACS and CDC PLACES",
     "Block groups on the map"
    ],
-   "recorded": "2026-11-08",
+   "recorded": "2026-11-09",
    "model": "gpt-6.1-terra",
    "group": "yale",
    "program": "Urban Resources Initiative (YSE)",
@@ -116,7 +116,7 @@
     "Georeferencing old maps as a method",
     "A window from 1846 to today"
    ],
-   "recorded": "2026-11-08",
+   "recorded": "2026-11-09",
    "model": "gpt-6.1-terra",
    "group": "yale",
    "program": "New Haven Digital Atlas (YCGS app)",
@@ -134,7 +134,7 @@
     "YCGS drone lidar to check 2026",
     "Aerial imagery of the forest"
    ],
-   "recorded": "2026-11-08",
+   "recorded": "2026-11-09",
    "model": "gpt-6.1-terra",
    "group": "yale",
    "program": "YCGS lidar biomass project",
@@ -152,7 +152,7 @@
     "Sentinel-5P NO2 and satellite PM2.5",
     "Province boundaries for zonal statistics"
    ],
-   "recorded": "2026-11-08",
+   "recorded": "2026-11-09",
    "model": "gpt-6.1-terra",
    "group": "yale",
    "program": "Environmental Performance Index",
@@ -170,7 +170,7 @@
     "Connecticut counties versus planning regions",
     "Scope set to the whole state"
    ],
-   "recorded": "2026-11-08",
+   "recorded": "2026-11-09",
    "model": "gpt-6.1-terra",
    "group": "yale",
    "program": "Yale Climate Opinion Maps",
@@ -188,7 +188,7 @@
     "Yale's Planet license for plant-level imagery",
     "Monthly panel design"
    ],
-   "recorded": "2026-11-08",
+   "recorded": "2026-11-09",
    "model": "gpt-6.1-terra",
    "group": "yale",
    "program": "Geospatial measurement of economic activity",

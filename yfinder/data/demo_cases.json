@@ -549,12 +549,14 @@
      "sentinel-5p"
     ],
     "methods_any": [
-     "zonal",
-     "population-weight",
-     "population weight",
-     "trend",
+     "change",
+     "differenc",
      "difference",
-     "change"
+     "population weight",
+     "population-weight",
+     "summar",
+     "trend",
+     "zonal"
     ]
    }
   },
@@ -592,9 +594,12 @@
      -72.7
     ],
     "scope_unit_any": [
+     "counties",
      "county",
      "region",
-     "town"
+     "regions",
+     "town",
+     "towns"
     ],
     "picks_min": 3,
     "no_unverified": true,
