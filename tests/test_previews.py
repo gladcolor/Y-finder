@@ -240,3 +240,18 @@ def test_airdata_monitors_near_the_study_area(s, monkeypatch):
     assert props[0]["properties"]["mean_PM2.5"] == 31.5                                # POCs averaged per day, then over days
     assert "24-hour mean" in r["layers"][0]["paint"]["label"] and not list(downloads.session_dir(s.sid).glob("pv-*"))
     assert [p[2] for p in previews._pollutants("ozone and NO2 near highways")] == ["Ozone", "NO2"]
+
+
+def test_gadm_boundaries_for_the_study_country(s, monkeypatch):
+    from yfinder import tables
+    sq = lambda x, y, d: {"type": "Polygon", "coordinates": [[[x, y], [x + d, y], [x + d, y + d], [x, y + d], [x, y]]]}
+    monkeypatch.setattr(tables, "countries", lambda: {"PAK": {"type": "Feature", "geometry": sq(60, 23, 18), "properties": {"name": "Pakistan"}}})
+    got = []
+    prov = {"type": "FeatureCollection", "features": [{"type": "Feature", "properties": {"NAME_1": n}, "geometry": sq(61 + i, 25, 1)}
+                                                      for i, n in enumerate(["Punjab", "Sindh", "Balochistan"])]}
+    monkeypatch.setattr(downloads, "fetch", lambda url, dest, max_bytes=None: got.append(url) or dest.write_text(json.dumps(prov)) or {})
+    s.scope = {"bbox": [61, 24, 77, 36]}
+    r = previews.build(s, _pick("cur:gadm"))
+    assert got == ["https://geodata.ucdavis.edu/gadm/gadm4.1/json/gadm41_PAK_1.json"]      # a big study area: provinces
+    assert r["layers"][0]["n"] == 3 and r["layers"][0]["style"] == "boundary" and "academic" in r["layers"][0]["source"]
+    assert not list(downloads.session_dir(s.sid).glob("pv-*"))

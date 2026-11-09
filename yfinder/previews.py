@@ -911,7 +911,40 @@ def _worldbank(s, pick, meta):
     return res
 
 
-BY_REF = {"cur:acs": _acs, "cur:tiger": _tiger, "cur:nclimgrid": _nclimgrid, "cur:places": _places, "cur:aqs": _aqs}
+def _gadm(s, pick, meta):
+    """GADM boundaries for the country the study area is in: provinces (districts for a small study area)."""
+    sb = s.scope.get("bbox")
+    if not sb:
+        return {"status": "none", "note": "Set a study area to preview boundaries"}
+    shapes = tables.countries()
+    isos = _countries_at(sb, shapes, shapes)
+    if not isos:
+        return {"status": "none", "note": "Could not tell which country the study area is in"}
+    iso, (w, h) = isos[0], bbox_size_km(sb)
+    for level in ((2, 1) if w * h < 60000 else (1,)):
+        url = f"https://geodata.ucdavis.edu/gadm/gadm4.1/json/gadm41_{iso}_{level}.json"
+        d = downloads.session_dir(s.sid)
+        d.mkdir(parents=True, exist_ok=True)
+        raw = d / f"pv-gadm-{iso}-{level}.json"
+        try:
+            downloads.fetch(url, raw, MAX_RAW_BYTES)
+            feats = downloads._geojson(raw.read_bytes())
+        except downloads.DownloadError:
+            continue
+        finally:
+            raw.unlink(missing_ok=True)
+        unit = {1: "provinces or states", 2: "districts or counties"}[level]
+        name = shapes[iso]["properties"]["name"]
+        layer, note = _vector_layer(s, pick, feats, f"GADM {unit}: {name}", "GADM 4.1 (free for academic and non-commercial use)",
+                                    None, "GADM preview")
+        if layer:
+            layer["style"] = "boundary"
+            return {"status": "ready", "kind": "slice", "layers": [layer],
+                    "note": note or f"{layer['n']} {unit} of {name} (level {level})"}
+    return {"status": "none", "note": "GADM did not answer for this country"}
+
+
+BY_REF = {"cur:acs": _acs, "cur:tiger": _tiger, "cur:nclimgrid": _nclimgrid, "cur:places": _places, "cur:aqs": _aqs, "cur:gadm": _gadm}
 
 
 def _reason(pick, meta) -> str:
