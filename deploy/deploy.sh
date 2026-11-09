@@ -43,6 +43,10 @@ else
   ssh "$HOST" "$APP/venv/bin/pip install -q -r $APP/requirements.txt"
 fi
 
+# Y-finder's own browser (yfinder/browser.py): headless Chromium outside $APP, so deploys do not copy it.
+# Installing is a no-op when this Playwright version's build is already there. The unit file carries the path.
+ssh "$HOST" "PLAYWRIGHT_BROWSERS_PATH=/opt/yfinder-browsers $APP/venv/bin/python -m playwright install --with-deps chromium-headless-shell >/dev/null &&   chmod -R a+rX /opt/yfinder-browsers &&   if ! cmp -s $APP/deploy/yfinder.service /etc/systemd/system/yfinder.service; then cp $APP/deploy/yfinder.service /etc/systemd/system/ && systemctl daemon-reload; fi"
+
 ssh "$HOST" "chown -R root:yfinder $APP && chmod -R g+rX $APP && chown -R yfinder:yfinder $APP/handbooks && systemctl restart yfinder && sleep 3 && \
   curl -s -o /dev/null -w 'local %{http_code}\n' http://127.0.0.1:8060/healthz"
 curl -s -o /dev/null -w "public %{http_code}\n" https://app.researcharchitect.ai/y-finder/healthz

@@ -11,6 +11,7 @@ EnvironmentFile=/etc/yfinder.env
 Environment=YFINDER_RUNTIME_DIR=/var/lib/yfinder
 Environment=YFINDER_PUBLIC_BASE=https://app.researcharchitect.ai/y-finder/
 Environment=PYTHONUNBUFFERED=1
+Environment=PLAYWRIGHT_BROWSERS_PATH=/opt/yfinder-browsers
 ExecStart=/opt/yfinder/venv/bin/gunicorn "yfinder.app:create_app()" -w 1 --threads 16 -b 127.0.0.1:8060 --timeout 300 --graceful-timeout 30 --access-logfile -
 Restart=always
 RestartSec=3

@@ -25,6 +25,7 @@ import zipfile
 
 import requests
 
+from . import browser
 from . import catalog as catalog_mod
 from . import downloads, geolibre, session, sources, tables, vector
 from .geo import bbox_size_km, coverage_fraction, geojson_bbox
@@ -33,6 +34,7 @@ from .session import save_layer
 MAX_PICKS = 10
 MAX_RAW_BYTES = 100 * 1024 * 1024     # "download a small data volume (100 MB)" for sources without a service
 _slots = threading.BoundedSemaphore(4)  # previews fetching at once on the whole server
+MAX_BROWSER = 6                         # pages per session handed to Y-finder's browser
 UA = {"User-Agent": "Y-finder/0.1 (YCGS data guide; +https://app.researcharchitect.ai/y-finder/)"}
 TIGER2020 = "https://tigerweb.geo.census.gov/arcgis/rest/services/TIGERweb/tigerWMS_Census2020/MapServer"
 ESRI_ACS_INCOME = ("https://P3ePLMYs2RVChkJx.svcs.arcgis.com/P3ePLMYs2RVChkJx/arcgis/rest/services/"
@@ -556,39 +558,63 @@ def _landing(s, pick, meta):
     try:
         r = requests.get(url, headers=UA, timeout=(6, 20))  # some sites drop connections from data centres
     except requests.RequestException:
-        return {"status": "none", "note": "The source site did not answer the Y-finder server; open it with the Source link"}
+        return {"status": "none", "note": "The source site did not answer the Y-finder server; open it with the Source link",
+                "retry_browser": True}
     if r.status_code != 200 or "html" not in (r.headers.get("Content-Type") or "") or not sources.safe_url(r.url):
         return None
     links = _data_links(r.url, r.text[:3_000_000], _study_year(s.scope))
-    for link in links[:3]:
-        fname = link.split("?")[0].rsplit("/", 1)[-1]
+    res, _why = _try_links(s, pick, meta, links[:3])
+    return res
+
+
+def _read_raw(s, pick, meta, raw_path, fname: str, host: str):
+    """A downloaded file as map layers (GeoJSON, KML, zipped shapefile) or a table joined to places, else None."""
+    raw = raw_path.read_bytes()
+    low = fname.lower()
+    if low.endswith((".geojson", ".kml", ".kmz")) or (low.endswith(".zip") and b".shp" in raw[:200000]) or raw[:200].lstrip().startswith(b"{"):
+        fmt = downloads.sniff(fname, "", raw[:4096])
+        parts = downloads.read_layers(raw_path, fmt, fname)
+        layers = []
+        for stem, feats in parts[:3]:
+            layer, _n = _vector_layer(s, pick, feats, f"{short_title(meta.get('title') or pick.get('title') or '')}: {stem}"[:100],
+                                      f"Downloaded from {host} (kept for this session only)")
+            if layer:
+                layers.append(layer)
+        if layers:
+            return {"status": "ready", "kind": "slice", "layers": layers, "note": f"{fname} downloaded for this session"}
+        return None
+    # tables: points from coordinates, a map joined on place codes or town names, else a table preview
+    return _table_result(s, pick, meta, raw, fname, f"{fname} from {host} (downloaded for this session)")
+
+
+def _try_links(s, pick, meta, links: list[str], cookies: dict | None = None, progress=None):
+    """Download the links in order (up to 100 MB each) until one becomes a layer or a table: (result, last problem)."""
+    why = None
+    for link in links:
+        fname = re.sub(r"[^\w.\-]+", "-", link.split("?")[0].rsplit("/", 1)[-1])[-80:] or "download"
+        host = link.split("/")[2]
+        if progress:
+            progress(f"Downloading {fname} from {host}")
         d = downloads.session_dir(s.sid)
         d.mkdir(parents=True, exist_ok=True)
         raw_path = d / ("pv-" + re.sub(r"[^a-z0-9.]+", "-", fname.lower())[-60:])
         try:
-            downloads.fetch(link, raw_path, MAX_RAW_BYTES)
-            raw = raw_path.read_bytes()
-            low = fname.lower()
-            if low.endswith((".geojson", ".kml", ".kmz")) or (low.endswith(".zip") and b".shp" in raw[:200000]):
-                fmt = downloads.sniff(fname, "", raw[:4096])
-                parts = downloads.read_layers(raw_path, fmt, fname)
-                layers = []
-                for stem, feats in parts[:3]:
-                    layer, _n = _vector_layer(s, pick, feats, f"{short_title(meta.get('title') or '')}: {stem}"[:100],
-                                              f"Downloaded from {link.split('/')[2]} (kept for this session only)")
-                    if layer:
-                        layers.append(layer)
-                if layers:
-                    return {"status": "ready", "kind": "slice", "layers": layers, "note": f"{fname} downloaded for this session"}
-                continue
-            res = _table_layers(s, pick, meta, raw, fname, f"{fname} from {link.split('/')[2]} (downloaded for this session)")
+            got = downloads.fetch(link, raw_path, MAX_RAW_BYTES, cookies=cookies) if cookies else downloads.fetch(link, raw_path, MAX_RAW_BYTES)
+            name = got.get("name") or fname if isinstance(got, dict) else fname
+            if progress:
+                progress(f"Reading {name}")
+            res = _read_raw(s, pick, meta, raw_path, name if "." in name else fname, host)
             if res:
-                return res
-        except (downloads.DownloadError, tables.TableError, requests.RequestException, ValueError, KeyError):
-            continue
+                return res, None
+            why = f"found {name} on {host}, but it has nothing Y-finder can draw or tabulate"
+        except downloads.DownloadError as e:
+            msg = str(e)
+            why = f"found {fname} on {host}, but {msg[:1].lower() + msg[1:]}"
+        except (tables.TableError, requests.RequestException, ValueError, KeyError, OSError, zipfile.BadZipFile) as e:
+            why = f"found {fname} on {host}, but could not read it ({type(e).__name__})"
         finally:
             raw_path.unlink(missing_ok=True)  # only the map layer and the CSV slice are kept
-    return None
+    return None, why
 
 
 # ---------------------------------------------------------------------------- EPA AirData (pre-generated daily files)
@@ -969,7 +995,7 @@ def build(s, pick) -> dict:
         if r is not None:
             break
     else:
-        r = {"status": "none", "note": _reason(pick, meta)}
+        r = {"status": "none", "note": _reason(pick, meta), "fallthrough": True}
     for l in r.get("layers", []):
         if pick.get("role") != "core":
             l["hidden"] = True  # supporting data waits in the Layers panel
@@ -994,8 +1020,120 @@ def _one(s, pick, sig):
         except Exception as e:  # one slow or broken source must not stop the others
             r = {"status": "error", "note": f"Preview failed ({type(e).__name__})"}
         r.update(at=time.time(), sig=sig)
+        escalate = r.pop("fallthrough", False) | r.pop("retry_browser", False)
+        handoff = escalate and r.get("status") == "none" and _browser_ok(s, pick)
         with s.plock:
+            if handoff:
+                s.browser_tries += 1
+                n = browser.ahead()
+                r = {"status": "pending", "browser": True, "sig": sig, "at": time.time(), "before": r.get("note"),
+                     "step": f"Waiting for Y-finder's browser ({n} ahead)" if n else "Starting Y-finder's browser"}
             s.previews[pick["ref"]] = r
+        if handoff:  # outside the lock: the browser reports back on its own thread
+            _submit_browser(s, pick, sig)
+
+
+# ---------------------------------------------------------------------------- Y-finder's browser (pages that need a person)
+def _browser_ok(s, pick) -> bool:
+    """Open, public pages only: no Earth Engine, licensed, registration or request-only sources, and a few per session."""
+    if not browser.available() or s.browser_tries >= MAX_BROWSER:
+        return False
+    meta = pick.get("meta") or catalog_mod.load().get(pick["ref"]) or {}
+    url = meta.get("url") or pick.get("url") or ""
+    acc = (meta.get("access_class") or pick.get("access_class") or "").lower()
+    if pick["ref"].startswith(("gee:", "geec:", "pc:")) or acc in ("yale", "paid", "request"):
+        return False
+    if "registration" in (meta.get("access") or "").lower() or "account" in (meta.get("access") or "").lower():
+        return False
+    return url.startswith("https://") and sources.safe_url(url)
+
+
+def _step(s, ref: str, sig: str, text: str):
+    with s.plock:
+        cur = s.previews.get(ref)
+        if cur and cur.get("sig") == sig and cur.get("status") == "pending":
+            cur["step"] = text[:120]
+
+
+def _submit_browser(s, pick, sig):
+    meta = pick.get("meta") or catalog_mod.load().get(pick["ref"]) or {}
+    url = meta.get("url") or pick.get("url")
+    ref = pick["ref"]
+    browser.submit(url, lambda t: _step(s, ref, sig, t), lambda found: _browser_done(s, pick, meta, sig, found),
+                   year=_study_year(s.scope), alive=lambda: session.peek(s.sid) is s and (s.previews.get(ref) or {}).get("sig") == sig)
+
+
+def _from_browser(s, pick, meta, found: dict, progress) -> dict:
+    host = found.get("host") or "the site"
+    w = found.get("wall")
+    if w == "signin":
+        return {"status": "none", "note": f"{host} asks for a sign-in; Y-finder does not sign in for you. Use the Source link"}
+    if w == "robot":
+        return {"status": "none", "note": f"{host} shows a robot check or blocks automated visits; open it with the Source link"}
+    if w:
+        return {"status": "none", "note": f"Y-finder's browser could not open {host}; use the Source link"}
+    for svc in found.get("services") or []:
+        progress(f"Drawing the map service behind {host}")
+        try:
+            r = _arcgis_url(s, pick, svc, meta.get("title") or pick.get("title") or "")
+        except Exception:
+            r = None
+        if r and r.get("status") == "ready":
+            r["note"] = (r.get("note") or "Live map service") + f" (found by Y-finder's browser on {host})"
+            return r
+    for f in found.get("files") or []:
+        progress(f"Reading {f['name']}")
+        d = downloads.session_dir(s.sid)
+        d.mkdir(parents=True, exist_ok=True)
+        dest = d / ("pv-" + re.sub(r"[^a-z0-9.]+", "-", f["name"].lower())[-60:])
+        try:
+            os.replace(f["path"], dest)
+            res = _read_raw(s, pick, meta, dest, f["name"], host)
+            if res:
+                res["note"] += " by Y-finder's browser"
+                return res
+        except (tables.TableError, ValueError, KeyError, OSError, zipfile.BadZipFile, downloads.DownloadError):
+            pass
+        finally:
+            dest.unlink(missing_ok=True)
+    links = found.get("links") or []
+    if links:
+        res, why = _try_links(s, pick, meta, links[:4], cookies=found.get("cookies"), progress=progress)
+        if res:
+            res["note"] = res.get("note", "") + f" (found by Y-finder's browser on {host})"
+            return res
+        return {"status": "none", "note": f"Y-finder's browser {why or f'found no file it can read on {host}'}. Use the Source link"}
+    if found.get("rasters"):
+        return {"status": "none", "note": f"{host} offers raster files (GeoTIFF or NetCDF); Y-finder draws vector and table files for now"}
+    return {"status": "none", "note": f"Y-finder's browser opened {host} and found no data file to download; use the Source link"}
+
+
+def _browser_done(s, pick, meta, sig, found: dict):
+    ref = pick["ref"]
+    try:
+        if session.peek(s.sid) is not s:
+            return
+        with _slots:
+            try:
+                r = _from_browser(s, pick, meta, found, lambda t: _step(s, ref, sig, t))
+            except Exception as e:  # a broken file must not leave the card waiting
+                r = {"status": "none", "note": f"Y-finder's browser could not finish ({type(e).__name__}); use the Source link"}
+        r.update(at=time.time(), sig=sig, browser=True)
+        for l in r.get("layers", []):
+            if pick.get("role") != "core":
+                l["hidden"] = True
+        with s.plock:
+            cur = s.previews.get(ref)
+            if not cur or cur.get("sig") != sig:
+                return  # the scope changed while the browser worked
+            for l in r.get("layers", []):
+                if l not in s.layers:
+                    s.layers.append(l)
+            s.previews[ref] = r
+    finally:
+        for f in found.get("files") or []:
+            import shutil
+            shutil.rmtree(f.get("dir") or "", ignore_errors=True)
 
 
 def start(s, refs: list[str] | None = None, sync: bool = False) -> bool:
@@ -1028,6 +1166,7 @@ def start(s, refs: list[str] | None = None, sync: bool = False) -> bool:
 
 def public(s) -> dict:
     with s.plock:
-        items = {ref: {k: v for k, v in r.items() if k in ("status", "kind", "note", "layers", "csv", "table", "series")}
+        items = {ref: {k: v for k, v in r.items() if k in ("status", "kind", "note", "layers", "csv", "table", "series", "step", "browser")}
                  for ref, r in s.previews.items()}
-        return {"running": s.preview_running, "items": items}
+        # the browser works after the first pass, so the page keeps asking while any card still waits
+        return {"running": s.preview_running or any(i.get("status") == "pending" for i in items.values()), "items": items}

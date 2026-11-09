@@ -448,60 +448,232 @@
    }
   },
   {
-   "id": "yale_forest",
+   "id": "yale_streams",
    "group": "yale",
-   "title": "Forest carbon at Yale-Myers Forest",
-   "field": "Forestry",
-   "program": "YCGS lidar biomass project",
-   "program_url": "https://geospatial.yale.edu/high-resolution-lidar-for-biomass-estimation-a-deep-dive-into-connecticuts-forest-carbon-stock",
-   "based_on": "YCGS compared 2016 and 2023 Connecticut lidar for forest carbon; its drone workshop flies Yale-Myers Forest",
-   "who": "Ana (fictional), YSE forestry student.",
+   "title": "Small streams behind Des Moines' drinking water",
+   "field": "Water policy",
+   "program": "YCGS maps of ephemeral streams",
+   "program_url": "https://geospatial.yale.edu/posts/2026-06-24-mapping-ephemeral-stream-contributions-to-us-watersheds",
+   "based_on": "A Yale study in Science modeled ephemeral streams across the U.S.; YCGS mapped how they feed drinking water in five states, Iowa among them",
+   "who": "Maya (fictional), joint law and environment (JD/MEM) student.",
    "shows": [
-    "Statewide lidar from 2016 and 2023",
-    "Field plots and GEDI to calibrate biomass",
-    "YCGS drone lidar to check 2026",
-    "Aerial imagery of the forest"
+    "Yale's ephemeral stream model joined to NHDPlus HR",
+    "Watersheds above the city's river intakes",
+    "Why intake locations are not public",
+    "A clear line between science and legal status"
    ],
    "steps": [
     {
      "type": "turn",
-     "message": "How did aboveground biomass change across Yale-Myers Forest in northeastern Connecticut between 2016 and 2023, and how could a YCGS drone lidar flight in 2026 check it?"
+     "message": "Des Moines draws its drinking water from the Raccoon and Des Moines rivers. How much of the stream network upstream is ephemeral, and how much of the river water do those streams supply now that the 2023 Sackett ruling narrowed Clean Water Act protection?"
+    },
+    {
+     "type": "ui",
+     "action": "tab",
+     "tab": "frame",
+     "note": "Hydrology and law in one graph: flow comes from the model, protection from the courts."
     },
     {
      "type": "ui",
      "action": "tab",
      "tab": "data",
-     "note": "Three scales: field plots, airborne lidar, drone lidar. YCGS rental rules bar DJI drones on federally funded projects."
-    },
-    {
-     "type": "turn",
-     "message": "Show me recent aerial imagery of the forest."
-    },
-    {
-     "type": "ui",
-     "action": "map",
-     "note": "Recent aerial imagery of Yale-Myers Forest."
+     "note": "The Yale model is a lookup table; it becomes a map only when joined to NHDPlus HR reaches."
     }
    ],
    "checks": {
     "graph_min_nodes": 5,
     "scope_contains": [
-     41.956,
-     -72.14
+     41.6,
+     -93.6
     ],
-    "scope_time_start_max": 2016,
     "picks_min": 3,
     "no_unverified": true,
     "picks_any": [
-     "cur:cteco",
-     "3dep"
+     "cur:ephemeral"
     ],
     "picks_any_2": [
-     "cur:ycgs_drone",
-     "cur:fia",
-     "gedi"
+     "cur:hydro",
+     "nhd",
+     "wbd"
     ],
-    "tool_used": "map_stac_preview"
+    "text_contains_any": [
+     "Sackett",
+     "Clean Water Act",
+     "clean-water-act",
+     "WOTUS",
+     "jurisdiction",
+     "protection"
+    ]
+   }
+  },
+  {
+   "id": "yale_vending",
+   "group": "yale",
+   "title": "Street vending arrests in Los Angeles",
+   "field": "Urban humanities",
+   "program": "Geographies of Arrest (YCGS with Leigh-Anna Hidalgo)",
+   "program_url": "https://geospatial.yale.edu/geographies-of-arrest-street-vending-race-and-policing-in-los-angeles",
+   "based_on": "YCGS screened more than 1.6 million LAPD arrest records from 2010 to 2024 for vending-related charges",
+   "who": "Sofia (fictional), research assistant on a street-vending book project.",
+   "shows": [
+    "LAPD arrest tables found on the city's open data portal",
+    "Charge codes are not verified incidents",
+    "Vending citations as a second record",
+    "Tract demographics for comparison"
+   ],
+   "steps": [
+    {
+     "type": "turn",
+     "message": "Where in Los Angeles were street-vending arrests concentrated from 2010 to 2024, how did that change after California decriminalized sidewalk vending in 2019, and how does it line up with the share of Latino and Black residents?"
+    },
+    {
+     "type": "ui",
+     "action": "tab",
+     "tab": "data",
+     "note": "Arrest records are tables with coordinates; a charge code is a record, not a verified sidewalk sale."
+    },
+    {
+     "type": "turn",
+     "message": "Map the census tracts of the City of Los Angeles."
+    },
+    {
+     "type": "ui",
+     "action": "map",
+     "note": "Tracts to aggregate the arrest points."
+    }
+   ],
+   "checks": {
+    "graph_min_nodes": 5,
+    "scope_contains": [
+     34.05,
+     -118.25
+    ],
+    "scope_time_start_max": 2010,
+    "picks_min": 3,
+    "no_unverified": true,
+    "picks_any": [
+     "data.lacity.org",
+     "yru6-6re4",
+     "amvf-fr72",
+     "7fnr-292v"
+    ],
+    "picks_any_2": [
+     "cur:acs",
+     "cur:dec2020"
+    ],
+    "text_contains_any": [
+     "charge",
+     "verified",
+     "classif",
+     "record"
+    ],
+    "tool_used": "search_tables"
+   }
+  },
+  {
+   "id": "yale_hgis",
+   "group": "yale",
+   "title": "Silver and treasuries in New Spain, 1701-1808",
+   "field": "History",
+   "program": "HGIS de las Indias (Bridging the Atlantic initiative)",
+   "program_url": "https://geospatial.yale.edu/posts/2026-03-10-bridging-the-atlantic-migrations-their-legacies",
+   "based_on": "YCGS supports HGIS de las Indias, an atlas of late colonial Spanish America whose data sit on Yale Dataverse",
+   "who": "Lucia (fictional), history PhD student.",
+   "shows": [
+    "Temporal gazetteers on Yale and Harvard Dataverse",
+    "Silver registries as tables to join",
+    "Modern layers fail the 1701-1808 window",
+    "Elevation for travel routes"
+   ],
+   "steps": [
+    {
+     "type": "turn",
+     "message": "How did silver registered at the royal treasuries of New Spain shift between mining districts from 1701 to 1808, and how far were the treasuries from the mining towns they served?"
+    },
+    {
+     "type": "ui",
+     "action": "tab",
+     "tab": "data",
+     "note": "Historical tables join to a gazetteer of places that existed in each year."
+    }
+   ],
+   "checks": {
+    "graph_min_nodes": 5,
+    "scope_contains": [
+     22.0,
+     -101.5
+    ],
+    "scope_time_start_max": 1710,
+    "picks_min": 3,
+    "no_unverified": true,
+    "picks_any": [
+     "cur:hgis_indias",
+     "10.60600/YU",
+     "FUSJD3",
+     "YPEU5E",
+     "NNFFCH"
+    ],
+    "methods_any": [
+     "gazetteer",
+     "join",
+     "distance",
+     "least-cost",
+     "least cost",
+     "network",
+     "georef",
+     "route"
+    ]
+   }
+  },
+  {
+   "id": "yale_tempo",
+   "group": "yale",
+   "title": "Rush hour in Los Angeles seen from orbit",
+   "field": "Course project",
+   "program": "Observing Earth from Space (EPS 362 / ENV 726)",
+   "program_url": "https://geospatial.yale.edu/observing-earth-from-space",
+   "based_on": "A 2025 student project in Prof. Xuhui Lee's course used TEMPO NO2 to study daily traffic in Los Angeles; YCGS hosts the course projects",
+   "who": "Jamie (fictional), Yale College junior taking the course.",
+   "shows": [
+    "Hourly TEMPO NO2 from a new geostationary satellite",
+    "EPA monitors with hourly values",
+    "Freeway counts behind a free account",
+    "Weekday versus weekend as the test"
+   ],
+   "steps": [
+    {
+     "type": "turn",
+     "message": "Does hourly TEMPO NO2 over Los Angeles follow weekday rush hours in 2024, and how does it compare with ground monitors and freeway traffic counts?"
+    },
+    {
+     "type": "ui",
+     "action": "tab",
+     "tab": "data",
+     "note": "Hourly satellite NO2 meets hourly monitors; the traffic counts need a free account."
+    }
+   ],
+   "checks": {
+    "graph_min_nodes": 5,
+    "scope_contains": [
+     34.05,
+     -118.25
+    ],
+    "picks_min": 3,
+    "no_unverified": true,
+    "picks_any": [
+     "tempo"
+    ],
+    "picks_any_2": [
+     "cur:aqs",
+     "cur:pems",
+     "aqs",
+     "pems"
+    ],
+    "text_contains_any": [
+     "hour",
+     "weekday",
+     "weekend"
+    ]
    }
   },
   {
@@ -678,6 +850,183 @@
      "buffer",
      "validat",
      "fixed effect"
+    ]
+   }
+  },
+  {
+   "id": "yale_forest",
+   "group": "yale",
+   "title": "Forest carbon at Yale-Myers Forest",
+   "field": "Forestry",
+   "program": "YCGS lidar biomass project",
+   "program_url": "https://geospatial.yale.edu/high-resolution-lidar-for-biomass-estimation-a-deep-dive-into-connecticuts-forest-carbon-stock",
+   "based_on": "YCGS compared 2016 and 2023 Connecticut lidar for forest carbon; its drone workshop flies Yale-Myers Forest",
+   "who": "Ana (fictional), YSE forestry student.",
+   "shows": [
+    "Statewide lidar from 2016 and 2023",
+    "Field plots and GEDI to calibrate biomass",
+    "YCGS drone lidar to check 2026",
+    "Aerial imagery of the forest"
+   ],
+   "steps": [
+    {
+     "type": "turn",
+     "message": "How did aboveground biomass change across Yale-Myers Forest in northeastern Connecticut between 2016 and 2023, and how could a YCGS drone lidar flight in 2026 check it?"
+    },
+    {
+     "type": "ui",
+     "action": "tab",
+     "tab": "data",
+     "note": "Three scales: field plots, airborne lidar, drone lidar. YCGS rental rules bar DJI drones on federally funded projects."
+    },
+    {
+     "type": "turn",
+     "message": "Show me recent aerial imagery of the forest."
+    },
+    {
+     "type": "ui",
+     "action": "map",
+     "note": "Recent aerial imagery of Yale-Myers Forest."
+    }
+   ],
+   "checks": {
+    "graph_min_nodes": 5,
+    "scope_contains": [
+     41.956,
+     -72.14
+    ],
+    "scope_time_start_max": 2016,
+    "picks_min": 3,
+    "no_unverified": true,
+    "picks_any": [
+     "cur:cteco",
+     "3dep"
+    ],
+    "picks_any_2": [
+     "cur:ycgs_drone",
+     "cur:fia",
+     "gedi"
+    ],
+    "tool_used": "map_stac_preview"
+   }
+  },
+  {
+   "id": "yale_congo",
+   "group": "yale",
+   "title": "Carbon in a Congo swamp forest reserve",
+   "field": "Tropical forestry",
+   "program": "YCGS tropical forest carbon project",
+   "program_url": "https://geospatial.yale.edu/unveiling-carbon-dynamics-in-african-tropical-forests-using-sentinel-2-spectral-indices",
+   "based_on": "YCGS mapped land cover and carbon in the Lac Tele-Likouala aux Herbes reserve, Republic of Congo, from 2018 to 2023 with Sentinel-2",
+   "who": "Amara (fictional), YSE master's student in tropical forestry.",
+   "shows": [
+    "Optical images under heavy cloud, and radar that sees through it",
+    "GEDI and global biomass maps to fill few field plots",
+    "The reserve boundary from WDPA",
+    "A carbon model as the method"
+   ],
+   "steps": [
+    {
+     "type": "turn",
+     "message": "How did land cover and carbon stocks change in the Lac Tele-Likouala aux Herbes protected area in the Republic of Congo between 2018 and 2023, given heavy cloud cover and very few field plots?"
+    },
+    {
+     "type": "ui",
+     "action": "tab",
+     "tab": "data",
+     "note": "Optical images, lidar samples and global maps each cover a different part of the problem."
+    },
+    {
+     "type": "turn",
+     "message": "Show a recent low-cloud Sentinel-2 view of the reserve."
+    },
+    {
+     "type": "ui",
+     "action": "map",
+     "note": "The best recent scene over the reserve."
+    }
+   ],
+   "checks": {
+    "graph_min_nodes": 5,
+    "scope_contains": [
+     1.3,
+     17.3
+    ],
+    "scope_time_start_max": 2018,
+    "picks_min": 3,
+    "no_unverified": true,
+    "picks_any": [
+     "sentinel-2",
+     "s2_sr",
+     "hls",
+     "sentinel-1",
+     "s1_grd",
+     "landsat"
+    ],
+    "picks_any_2": [
+     "gedi",
+     "worldcover",
+     "hansen",
+     "peat",
+     "wdpa",
+     "biomass"
+    ],
+    "tool_used": "map_stac_preview"
+   }
+  },
+  {
+   "id": "yale_ikon",
+   "group": "yale",
+   "title": "Checking coffee farmers' climate reports in Colombia",
+   "field": "Climate and agriculture",
+   "program": "Community sensing of climate impacts (Yale Planetary Solutions grant)",
+   "program_url": "https://planetarysolutions.yale.edu/scaling-community-sensing-and-recalling-of-historical-climate-impact-data",
+   "based_on": "A 2025 Yale Planetary Solutions project collects smallholder farmers' climate reports by SMS game and field-tested it in Cauca, Colombia",
+   "who": "Daniel (fictional), YSE doctoral student on the project.",
+   "shows": [
+    "Farmer reports are the project's own data",
+    "Satellite rainfall and vegetation to compare",
+    "Where coffee is grown",
+    "Municipalities as the unit"
+   ],
+   "steps": [
+    {
+     "type": "turn",
+     "message": "Coffee farmers in Cauca, Colombia, report drought and heavy-rain losses by SMS. Which satellite and climate records can check their reports from the 2023-2024 El Nino, municipality by municipality?"
+    },
+    {
+     "type": "ui",
+     "action": "tab",
+     "tab": "data",
+     "note": "Satellites check the farmers' reports; neither replaces the other."
+    }
+   ],
+   "checks": {
+    "graph_min_nodes": 5,
+    "scope_contains": [
+     2.5,
+     -76.6
+    ],
+    "scope_time_start_max": 2023,
+    "picks_min": 3,
+    "no_unverified": true,
+    "scope_unit_any": [
+     "municipal",
+     "municipality",
+     "municipalities",
+     "municipio"
+    ],
+    "picks_any": [
+     "chirps"
+    ],
+    "picks_any_2": [
+     "coffee",
+     "cur:gadm",
+     "modis",
+     "era5",
+     "terraclimate",
+     "smap",
+     "hls"
     ]
    }
   }

@@ -1169,6 +1169,82 @@
    "res_m": 5000,
    "type": "Raster and table",
    "kind": "dataset"
+  },
+  {
+   "id": "cur:ephemeral",
+   "title": "Ephemeral stream contributions to U.S. rivers (Science 2024)",
+   "provider": "Brinkerhoff, Gleason, Kotchen, Kysar and Raymond (authors from the Yale School of the Environment and Yale Law School)",
+   "description": "Model results for every NHDPlus HR reach in the contiguous U.S.: whether the reach is ephemeral, and the share of its water that comes from ephemeral streams. One CSV lookup table per HUC-4 basin, joined to NHDPlus HR by NHDPlusID. The study estimated that ephemeral streams supply about 55% of regional river discharge on average.",
+   "keywords": "ephemeral streams intermittent headwaters perenniality clean water act wotus sackett drinking water discharge nhdplus hydrography watershed river network",
+   "access": "Open (CC BY 4.0, Zenodo)",
+   "access_class": "open",
+   "url": "https://zenodo.org/records/10658663",
+   "region": "Contiguous U.S.",
+   "bbox": [
+    -125.0,
+    24.5,
+    -66.9,
+    49.5
+   ],
+   "time": "2024 model of typical flow conditions",
+   "t0": null,
+   "t1": null,
+   "unit": "Stream reach (NHDPlus HR)",
+   "res_m": null,
+   "type": "Table (joins to NHDPlus HR reaches)",
+   "data_type": "table",
+   "yale_note": "Yale study; YCGS turned it into maps of how small streams feed drinking water in Iowa, West Virginia, Utah, South Carolina and Arizona.",
+   "kind": "dataset"
+  },
+  {
+   "id": "cur:hgis_indias",
+   "title": "HGIS de las Indias: Spanish America, 1701-1808",
+   "provider": "Werner Stangl (coord.); Indias-HGIS 2.0 on Yale Dataverse, supported by YCGS",
+   "description": "Historical GIS of late colonial Spanish America: a year-by-year gazetteer of more than 12,000 places and 1,000 territorial units (governments, dioceses, treasury districts), with thematic tables such as royal treasury silver registries and colonial institutions.",
+   "keywords": "historical gis colonial spanish america gazetteer places territories viceroyalty new spain peru silver treasury cajas reales mining dioceses eighteenth century bourbon migration",
+   "access": "Open (Harvard and Yale Dataverse)",
+   "access_class": "open",
+   "url": "https://dataverse.yale.edu/dataverse/indias-hgis",
+   "region": "Spanish America",
+   "bbox": [
+    -125.0,
+    -56.0,
+    -55.0,
+    40.0
+   ],
+   "time": "1701-1808 (year by year)",
+   "t0": 1701,
+   "t1": 1808,
+   "unit": "Place (point) and territorial unit",
+   "res_m": null,
+   "type": "Vector (temporal gazetteer) and tables",
+   "yale_note": "Indias-HGIS 2.0 is published on Yale Dataverse; YCGS cleans the data and builds the web atlas for the Bridging the Atlantic initiative.",
+   "kind": "dataset"
+  },
+  {
+   "id": "cur:pems",
+   "title": "Caltrans PeMS freeway traffic counts",
+   "provider": "California Department of Transportation (Caltrans)",
+   "description": "Flow, speed and occupancy from nearly 40,000 freeway loop detectors across California, in 5-minute and hourly steps, with more than ten years of history.",
+   "keywords": "traffic counts vehicle flow freeway loop detectors speed congestion rush hour hourly california los angeles caltrans pems",
+   "access": "Free account (approved in one to two business days)",
+   "access_class": "request",
+   "url": "https://dot.ca.gov/programs/traffic-operations/mpr/pems-source",
+   "region": "California",
+   "bbox": [
+    -124.5,
+    32.5,
+    -114.1,
+    42.0
+   ],
+   "time": "More than ten years to present",
+   "t0": 2015,
+   "t1": null,
+   "unit": "Freeway detector station",
+   "res_m": null,
+   "type": "Tables (detector time series) with station locations",
+   "data_type": "table",
+   "kind": "dataset"
   }
  ],
  "tools": [

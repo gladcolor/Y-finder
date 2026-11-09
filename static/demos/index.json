@@ -124,22 +124,76 @@
    "based_on": "Yale Environmental Humanities and YCGS compare the 1846 harbor survey with today's city"
   },
   {
-   "id": "yale_forest",
-   "title": "Forest carbon at Yale-Myers Forest",
-   "field": "Forestry",
-   "who": "Ana (fictional), YSE forestry student.",
+   "id": "yale_streams",
+   "title": "Small streams behind Des Moines' drinking water",
+   "field": "Water policy",
+   "who": "Maya (fictional), joint law and environment (JD/MEM) student.",
    "shows": [
-    "Statewide lidar from 2016 and 2023",
-    "Field plots and GEDI to calibrate biomass",
-    "YCGS drone lidar to check 2026",
-    "Aerial imagery of the forest"
+    "Yale's ephemeral stream model joined to NHDPlus HR",
+    "Watersheds above the city's river intakes",
+    "Why intake locations are not public",
+    "A clear line between science and legal status"
    ],
    "recorded": "2026-11-09",
    "model": "gpt-6.1-terra",
    "group": "yale",
-   "program": "YCGS lidar biomass project",
-   "program_url": "https://geospatial.yale.edu/high-resolution-lidar-for-biomass-estimation-a-deep-dive-into-connecticuts-forest-carbon-stock",
-   "based_on": "YCGS compared 2016 and 2023 Connecticut lidar for forest carbon; its drone workshop flies Yale-Myers Forest"
+   "program": "YCGS maps of ephemeral streams",
+   "program_url": "https://geospatial.yale.edu/posts/2026-06-24-mapping-ephemeral-stream-contributions-to-us-watersheds",
+   "based_on": "A Yale study in Science modeled ephemeral streams across the U.S.; YCGS mapped how they feed drinking water in five states, Iowa among them"
+  },
+  {
+   "id": "yale_vending",
+   "title": "Street vending arrests in Los Angeles",
+   "field": "Urban humanities",
+   "who": "Sofia (fictional), research assistant on a street-vending book project.",
+   "shows": [
+    "LAPD arrest tables found on the city's open data portal",
+    "Charge codes are not verified incidents",
+    "Vending citations as a second record",
+    "Tract demographics for comparison"
+   ],
+   "recorded": "2026-11-09",
+   "model": "gpt-6.1-terra",
+   "group": "yale",
+   "program": "Geographies of Arrest (YCGS with Leigh-Anna Hidalgo)",
+   "program_url": "https://geospatial.yale.edu/geographies-of-arrest-street-vending-race-and-policing-in-los-angeles",
+   "based_on": "YCGS screened more than 1.6 million LAPD arrest records from 2010 to 2024 for vending-related charges"
+  },
+  {
+   "id": "yale_hgis",
+   "title": "Silver and treasuries in New Spain, 1701-1808",
+   "field": "History",
+   "who": "Lucia (fictional), history PhD student.",
+   "shows": [
+    "Temporal gazetteers on Yale and Harvard Dataverse",
+    "Silver registries as tables to join",
+    "Modern layers fail the 1701-1808 window",
+    "Elevation for travel routes"
+   ],
+   "recorded": "2026-11-09",
+   "model": "gpt-6.1-terra",
+   "group": "yale",
+   "program": "HGIS de las Indias (Bridging the Atlantic initiative)",
+   "program_url": "https://geospatial.yale.edu/posts/2026-03-10-bridging-the-atlantic-migrations-their-legacies",
+   "based_on": "YCGS supports HGIS de las Indias, an atlas of late colonial Spanish America whose data sit on Yale Dataverse"
+  },
+  {
+   "id": "yale_tempo",
+   "title": "Rush hour in Los Angeles seen from orbit",
+   "field": "Course project",
+   "who": "Jamie (fictional), Yale College junior taking the course.",
+   "shows": [
+    "Hourly TEMPO NO2 from a new geostationary satellite",
+    "EPA monitors with hourly values",
+    "Freeway counts behind a free account",
+    "Weekday versus weekend as the test"
+   ],
+   "recorded": "2026-11-09",
+   "model": "gpt-6.1-terra",
+   "group": "yale",
+   "program": "Observing Earth from Space (EPS 362 / ENV 726)",
+   "program_url": "https://geospatial.yale.edu/observing-earth-from-space",
+   "based_on": "A 2025 student project in Prof. Xuhui Lee's course used TEMPO NO2 to study daily traffic in Los Angeles; YCGS hosts the course projects"
   },
   {
    "id": "yale_epi",
@@ -194,6 +248,60 @@
    "program": "Geospatial measurement of economic activity",
    "program_url": "https://www.nber.org/papers/w33619",
    "based_on": "Yale economists use pollution, night light and heat data to estimate plant output; featured by YCGS"
+  },
+  {
+   "id": "yale_forest",
+   "title": "Forest carbon at Yale-Myers Forest",
+   "field": "Forestry",
+   "who": "Ana (fictional), YSE forestry student.",
+   "shows": [
+    "Statewide lidar from 2016 and 2023",
+    "Field plots and GEDI to calibrate biomass",
+    "YCGS drone lidar to check 2026",
+    "Aerial imagery of the forest"
+   ],
+   "recorded": "2026-11-09",
+   "model": "gpt-6.1-terra",
+   "group": "yale",
+   "program": "YCGS lidar biomass project",
+   "program_url": "https://geospatial.yale.edu/high-resolution-lidar-for-biomass-estimation-a-deep-dive-into-connecticuts-forest-carbon-stock",
+   "based_on": "YCGS compared 2016 and 2023 Connecticut lidar for forest carbon; its drone workshop flies Yale-Myers Forest"
+  },
+  {
+   "id": "yale_congo",
+   "title": "Carbon in a Congo swamp forest reserve",
+   "field": "Tropical forestry",
+   "who": "Amara (fictional), YSE master's student in tropical forestry.",
+   "shows": [
+    "Optical images under heavy cloud, and radar that sees through it",
+    "GEDI and global biomass maps to fill few field plots",
+    "The reserve boundary from WDPA",
+    "A carbon model as the method"
+   ],
+   "recorded": "2026-11-09",
+   "model": "gpt-6.1-terra",
+   "group": "yale",
+   "program": "YCGS tropical forest carbon project",
+   "program_url": "https://geospatial.yale.edu/unveiling-carbon-dynamics-in-african-tropical-forests-using-sentinel-2-spectral-indices",
+   "based_on": "YCGS mapped land cover and carbon in the Lac Tele-Likouala aux Herbes reserve, Republic of Congo, from 2018 to 2023 with Sentinel-2"
+  },
+  {
+   "id": "yale_ikon",
+   "title": "Checking coffee farmers' climate reports in Colombia",
+   "field": "Climate and agriculture",
+   "who": "Daniel (fictional), YSE doctoral student on the project.",
+   "shows": [
+    "Farmer reports are the project's own data",
+    "Satellite rainfall and vegetation to compare",
+    "Where coffee is grown",
+    "Municipalities as the unit"
+   ],
+   "recorded": "2026-11-09",
+   "model": "gpt-6.1-terra",
+   "group": "yale",
+   "program": "Community sensing of climate impacts (Yale Planetary Solutions grant)",
+   "program_url": "https://planetarysolutions.yale.edu/scaling-community-sensing-and-recalling-of-historical-climate-impact-data",
+   "based_on": "A 2025 Yale Planetary Solutions project collects smallholder farmers' climate reports by SMS game and field-tested it in Cauca, Colombia"
   }
  ]
 }

@@ -11,7 +11,8 @@ ROOT = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
 MUTANTS = ["resolution_always_good", "extent_ignored", "time_ignored", "overall_best_not_worst", "everything_verified",
            "no_url_safety", "tokenizer_drops_sensor_names", "no_synonyms", "graph_keeps_bad_edges",
            "downloads_kept_after_session", "download_follows_redirects", "geolibre_any_url",
-           "previews_not_session_only"]
+           "previews_not_session_only",
+           "browser_cookies_to_any_site", "browser_opens_licensed_pages", "dead_links_trusted"]
 
 
 def run(mutant=None):

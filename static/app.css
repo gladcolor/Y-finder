@@ -31,6 +31,15 @@ body.collapsed #map { left: 0; }
 /* iframes are replaced elements: left+right do not stretch them, so the width is explicit */
 #geolibre { position: fixed; top: 0; bottom: 0; left: calc(var(--panel-w) + 24px); width: calc(100vw - var(--panel-w) - 24px); height: 100vh; border: 0; background: #fff; z-index: 2; }
 body.collapsed #geolibre { left: 0; width: 100vw; }
+/* the border between the panel and the map: drag it, or focus it and use the arrow keys */
+.panel-resizer { position: fixed; top: 12px; bottom: 12px; left: calc(var(--panel-w) + 12px); width: 12px; z-index: 6; cursor: col-resize;
+  display: grid; place-items: center; touch-action: none; }
+.panel-resizer i { width: 4px; height: 44px; border-radius: 3px; background: #b7c3d4; opacity: .55; transition: opacity .12s, background .12s, height .12s; }
+.panel-resizer:hover i, .panel-resizer:focus-visible i, body.resizing .panel-resizer i { opacity: 1; background: var(--navy-2); height: 64px; }
+.panel-resizer:focus-visible { outline: none; }
+body.resizing, body.resizing * { cursor: col-resize !important; user-select: none !important; }
+body.resizing #geolibre, body.resizing #map { pointer-events: none; }
+body.collapsed .panel-resizer { display: none; }
 
 /* ---------- floating panel (Google Maps style) ---------- */
 .panel { position: fixed; top: 12px; left: 12px; bottom: 12px; width: var(--panel-w); z-index: 5; display: flex; flex-direction: column;
@@ -386,6 +395,8 @@ body.collapsed .layers-box { left: 12px; }
 .dcard .pv { display: flex; align-items: center; gap: 4px; flex-wrap: wrap; font-size: 12px; margin-top: 5px; }
 .dcard .pv:empty { display: none; }
 .pv-dot { width: 7px; height: 7px; border-radius: 50%; background: #cbd5e1; flex: none; }
+.pv-globe { width: 13px; height: 13px; color: var(--navy-2); flex: none; }
+.pv-step { font-style: italic; }
 .pv-dot.ok { background: #16a34a; }
 .pv-dot.run { background: #f59e0b; animation: pvblink 1s ease-in-out infinite; }
 @keyframes pvblink { 50% { opacity: .35; } }
@@ -469,5 +480,6 @@ body.wide.hist-open .hist { display: flex; }
   #geolibre { left: 0; width: 100vw; top: 0; height: 38vh; }
   .gis-bar { top: 52px; left: 8px; right: 8px; max-width: none; }
   #btnWide { display: none; }
+  .panel-resizer { display: none; }
   .ask textarea { min-height: 38px; }
 }

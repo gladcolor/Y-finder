@@ -895,7 +895,11 @@
   }
   function pvLine(ref) {
     const it = state.previews[ref]; if (!it) return '';
-    if (it.status === 'pending') return '<span class="pv-dot run"></span><span class="muted">Preparing a map preview...</span>';
+    if (it.status === 'pending') {
+      // Y-finder's own browser reports each step: waiting, opening the site, clicking Download, downloading, reading
+      const globe = it.browser ? '<svg class="pv-globe" viewBox="0 0 16 16" aria-hidden="true"><circle cx="8" cy="8" r="6.2" fill="none" stroke="currentColor" stroke-width="1.3"/><path d="M1.8 8h12.4M8 1.8c2 2.2 2 10.2 0 12.4M8 1.8c-2 2.2-2 10.2 0 12.4" fill="none" stroke="currentColor" stroke-width="1.1"/></svg>' : '';
+      return `<span class="pv-dot run"></span>${globe}<span class="muted pv-step">${esc(it.step || 'Preparing a map preview...')}</span>`;
+    }
     if (it.status !== 'ready') return `<span class="pv-dot"></span><span class="muted">No map preview: ${esc(it.note || '')}</span>`;
     const csv0 = it.csv ? ` <a class="pv-a" href="api/session/${encodeURIComponent(state.sid)}/sample/${encodeURIComponent(it.csv)}" download>CSV</a>` : '';
     const open = state.pvOpen.has(ref);
@@ -950,7 +954,7 @@
         if (t) convSave();
       }
       refreshPreviewLines();
-      if (j.running && Date.now() - t0 < 150000) state.pvTimer = setTimeout(() => tick(false), 2500);
+      if (j.running && Date.now() - t0 < 600000) state.pvTimer = setTimeout(() => tick(false), 2000); // the browser can take minutes
     };
     tick(true);
   }
@@ -1059,10 +1063,46 @@
     $('#btnWide').title = w ? 'Smaller chat (more map)' : 'Larger chat';
     setHist(w); // the large chat shows the conversation list beside it
     local.set('yf_wide', w ? '1' : '0');
+    if (typeof restorePanelWidth === 'function') restorePanelWidth();
     requestAnimationFrame(mapResized);
     setTimeout(() => { if (state.cy) { state.cy.resize(); state.cy.fit(undefined, 18); } }, 60);
   }
   $('#btnWide').onclick = () => setWide(!isWide());
+
+  // ------------------------------------------------------------------ drag the border between the panel and the map
+  // The width is kept per mode (normal and large chat), so the Larger chat button still switches between two sizes.
+  const panelKey = () => (isWide() ? 'yf_panel_w_wide' : 'yf_panel_w');
+  const panelLimits = () => [340, Math.max(360, innerWidth - 300)]; // the map always keeps at least 300 px
+  function setPanelWidth(px, save) {
+    const [lo, hi] = panelLimits();
+    if (px == null) { document.body.style.removeProperty('--panel-w'); if (save) local.set(panelKey(), ''); }
+    else { const w = Math.round(Math.min(hi, Math.max(lo, px))); document.body.style.setProperty('--panel-w', w + 'px'); if (save) local.set(panelKey(), String(w)); }
+    $('#panelResizer').setAttribute('aria-valuenow', String(Math.round($('.panel').getBoundingClientRect().width)));
+  }
+  function restorePanelWidth() { const v = parseInt(local.get(panelKey()) || '', 10); setPanelWidth(Number.isFinite(v) && v > 0 ? v : null, false); }
+  {
+    const rz = $('#panelResizer'); let raf = 0;
+    const redraw = () => { cancelAnimationFrame(raf); raf = requestAnimationFrame(() => { mapResized(); if (state.cy) state.cy.resize(); }); };
+    rz.addEventListener('pointerdown', (e) => {
+      if (e.button !== 0) return;
+      e.preventDefault(); rz.setPointerCapture(e.pointerId); document.body.classList.add('resizing');
+      const move = (ev) => { setPanelWidth(ev.clientX - 18, false); redraw(); };
+      const up = () => {
+        rz.removeEventListener('pointermove', move); rz.removeEventListener('pointerup', up); rz.removeEventListener('pointercancel', up);
+        document.body.classList.remove('resizing'); setPanelWidth($('.panel').getBoundingClientRect().width, true); redraw();
+        setTimeout(() => { if (state.cy) state.cy.fit(undefined, 18); }, 60);
+      };
+      rz.addEventListener('pointermove', move); rz.addEventListener('pointerup', up); rz.addEventListener('pointercancel', up);
+    });
+    rz.addEventListener('dblclick', () => { setPanelWidth(null, true); redraw(); });
+    rz.addEventListener('keydown', (e) => {
+      const step = e.shiftKey ? 96 : 32; const w = $('.panel').getBoundingClientRect().width;
+      if (e.key === 'ArrowLeft') setPanelWidth(w - step, true); else if (e.key === 'ArrowRight') setPanelWidth(w + step, true);
+      else if (e.key === 'Home' || e.key === 'Escape') setPanelWidth(null, true); else return;
+      e.preventDefault(); redraw();
+    });
+    addEventListener('resize', () => { if (document.body.style.getPropertyValue('--panel-w')) restorePanelWidth(); });
+  }
   $('#q').addEventListener('focus', () => { if (document.body.classList.contains('collapsed')) { document.body.classList.remove('collapsed'); requestAnimationFrame(mapResized); } });
 
   $('#btnAttach').onclick = () => $('#file').click();
@@ -1225,7 +1265,7 @@
   };
   $('.pmain').addEventListener('pointerdown', () => { if (!isWide() && document.body.classList.contains('hist-open')) setHist(false); });
   // Large chat by default on big screens; the choice is remembered.
-  { const pref = local.get('yf_wide'); if (innerWidth > 980 && (pref === '1' || (pref == null && innerWidth >= 1280))) setWide(true); else renderHist(); }
+  { const pref = local.get('yf_wide'); if (innerWidth > 980 && (pref === '1' || (pref == null && innerWidth >= 1280))) setWide(true); else { restorePanelWidth(); renderHist(); } }
 
   // ------------------------------------------------------------------ demo cases (recorded runs, replayed, then live)
   const wait = (ms) => new Promise((r) => setTimeout(r, ms));
@@ -1234,8 +1274,9 @@
       const j = await getJSON('static/demos/index.json?v=' + (window.YF_VERSION || '')); if (!j.cases || !j.cases.length) return;
       const card = (c) => `<button class="demo-card" data-id="${esc(c.id)}" title="${esc(c.who + (c.program ? '\nBased on: ' + c.program : '') + '\nShows: ' + c.shows.join('; '))}">
         <div class="field">${esc(c.program ? c.program : c.field)}</div><div class="title">${esc(c.title)}</div></button>`;
-      const yale = j.cases.filter((c) => c.group === 'yale'), rest = j.cases.filter((c) => c.group !== 'yale');
-      // Yale research cases first; the earlier general demos stay one click away
+      const yaleAll = j.cases.filter((c) => c.group === 'yale');
+      // six Yale research cases from different fields up front; the other Yale cases and the general demos stay one click away
+      const yale = yaleAll.slice(0, 6), rest = yaleAll.slice(6).concat(j.cases.filter((c) => c.group !== 'yale'));
       $('#demos').innerHTML = yale.length
         ? `<div class="demo-grid">${yale.map(card).join('')}</div>${rest.length ? `<details class="more-demos"><summary>More demos (${rest.length})</summary><div class="demo-grid">${rest.map(card).join('')}</div></details>` : ''}`
         : `<div class="demo-grid">${rest.map(card).join('')}</div>`;

@@ -40,6 +40,7 @@ class Session:
     downloads: list = field(default_factory=list)   # files downloaded for this session (deleted when it ends)
     previews: dict = field(default_factory=dict)    # ref -> map preview of a recommended dataset (previews.py)
     preview_running: bool = False
+    browser_tries: int = 0                          # pages handed to Y-finder's browser (previews.MAX_BROWSER)
     plock: threading.Lock = field(default_factory=threading.Lock)
     lock: threading.Lock = field(default_factory=threading.Lock)
 

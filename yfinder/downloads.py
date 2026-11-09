@@ -116,12 +116,21 @@ def _filename(r: requests.Response, url: str) -> str:
     return name or "download"
 
 
-def _http_get(url: str):
+def _http_get(url: str, headers: dict | None = None):
     # Redirects are followed by fetch(), one checked hop at a time, never by requests.
-    return requests.get(url, headers=UA, stream=True, timeout=(15, 60), allow_redirects=False)
+    return requests.get(url, headers={**UA, **(headers or {})}, stream=True, timeout=(15, 60), allow_redirects=False)
 
 
-def fetch(url: str, dest: Path, max_bytes: int | None = None) -> dict:
+def _cookie_for(url: str, cookies: dict | None) -> dict | None:
+    """The browser's cookies go only to the site that set them (and its subdomains), hop by hop."""
+    host = (urlparse(url).hostname or "").lower()
+    if not cookies or not host:
+        return None
+    vals = [v for d, v in cookies.items() if host == d.lower() or host.endswith("." + d.lower())]
+    return {"Cookie": "; ".join(vals)} if vals else None
+
+
+def fetch(url: str, dest: Path, max_bytes: int | None = None, cookies: dict | None = None) -> dict:
     """Stream a public https file to dest, checking every redirect hop and the size as it arrives."""
     started = time.time()
     cap = max_bytes or MAX_FILE_BYTES
@@ -129,7 +138,8 @@ def fetch(url: str, dest: Path, max_bytes: int | None = None) -> dict:
         if not sources.safe_url(url):
             raise DownloadError("Only public https links can be downloaded")
         try:
-            r = _http_get(url)
+            extra = _cookie_for(url, cookies)
+            r = _http_get(url, extra) if extra else _http_get(url)
         except requests.RequestException as e:
             raise DownloadError(f"Could not reach the server ({type(e).__name__})")
         if r.status_code in (301, 302, 303, 307, 308) and r.headers.get("Location"):

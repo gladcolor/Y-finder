@@ -34,6 +34,10 @@ Work in three projections (tri-projection), in order, and keep the user in the l
    small pools or individual trees, 10 to 30 m for neighborhood land cover, null when the study uses reporting
    units such as tracts), the unit of analysis and the temporal frequency. Call set_scope. If the user did not
    state an element, choose a sensible default, list it in "assumed", and say so. Do not stall on questions.
+   The extent must cover the whole place the question names. If geocode finds only a smaller feature inside
+   it (a lake inside a reserve, one building of a campus), do not keep that box: geocode a containing unit
+   (district, county, department) or take the place's extent from a web search, set a box that covers it all,
+   and list "extent" in "assumed".
 3. Scope -> data. For each core factor, search. Start with search_catalog (YCGS curated cards with Yale access
    routes, Planetary Computer, Earth Engine and its community catalog, and the layers collected in GeoLibre:
    gallery maps "gl:" and web services "gls:"). Use live sources when they can add something:
@@ -720,6 +724,43 @@ def _ui_picks(s: Session) -> list[dict]:
     return out
 
 
+def _link_dead(url: str) -> bool:
+    """True only when a link clearly does not open: no such host, refused connection, broken TLS, 404 or 410.
+    Sites that block scripts (403, 405, 429), redirect, or answer slowly count as working. Redirects are not followed."""
+    import requests
+    from urllib.parse import urlparse
+    try:
+        host = urlparse(url).hostname
+    except ValueError:
+        return True
+    if not host or not sources._public_host(host):
+        return True
+    try:
+        r = requests.get(url, headers={"User-Agent": "Mozilla/5.0 (Y-finder link check)"}, timeout=(5, 8), stream=True, allow_redirects=False)
+        code = r.status_code
+        r.close()
+        return code in (404, 410)
+    except requests.Timeout:
+        return False
+    except requests.RequestException:
+        return True
+
+
+def _check_web_links(picks: list[dict]) -> list[str]:
+    """Links found by web search are opened once; the dead ones are marked unverified so they never count as data."""
+    import concurrent.futures as cf
+    import os
+    web = [p for p in picks if p["verified"] == "web" and str(p.get("url") or "").startswith(("http://", "https://"))]
+    if not web or os.environ.get("YFINDER_LINKCHECK", "1") == "0":
+        return []
+    with cf.ThreadPoolExecutor(min(8, len(web))) as ex:
+        dead = [p for p, d in zip(web, ex.map(lambda p: _link_dead(p["url"]), web)) if d]
+    for p in dead:
+        p["verified"] = "unverified"
+        p["link_dead"] = True
+    return [p["ref"] for p in dead]
+
+
 def h_recommend_data(s: Session, a: dict):
     node_ids = {n["id"] for n in (s.graph or {}).get("nodes", [])}
     new = []
@@ -752,6 +793,7 @@ def h_recommend_data(s: Session, a: dict):
             "stac_collection": (meta.get("stac") or {}).get("collection") or "", "map": mappable(meta),
             "data_type": "table" if (meta.get("data_type") == "table" or p.get("data_type") == "table") else "spatial",
             "t0": meta.get("t0"), "t1": meta.get("t1"), "bbox": fit.dataset_bbox(meta), "meta": meta})
+    dead = _check_web_links(new)
     refs = {p["ref"] for p in new}
     s.picks = [p for p in s.picks if p["ref"] not in refs] + new
     s.picks = s.picks[-25:]
@@ -768,7 +810,10 @@ def h_recommend_data(s: Session, a: dict):
     core_uncovered = [n["label"] for n in (s.graph or {}).get("nodes", []) if n.get("core") and n.get("data_coverage") == "uncovered"]
     res = {"picks": [{"ref": p["ref"], "verified": p["verified"], "fit": fit.short(p["fit"])} for p in new],
            "core_factors_without_data": core_uncovered}
-    unver = [p["ref"] for p in new if p["verified"] == "unverified"]
+    unver = [p["ref"] for p in new if p["verified"] == "unverified" and not p.get("link_dead")]
+    if dead:
+        res["dead_links"] = ("These links did not open when checked (no such site, refused, or not found) and are marked "
+                             "unverified: " + ", ".join(dead) + ". Replace them with a working page for the same data, or drop them.")
     if unver:
         res["warning"] = ("These refs were not returned by any tool in this conversation and are marked unverified: "
                           + ", ".join(unver) + ". Search for them or remove them.")

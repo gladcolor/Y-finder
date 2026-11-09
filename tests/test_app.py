@@ -150,3 +150,24 @@ def test_layer_files_also_load_under_a_readable_name(tmp_path):
     b = c.get("/" + lay["url"].replace(".geojson", "") + "/EPI-Air-Quality.geojson")
     assert a.status_code == b.status_code == 200 and a.data == b.data and b.headers["Access-Control-Allow-Origin"] == "*"
     assert c.get("/api/layers/notanid/x.geojson").status_code == 404
+
+
+def test_dead_web_links_are_marked_unverified(monkeypatch):
+    """A link found by web search that does not open never counts as data; the agent is told to replace it."""
+    from yfinder import agent, session
+    monkeypatch.setenv("YFINDER_LINKCHECK", "1")
+    monkeypatch.setattr(agent, "_link_dead", lambda url: "broken" in url)
+    s = session.get(None)
+    try:
+        s.scope = {"bbox": [-94, 41, -93, 42]}
+        s.citations = {"https://broken.example.org/data", "https://works.example.org/data"}  # links from web search answers
+        blank = {"factors": [], "role": "core", "why": "", "limitations": "", "spatial_resolution_m": None, "time_start": None,
+                 "time_end": None, "coverage": None, "data_type": "spatial", "title": ""}
+        res, _ev, _label = agent.h_recommend_data(s, {"picks": [dict(blank, ref="https://broken.example.org/data"),
+                                                                  dict(blank, ref="https://works.example.org/data")],
+                                                        "methods": [], "next_steps": []})
+        by = {p["ref"]: p for p in s.picks}
+        assert by["https://broken.example.org/data"]["verified"] == "unverified" and by["https://works.example.org/data"]["verified"] == "web"
+        assert "broken.example.org" in res["dead_links"] and "works.example.org" not in res["dead_links"]
+    finally:
+        session.reset(s.sid)

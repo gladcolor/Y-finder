@@ -7,6 +7,8 @@ import re
 
 os.environ.setdefault("YFINDER_JANITOR", "0")  # tests call janitor.sweep() themselves
 os.environ.setdefault("YFINDER_PREVIEWS", "0")  # no background network calls; tests run previews.build directly
+os.environ.setdefault("YFINDER_BROWSER", "0")  # no headless browser in tests; they fake browser.find
+os.environ.setdefault("YFINDER_LINKCHECK", "0")  # recommend_data does not open web links in tests
 MUTANT = os.environ.get("YF_MUTANT")
 
 if MUTANT:
@@ -62,5 +64,13 @@ if MUTANT:
     elif MUTANT == "previews_not_session_only":
         from yfinder import downloads
         downloads.track = lambda s, layers, label: None
+    elif MUTANT == "browser_cookies_to_any_site":
+        from yfinder import downloads
+        downloads._cookie_for = lambda url, cookies: {"Cookie": "; ".join(cookies.values())} if cookies else None
+    elif MUTANT == "browser_opens_licensed_pages":
+        from yfinder import browser, previews
+        previews._browser_ok = lambda s, pick: browser.available() and s.browser_tries < previews.MAX_BROWSER
+    elif MUTANT == "dead_links_trusted":
+        agent._check_web_links = lambda picks: []
     else:
         raise SystemExit(f"unknown mutant {MUTANT}")
