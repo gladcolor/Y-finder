@@ -184,7 +184,10 @@ def test_earth_engine_picks_use_their_planetary_computer_copy(s, monkeypatch):
     seen = {}
 
     def stac(ses, pick, meta):
-        seen["coll"] = (meta.get("stac") or {}).get("collection")
+        coll = (meta.get("stac") or {}).get("collection")
+        if not coll:
+            return None  # like the real adapter: an Earth Engine card names no Planetary Computer collection
+        seen["coll"] = coll
         return {"status": "ready", "kind": "service", "layers": [], "note": "Imagery of 2023-12-18"}
     monkeypatch.setattr(previews, "_stac", stac)
     r = previews.build(s, {"ref": "gee:COPERNICUS/S2_SR_HARMONIZED", "role": "core", "title": "Sentinel-2"})
