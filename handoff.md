@@ -121,3 +121,4 @@ See `git log --oneline`. Add a line here for any commit that changes behavior us
 - `9ae3990` (2026-11-08) Frame graph in Research Architect's style (roles, coverage opacity, dagre layout, tap-to-focus).
 - `6deb998` (2026-11-08) GeoLibre layers in the catalog and on the map; session-only downloads with cleanup (janitor).
 - `a8fa9fc` (2026-11-08) Graph layout menu; map beside the chat panel; GeoLibre browse lists services first.
+- `5c5eb87` (2026-11-08) Six demo cases grounded in real YCGS work and Yale research; 13 Yale-source catalog cards.
