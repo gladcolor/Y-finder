@@ -1,10 +1,11 @@
 {
- "_note": "Demo cases shown on the Y-finder welcome screen. People are fictional; questions, places, data and Yale access routes are real. scripts/record_demos.py runs each script against the live agent and saves the event stream to static/demos/<id>.json so the app can replay it quickly and reliably, then continue live. Cases with group \"yale\" are grounded in real YCGS projects and Yale programs (program and program_url name the source); their people are fictional too.",
+ "_note": "Demo cases shown on the Y-finder welcome screen. People are fictional; questions, places, data and Yale access routes are real. scripts/record_demos.py runs each script against the live agent and saves the event stream to static/demos/<id>.json so the app can replay it quickly and reliably, then continue live. Cases with group \"yale\" are grounded in real YCGS projects and Yale programs (program and program_url name the source); their people are fictional too. theme groups the cases on the welcome screen (health, environment, society, history).",
  "cases": [
   {
    "id": "habitat",
    "title": "Where do mosquitoes breed?",
    "field": "Public health",
+   "theme": "health",
    "who": "Maya (fictional), MPH student, first GIS project.",
    "shows": [
     "Influence graph from a plain question",
@@ -68,6 +69,7 @@
    "id": "smoke",
    "title": "Wildfire smoke and asthma",
    "field": "Environmental health",
+   "theme": "health",
    "who": "Dr. Ortiz (fictional), environmental health faculty.",
    "shows": [
     "Tract-level scope across a whole state",
@@ -129,6 +131,7 @@
    "id": "zoning",
    "title": "Zoning reform and new housing",
    "field": "Economics",
+   "theme": "society",
    "who": "Sam (fictional), economics PhD student, with a proposal.",
    "shows": [
     "Reads an attached proposal",
@@ -190,6 +193,7 @@
    "id": "waterfront",
    "title": "New Haven's lost shoreline",
    "field": "History",
+   "theme": "history",
    "who": "Ava (fictional), history PhD student.",
    "shows": [
     "Live search of Yale Library map holdings",
@@ -231,6 +235,7 @@
    "id": "foottraffic",
    "title": "Downtown recovery after COVID",
    "field": "Management",
+   "theme": "society",
    "who": "Priya (fictional), MBA student.",
    "shows": [
     "Yale-licensed data (Dewey) with the access route",
@@ -274,6 +279,7 @@
    "id": "kenya",
    "title": "Malaria and land cover in western Kenya",
    "field": "Global health",
+   "theme": "health",
    "who": "Kofi (fictional), global health MPH student.",
    "shows": [
     "Global datasets for a study outside the US",
@@ -331,6 +337,7 @@
    "group": "yale",
    "title": "Where should New Haven plant street trees next?",
    "field": "Urban ecology",
+   "theme": "environment",
    "program": "Urban Resources Initiative (YSE)",
    "program_url": "https://uri.yale.edu/",
    "based_on": "URI plants street trees with the City of New Haven; YSE work maps heat and canopy to guide planting",
@@ -393,6 +400,7 @@
    "group": "yale",
    "title": "Filled shoreline, redlining and flood risk",
    "field": "Environmental humanities",
+   "theme": "history",
    "program": "New Haven Digital Atlas (YCGS app)",
    "program_url": "https://news.yale.edu/2026/05/29/building-maps-connect-new-havens-past-present",
    "based_on": "Yale Environmental Humanities and YCGS compare the 1846 harbor survey with today's city",
@@ -452,6 +460,7 @@
    "group": "yale",
    "title": "Small streams behind Des Moines' drinking water",
    "field": "Water policy",
+   "theme": "environment",
    "program": "YCGS maps of ephemeral streams",
    "program_url": "https://geospatial.yale.edu/posts/2026-06-24-mapping-ephemeral-stream-contributions-to-us-watersheds",
    "based_on": "A Yale study in Science modeled ephemeral streams across the U.S.; YCGS mapped how they feed drinking water in five states, Iowa among them",
@@ -511,6 +520,7 @@
    "group": "yale",
    "title": "Street vending arrests in Los Angeles",
    "field": "Urban humanities",
+   "theme": "society",
    "program": "Geographies of Arrest (YCGS with Leigh-Anna Hidalgo)",
    "program_url": "https://geospatial.yale.edu/geographies-of-arrest-street-vending-race-and-policing-in-los-angeles",
    "based_on": "YCGS screened more than 1.6 million LAPD arrest records from 2010 to 2024 for vending-related charges",
@@ -575,6 +585,7 @@
    "group": "yale",
    "title": "Silver and treasuries in New Spain, 1701-1808",
    "field": "History",
+   "theme": "history",
    "program": "HGIS de las Indias (Bridging the Atlantic initiative)",
    "program_url": "https://geospatial.yale.edu/posts/2026-03-10-bridging-the-atlantic-migrations-their-legacies",
    "based_on": "YCGS supports HGIS de las Indias, an atlas of late colonial Spanish America whose data sit on Yale Dataverse",
@@ -630,6 +641,7 @@
    "group": "yale",
    "title": "Rush hour in Los Angeles seen from orbit",
    "field": "Course project",
+   "theme": "environment",
    "program": "Observing Earth from Space (EPS 362 / ENV 726)",
    "program_url": "https://geospatial.yale.edu/observing-earth-from-space",
    "based_on": "A 2025 student project in Prof. Xuhui Lee's course used TEMPO NO2 to study daily traffic in Los Angeles; YCGS hosts the course projects",
@@ -681,6 +693,7 @@
    "group": "yale",
    "title": "Behind Pakistan's air quality score",
    "field": "Environmental policy",
+   "theme": "environment",
    "program": "Environmental Performance Index",
    "program_url": "https://epi.yale.edu/",
    "based_on": "The 2026 EPI (Yale Center for Environmental Law & Policy, supported by YCGS) ranks 177 countries",
@@ -737,6 +750,7 @@
    "group": "yale",
    "title": "Climate worry versus extreme heat in Connecticut",
    "field": "Climate communication",
+   "theme": "society",
    "program": "Yale Climate Opinion Maps",
    "program_url": "https://climatecommunication.yale.edu/visualizations-data/ycom-us/",
    "based_on": "The Yale Program on Climate Change Communication models opinion for states, districts and counties",
@@ -799,6 +813,7 @@
    "group": "yale",
    "title": "Tracking steel output from space",
    "field": "Economics",
+   "theme": "society",
    "program": "Geospatial measurement of economic activity",
    "program_url": "https://www.nber.org/papers/w33619",
    "based_on": "Yale economists use pollution, night light and heat data to estimate plant output; featured by YCGS",
@@ -858,6 +873,7 @@
    "group": "yale",
    "title": "Forest carbon at Yale-Myers Forest",
    "field": "Forestry",
+   "theme": "environment",
    "program": "YCGS lidar biomass project",
    "program_url": "https://geospatial.yale.edu/high-resolution-lidar-for-biomass-estimation-a-deep-dive-into-connecticuts-forest-carbon-stock",
    "based_on": "YCGS compared 2016 and 2023 Connecticut lidar for forest carbon; its drone workshop flies Yale-Myers Forest",
@@ -915,6 +931,7 @@
    "group": "yale",
    "title": "Carbon in a Congo swamp forest reserve",
    "field": "Tropical forestry",
+   "theme": "environment",
    "program": "YCGS tropical forest carbon project",
    "program_url": "https://geospatial.yale.edu/unveiling-carbon-dynamics-in-african-tropical-forests-using-sentinel-2-spectral-indices",
    "based_on": "YCGS mapped land cover and carbon in the Lac Tele-Likouala aux Herbes reserve, Republic of Congo, from 2018 to 2023 with Sentinel-2",
@@ -979,6 +996,7 @@
    "group": "yale",
    "title": "Checking coffee farmers' climate reports in Colombia",
    "field": "Climate and agriculture",
+   "theme": "environment",
    "program": "Community sensing of climate impacts (Yale Planetary Solutions grant)",
    "program_url": "https://planetarysolutions.yale.edu/scaling-community-sensing-and-recalling-of-historical-climate-impact-data",
    "based_on": "A 2025 Yale Planetary Solutions project collects smallholder farmers' climate reports by SMS game and field-tested it in Cauca, Colombia",
@@ -1027,6 +1045,1211 @@
      "terraclimate",
      "smap",
      "hls"
+    ]
+   }
+  },
+  {
+   "id": "yale_election",
+   "group": "yale",
+   "title": "Election swings and split tickets in Connecticut",
+   "field": "Political science",
+   "theme": "society",
+   "program": "The US election landscape (YCGS and ISPS panel)",
+   "program_url": "https://isps.yale.edu/news/blog/2024/12/analyzing-election-maps-insights-from-yales-post-election-panel",
+   "based_on": "YCGS, ISPS and the Data-Intensive Social Science Center held a 2024 panel on reading election maps; ISPS fellow Shiro Kuriwaki studies ticket splitting",
+   "who": "Elena (fictional), political science PhD student at ISPS.",
+   "shows": [
+    "Official town returns from the state's election site",
+    "Swing and split tickets as two measures",
+    "Town boundaries on the map",
+    "Why town totals cannot show individual split voters"
+   ],
+   "steps": [
+    {
+     "type": "turn",
+     "message": "Which Connecticut towns swung most toward Republicans between the 2020 and 2024 presidential elections, and where did voters split their tickets between the presidential and U.S. House races?"
+    },
+    {
+     "type": "ui",
+     "action": "tab",
+     "tab": "frame",
+     "note": "Frame: 2020 and 2024 presidential votes and the 2024 House vote feed the town pattern; turnout confounds it."
+    },
+    {
+     "type": "ui",
+     "action": "tab",
+     "tab": "data",
+     "note": "Data: official returns from the state's election database, with MIT's precinct files as a check."
+    }
+   ],
+   "checks": {
+    "graph_min_nodes": 5,
+    "scope_contains": [
+     41.6,
+     -72.7
+    ],
+    "scope_unit_any": [
+     "town",
+     "municipal",
+     "precinct"
+    ],
+    "picks_min": 3,
+    "no_unverified": true,
+    "picks_any": [
+     "medsl",
+     "election",
+     "dataverse",
+     "secretary of the state",
+     "vest"
+    ],
+    "picks_any_2": [
+     "tiger",
+     "acs",
+     "cur:acs",
+     "town",
+     "boundar"
+    ]
+   }
+  },
+  {
+   "id": "yale_circus",
+   "group": "yale",
+   "title": "Traveling circuses from wagons to rails",
+   "field": "Architectural history",
+   "theme": "history",
+   "program": "Tracking the traveling circus (Yale GIS Accelerator)",
+   "program_url": "https://library.yale.edu/news/tracking-traveling-circus-student-maps-data-visualize-american-history",
+   "based_on": "A Yale architecture PhD student mapped circus route books against rail lines and census data in the Yale GIS Accelerator",
+   "who": "Marcus (fictional), architecture history PhD student.",
+   "shows": [
+    "Circus route books in a library collection",
+    "Year-by-year railroad maps, flagged where they end",
+    "Historical census counts by county",
+    "A window from 1863 to 1916"
+   ],
+   "steps": [
+    {
+     "type": "turn",
+     "message": "How did American traveling circuses shift from wagon roads to railroads between 1863 and 1916 across New England and the Midwest, and did the shows favor larger towns on rail lines?"
+    },
+    {
+     "type": "ui",
+     "action": "tab",
+     "tab": "frame",
+     "note": "Frame: travel mode and rail access shape where shows stopped; surviving records confound it."
+    },
+    {
+     "type": "ui",
+     "action": "tab",
+     "tab": "data",
+     "note": "Data: route books are the core evidence; the rail map ends in 1911, and the rules flag it."
+    }
+   ],
+   "checks": {
+    "graph_min_nodes": 5,
+    "scope_contains": [
+     40.0,
+     -83.0
+    ],
+    "scope_time_start_max": 1870,
+    "picks_min": 3,
+    "no_unverified": true,
+    "picks_any": [
+     "rail",
+     "atack",
+     "transportation"
+    ],
+    "picks_any_2": [
+     "nhgis",
+     "census",
+     "ipums",
+     "route book",
+     "circus"
+    ]
+   }
+  },
+  {
+   "id": "yale_tsetse",
+   "group": "yale",
+   "title": "Tsetse habitat near cattle and villages in Uganda",
+   "field": "Vector biology",
+   "theme": "health",
+   "program": "Aksoy Lab: tsetse flies and sleeping sickness (Yale School of Public Health)",
+   "program_url": "https://medicine.yale.edu/lab/aksoy/",
+   "based_on": "Yale's Aksoy Lab studies tsetse flies and the parasites behind sleeping sickness with partners in Uganda and Kenya",
+   "who": "Grace (fictional), YSPH epidemiology PhD student.",
+   "shows": [
+    "Districts found by name",
+    "10 m land cover for fly habitat",
+    "Cattle density grids",
+    "Candidate trap areas, not proof of flies"
+   ],
+   "steps": [
+    {
+     "type": "turn",
+     "message": "In Uganda's Soroti and Kaberamaido districts near Lake Kyoga, where is tsetse fly habitat close to cattle and villages, so we can place traps for a sleeping sickness survey in 2027?"
+    },
+    {
+     "type": "ui",
+     "action": "tab",
+     "tab": "frame",
+     "note": "Frame: fly habitat, cattle and villages together set trap priority; species and infection are checked in the field."
+    },
+    {
+     "type": "ui",
+     "action": "tab",
+     "tab": "data",
+     "note": "Data: 10 m land cover for habitat, a cattle density grid and villages from open maps."
+    }
+   ],
+   "checks": {
+    "graph_min_nodes": 5,
+    "scope_contains": [
+     1.71,
+     33.61
+    ],
+    "picks_min": 3,
+    "no_unverified": true,
+    "picks_any": [
+     "worldcover",
+     "dynamic",
+     "land cover",
+     "sentinel-2",
+     "lulc"
+    ],
+    "picks_any_2": [
+     "livestock",
+     "cattle",
+     "glw",
+     "gridded"
+    ]
+   }
+  },
+  {
+   "id": "yale_hrl",
+   "group": "yale",
+   "title": "Damage and displacement around El Fasher, Sudan",
+   "field": "Humanitarian research",
+   "theme": "health",
+   "program": "Humanitarian Research Lab (Yale School of Public Health)",
+   "program_url": "https://ysph.yale.edu/hrl/",
+   "based_on": "Yale's Humanitarian Research Lab documents attacks on civilians in El Fasher, Sudan, from satellite imagery and open sources",
+   "who": "Amira (fictional), research assistant at a humanitarian lab.",
+   "shows": [
+    "Open fire detections and imagery first",
+    "Building-level needs named as commercial imagery",
+    "Field reports linked as context",
+    "A preview that is not a damage assessment"
+   ],
+   "steps": [
+    {
+     "type": "turn",
+     "message": "Using open satellite data first, how did fires, damaged buildings and displacement camps change in and around El Fasher, Sudan, from April 2023 to November 2025?"
+    },
+    {
+     "type": "ui",
+     "action": "tab",
+     "tab": "frame",
+     "note": "Frame: fires, damage and camps change together; cloud cover and revisit dates limit what can be seen."
+    },
+    {
+     "type": "ui",
+     "action": "tab",
+     "tab": "data",
+     "note": "Data: open fire detections and 10 m imagery cannot see single buildings; the rules say so."
+    }
+   ],
+   "checks": {
+    "graph_min_nodes": 5,
+    "scope_contains": [
+     13.63,
+     25.35
+    ],
+    "scope_time_start_max": 2023,
+    "picks_min": 3,
+    "no_unverified": true,
+    "picks_any": [
+     "firms",
+     "fire",
+     "viirs"
+    ],
+    "picks_any_2": [
+     "sentinel-1",
+     "sentinel-2",
+     "planet",
+     "maxar",
+     "landsat"
+    ]
+   }
+  },
+  {
+   "id": "yale_mol",
+   "group": "yale",
+   "title": "Endemic species and forest loss in Tanzania's Eastern Arc",
+   "field": "Biodiversity",
+   "theme": "environment",
+   "program": "Map of Life (Yale Center for Biodiversity and Global Change)",
+   "program_url": "https://mol.org/",
+   "based_on": "Yale's Map of Life gathers species ranges and records worldwide and computes habitat and protection indicators",
+   "who": "Joseph (fictional), YSE master's student in conservation.",
+   "shows": [
+    "Species ranges from Yale's Map of Life",
+    "Protected areas (WDPA)",
+    "Forest loss year by year",
+    "Coarse ranges flagged against 30 m forest data"
+   ],
+   "steps": [
+    {
+     "type": "turn",
+     "message": "How much of the ranges of endemic birds and amphibians in Tanzania's Eastern Arc Mountains lies inside protected areas, and where has their forest been lost since 2001?"
+    },
+    {
+     "type": "ui",
+     "action": "tab",
+     "tab": "frame",
+     "note": "Frame: two outcomes, the share of each range protected and the forest lost since 2001."
+    },
+    {
+     "type": "ui",
+     "action": "tab",
+     "tab": "data",
+     "note": "Data: Map of Life ranges, protected areas and yearly forest loss; coarse range maps are flagged."
+    }
+   ],
+   "checks": {
+    "graph_min_nodes": 5,
+    "scope_contains": [
+     -7.1,
+     37.65
+    ],
+    "picks_min": 3,
+    "no_unverified": true,
+    "picks_any": [
+     "mol",
+     "map of life",
+     "gbif",
+     "iucn",
+     "birdlife"
+    ],
+    "picks_any_2": [
+     "wdpa",
+     "hansen",
+     "forest change",
+     "gfc",
+     "tmf"
+    ]
+   }
+  },
+  {
+   "id": "yale_ygdp",
+   "group": "yale",
+   "title": "Where Americans say 'the car needs washed'",
+   "field": "Linguistics",
+   "theme": "history",
+   "program": "Yale Grammatical Diversity Project",
+   "program_url": "https://ygdp.yale.edu/",
+   "based_on": "The Yale Grammatical Diversity Project maps regional English grammar from nationwide acceptability surveys",
+   "who": "Hannah (fictional), linguistics PhD student.",
+   "shows": [
+    "Yale's dialect survey maps",
+    "Historical census tables by county",
+    "The contiguous US as the study area",
+    "Pattern versus cause stated plainly"
+   ],
+   "steps": [
+    {
+     "type": "turn",
+     "message": "Where in the United States do people accept 'The car needs washed', and does the pattern follow the 19th-century migration from Pennsylvania into the Ohio Valley?"
+    },
+    {
+     "type": "ui",
+     "action": "tab",
+     "tab": "frame",
+     "note": "Frame: settlement from Pennsylvania may explain the pattern; survey coverage and later moves confound it."
+    },
+    {
+     "type": "ui",
+     "action": "tab",
+     "tab": "data",
+     "note": "Data: Yale's dialect survey and historical census tables by county."
+    }
+   ],
+   "checks": {
+    "graph_min_nodes": 4,
+    "scope_contains": [
+     40.0,
+     -83.0
+    ],
+    "picks_min": 3,
+    "no_unverified": true,
+    "picks_any": [
+     "ygdp",
+     "grammatical diversity"
+    ],
+    "picks_any_2": [
+     "nhgis",
+     "census",
+     "ipums"
+    ]
+   }
+  },
+  {
+   "id": "yale_wastewater",
+   "group": "yale",
+   "title": "Wastewater warnings before hospital visits",
+   "field": "Environmental engineering",
+   "theme": "health",
+   "program": "Wastewater surveillance (Peccia Lab, Yale Engineering)",
+   "program_url": "https://engineering.yale.edu/research-and-faculty/faculty-directory/jordan-peccia",
+   "based_on": "Yale engineers began testing New Haven's East Shore plant for SARS-CoV-2 in 2020 and showed it led hospital admissions by days",
+   "who": "Wei (fictional), environmental engineering PhD student.",
+   "shows": [
+    "CDC wastewater series by plant",
+    "Connecticut hospital tables",
+    "The plant's service towns from its operator",
+    "Lead and lag as the method"
+   ],
+   "steps": [
+    {
+     "type": "turn",
+     "message": "Do SARS-CoV-2 and flu levels in New Haven's wastewater rise before hospital admissions, from 2023 to 2025, and which towns does the East Shore plant's sewershed cover?"
+    },
+    {
+     "type": "ui",
+     "action": "tab",
+     "tab": "frame",
+     "note": "Frame: wastewater levels lead admissions; sampling, dilution and reporting delays sit in between."
+    },
+    {
+     "type": "ui",
+     "action": "tab",
+     "tab": "data",
+     "note": "Data: CDC wastewater series and Connecticut hospital tables, each with its years."
+    }
+   ],
+   "checks": {
+    "graph_min_nodes": 4,
+    "scope_contains": [
+     41.3,
+     -72.92
+    ],
+    "picks_min": 3,
+    "no_unverified": true,
+    "picks_any": [
+     "nwss",
+     "wastewater"
+    ],
+    "picks_any_2": [
+     "hospital",
+     "nhsn",
+     "admission",
+     "hhs",
+     "respiratory"
+    ]
+   }
+  },
+  {
+   "id": "yale_lepto",
+   "group": "yale",
+   "title": "Flooding, rats and leptospirosis in Salvador, Brazil",
+   "field": "Global health",
+   "theme": "health",
+   "program": "Leptospirosis cohort in Pau da Lima (Albert Ko, Yale School of Public Health)",
+   "program_url": "https://ysph.yale.edu/profile/albert-ko/",
+   "based_on": "Albert Ko's Yale group has followed leptospirosis, rats and flooding in Salvador's Pau da Lima community since the 1990s",
+   "who": "Lucas (fictional), YSPH global health student.",
+   "shows": [
+    "A study map of terrain and sewers",
+    "Rainfall and elevation grids flagged as coarse",
+    "Street-level photos and open maps",
+    "Recent satellite view of the valleys"
+   ],
+   "steps": [
+    {
+     "type": "turn",
+     "message": "In Pau da Lima, a hillside neighborhood of Salvador, Brazil, which low-lying blocks near open sewers flood after heavy rain, so we can target rat control and leptospirosis testing in 2026?"
+    },
+    {
+     "type": "ui",
+     "action": "tab",
+     "tab": "frame",
+     "note": "Frame: rain, low ground and open sewers drive block flooding; rats link it to infection."
+    },
+    {
+     "type": "ui",
+     "action": "tab",
+     "tab": "data",
+     "note": "Data: rainfall and elevation grids are too coarse for single blocks; the rules say so."
+    },
+    {
+     "type": "turn",
+     "message": "Show me a recent high-resolution satellite image of Pau da Lima."
+    },
+    {
+     "type": "ui",
+     "action": "map",
+     "note": "A recent image of the hillside valleys of Pau da Lima."
+    }
+   ],
+   "checks": {
+    "graph_min_nodes": 5,
+    "scope_contains": [
+     -12.925,
+     -38.445
+    ],
+    "picks_min": 3,
+    "no_unverified": true,
+    "picks_any": [
+     "dem",
+     "elevation",
+     "lidar",
+     "srtm",
+     "fabdem"
+    ],
+    "picks_any_2": [
+     "imerg",
+     "chirps",
+     "rain",
+     "precip"
+    ],
+    "tool_used": "map_stac_preview"
+   }
+  },
+  {
+   "id": "yale_leanseason",
+   "group": "yale",
+   "title": "The lean season in northern Bangladesh",
+   "field": "Development economics",
+   "theme": "society",
+   "program": "Seasonal migration subsidies in Bangladesh (Yale Economic Growth Center)",
+   "program_url": "https://egc.yale.edu/research/meghir_et_al_2022",
+   "based_on": "Yale economists tested travel subsidies for seasonal migration during the pre-harvest lean season in Rangpur, Bangladesh",
+   "who": "Rahim (fictional), economics PhD student at the Economic Growth Center.",
+   "shows": [
+    "Satellite rainfall and crop condition",
+    "Upazilas as the unit",
+    "The Yale migration experiment's data on Dataverse",
+    "A 2022 poverty map by upazila"
+   ],
+   "steps": [
+    {
+     "type": "turn",
+     "message": "In northern Bangladesh's Rangpur Division, which upazilas have the worst lean season before the rice harvest, from 2008 to 2024, and can satellite crop and rainfall data show where seasonal migration support would help most?"
+    },
+    {
+     "type": "ui",
+     "action": "tab",
+     "tab": "frame",
+     "note": "Frame: rice timing and rainfall shocks drive lean-season hardship; poverty confounds it."
+    },
+    {
+     "type": "ui",
+     "action": "tab",
+     "tab": "data",
+     "note": "Data: satellite rainfall and crop condition, upazila boundaries, and the Yale migration study's data."
+    }
+   ],
+   "checks": {
+    "graph_min_nodes": 5,
+    "scope_contains": [
+     25.75,
+     89.25
+    ],
+    "scope_time_start_max": 2010,
+    "picks_min": 3,
+    "no_unverified": true,
+    "scope_unit_any": [
+     "upazila",
+     "sub-district",
+     "subdistrict"
+    ],
+    "picks_any": [
+     "chirps",
+     "imerg",
+     "modis",
+     "sentinel",
+     "rice",
+     "landsat"
+    ],
+    "picks_any_2": [
+     "gadm",
+     "geoboundaries",
+     "hdx",
+     "census",
+     "bbs",
+     "dhs",
+     "upazila",
+     "boundar"
+    ]
+   }
+  },
+  {
+   "id": "yale_solar",
+   "group": "yale",
+   "title": "Did Solarize campaigns keep rooftop solar growing?",
+   "field": "Energy economics",
+   "theme": "society",
+   "program": "Solarize Connecticut studies (Kenneth Gillingham, Yale School of the Environment)",
+   "program_url": "https://news.yale.edu/2017/04/18/national-guidebook-maps-way-toward-tipping-points-solar-adoption",
+   "based_on": "Yale economists ran randomized Solarize campaigns in Connecticut towns and measured peer effects in rooftop solar adoption",
+   "who": "Olivia (fictional), YSE doctoral student in energy economics.",
+   "shows": [
+    "State solar incentive records by town",
+    "Campaign dates from a research appendix",
+    "Towns on the map",
+    "Event-time comparison as the method"
+   ],
+   "steps": [
+    {
+     "type": "turn",
+     "message": "How did rooftop solar spread across Connecticut towns from 2012 to 2024, and did towns that ran Solarize campaigns keep adding systems after the campaigns ended?"
+    },
+    {
+     "type": "ui",
+     "action": "tab",
+     "tab": "frame",
+     "note": "Frame: campaigns, incentives, costs and neighbors drive adoption in each town."
+    },
+    {
+     "type": "ui",
+     "action": "tab",
+     "tab": "data",
+     "note": "Data: the state's solar incentive records, with their own years; Berkeley Lab's records as a check."
+    }
+   ],
+   "checks": {
+    "graph_min_nodes": 5,
+    "scope_contains": [
+     41.6,
+     -72.7
+    ],
+    "scope_unit_any": [
+     "town",
+     "municipal",
+     "zip"
+    ],
+    "picks_min": 3,
+    "no_unverified": true,
+    "picks_any": [
+     "tracking the sun",
+     "solar",
+     "green bank"
+    ],
+    "methods_any": [
+     "difference",
+     "event",
+     "synthetic",
+     "panel"
+    ]
+   }
+  },
+  {
+   "id": "yale_weathering",
+   "group": "yale",
+   "title": "Where to spread crushed rock on Illinois farms",
+   "field": "Biogeochemistry",
+   "theme": "environment",
+   "program": "Enhanced weathering trials (Yale Center for Natural Carbon Capture)",
+   "program_url": "https://naturalcarboncapture.yale.edu/",
+   "based_on": "Yale's Center for Natural Carbon Capture runs enhanced rock weathering trials on farms in eight US states",
+   "who": "Nora (fictional), Earth and planetary sciences PhD student.",
+   "shows": [
+    "Soil pH from the soil survey",
+    "Field boundaries and cropland",
+    "Quarries from USGS",
+    "Rainfall normals from PRISM"
+   ],
+   "steps": [
+    {
+     "type": "turn",
+     "message": "Which farm fields in central Illinois have acidic soils, high rainfall and a source of crushed basalt within 200 km, to site enhanced rock weathering trials in 2027?"
+    },
+    {
+     "type": "ui",
+     "action": "tab",
+     "tab": "frame",
+     "note": "Frame: soil acidity, rainfall and the distance to crushed rock decide where a trial can go."
+    },
+    {
+     "type": "ui",
+     "action": "tab",
+     "tab": "data",
+     "note": "Data: soil survey pH, field boundaries, cropland, quarries and rainfall normals."
+    }
+   ],
+   "checks": {
+    "graph_min_nodes": 5,
+    "scope_contains": [
+     40.0,
+     -89.0
+    ],
+    "picks_min": 3,
+    "no_unverified": true,
+    "picks_any": [
+     "ssurgo",
+     "soil"
+    ],
+    "picks_any_2": [
+     "cdl",
+     "cropland",
+     "mrds",
+     "quarr",
+     "mineral"
+    ]
+   }
+  },
+  {
+   "id": "yale_airsensors",
+   "group": "yale",
+   "title": "Fine particles in Dwight and East Rock",
+   "field": "Environmental justice",
+   "theme": "health",
+   "program": "Low-cost air sensor network in New Haven (Yale Planetary Solutions)",
+   "program_url": "https://planetarysolutions.yale.edu/deployment-of-a-low-cost-sensor-network-to-measure-co2-emissions-and-pollution-exposure-across-the",
+   "based_on": "A Yale Planetary Solutions project placed low-cost sensors across New Haven; a 2025 study compared air in Dwight and East Rock",
+   "who": "Jasmine (fictional), Yale College senior in environmental studies.",
+   "shows": [
+    "Yale's sensor network and PurpleAir",
+    "The EPA monitor for calibration",
+    "Weather as a confounder",
+    "Street-level claims tied to sensor coverage"
+   ],
+   "steps": [
+    {
+     "type": "turn",
+     "message": "Is fine-particle pollution higher in New Haven's Dwight neighborhood than in East Rock, street by street, and how well do low-cost sensors agree with the state monitor in 2024 and 2025?"
+    },
+    {
+     "type": "ui",
+     "action": "tab",
+     "tab": "frame",
+     "note": "Frame: sensor readings depend on calibration, weather and siting, not only on traffic."
+    },
+    {
+     "type": "ui",
+     "action": "tab",
+     "tab": "data",
+     "note": "Data: Yale's sensor network, PurpleAir and the EPA monitor used to check them."
+    }
+   ],
+   "checks": {
+    "graph_min_nodes": 5,
+    "scope_contains": [
+     41.31,
+     -72.935
+    ],
+    "picks_min": 3,
+    "no_unverified": true,
+    "picks_any": [
+     "purpleair",
+     "yps_sensors",
+     "sensor"
+    ],
+    "picks_any_2": [
+     "aqs",
+     "airdata",
+     "epa"
+    ],
+    "text_contains_any": [
+     "calibrat",
+     "coloca",
+     "colloca",
+     "co-loca",
+     "side by side",
+     "paired",
+     "pair hourly",
+     "bias"
+    ]
+   }
+  },
+  {
+   "id": "yale_familyforest",
+   "group": "yale",
+   "title": "Family forests at risk of being split up",
+   "field": "Forest policy",
+   "theme": "environment",
+   "program": "Sustaining Family Forests Initiative (Yale School of the Environment)",
+   "program_url": "https://sffi.yale.edu/",
+   "based_on": "Yale's Sustaining Family Forests Initiative studies family forest owners with the USDA Forest Service to help keep their land in forest",
+   "who": "Ben (fictional), YSE master's student working with land trusts.",
+   "shows": [
+    "Parcels in two states",
+    "Protected land and easements (PAD-US)",
+    "Land cover over time",
+    "Risk ranked for outreach, not forecast as fact"
+   ],
+   "steps": [
+    {
+     "type": "turn",
+     "message": "Where in Connecticut and western Massachusetts are large family-owned forests most at risk of being split up and developed by 2035, so land trusts can reach their owners first?"
+    },
+    {
+     "type": "ui",
+     "action": "tab",
+     "tab": "frame",
+     "note": "Frame: forest size, development pressure and protection set the risk; zoning confounds it."
+    },
+    {
+     "type": "ui",
+     "action": "tab",
+     "tab": "data",
+     "note": "Data: parcels in both states, protected land and easements, and land cover."
+    }
+   ],
+   "checks": {
+    "graph_min_nodes": 5,
+    "scope_contains": [
+     42.0,
+     -72.8
+    ],
+    "picks_min": 3,
+    "no_unverified": true,
+    "picks_any": [
+     "parcel",
+     "pad-us",
+     "padus",
+     "protected",
+     "nlcd"
+    ],
+    "picks_any_2": [
+     "nlcd",
+     "land cover",
+     "lcmap",
+     "ctparcels",
+     "parcel",
+     "woodland"
+    ]
+   }
+  },
+  {
+   "id": "yale_aguasalud",
+   "group": "yale",
+   "title": "Young forests and dry-season water in the Panama Canal watershed",
+   "field": "Tropical restoration",
+   "theme": "environment",
+   "program": "ELTI and the Agua Salud Project, Panama (Yale School of the Environment)",
+   "program_url": "https://restoration.elti.yale.edu/resource/agua-salud-project-central-panama",
+   "based_on": "Yale's Environmental Leadership and Training Initiative teaches restoration at the Agua Salud Project, which tests how regrowing forest affects canal water",
+   "who": "Camila (fictional), YSE master's student in tropical forestry.",
+   "shows": [
+    "Landsat for forest regrowth",
+    "Canal sub-basins from an ArcGIS layer",
+    "Canal Authority discharge records via STRI",
+    "Rainfall as the confounder"
+   ],
+   "steps": [
+    {
+     "type": "turn",
+     "message": "How much young forest has regrown in the Panama Canal watershed since 2000, and do sub-basins with more regrowth keep more streamflow in the dry season?"
+    },
+    {
+     "type": "ui",
+     "action": "tab",
+     "tab": "frame",
+     "note": "Frame: regrowth may store water for the dry season; rainfall and canal operations confound it."
+    },
+    {
+     "type": "ui",
+     "action": "tab",
+     "tab": "data",
+     "note": "Data: Landsat for regrowth, the canal's sub-basins and the Canal Authority's discharge records."
+    }
+   ],
+   "checks": {
+    "graph_min_nodes": 5,
+    "scope_contains": [
+     9.2,
+     -79.75
+    ],
+    "picks_min": 3,
+    "no_unverified": true,
+    "picks_any": [
+     "hansen",
+     "forest change",
+     "tmf",
+     "mapbiomas",
+     "landsat",
+     "glad"
+    ],
+    "picks_any_2": [
+     "hydro",
+     "streamflow",
+     "basin",
+     "chirps",
+     "era5",
+     "imerg"
+    ]
+   }
+  },
+  {
+   "id": "yale_lagos",
+   "group": "yale",
+   "title": "Lagos spreading onto farmland and wetlands",
+   "field": "Urban science",
+   "theme": "society",
+   "program": "Urban expansion forecasts (Karen Seto, Yale School of the Environment)",
+   "program_url": "https://environment.yale.edu/directory/faculty/karen-seto",
+   "based_on": "Karen Seto's group at Yale forecast global urban expansion to 2030 and its impact on farmland and habitats",
+   "who": "Tunde (fictional), YSE doctoral student in urban land change.",
+   "shows": [
+    "Landsat from 2000 to 2025",
+    "30 m wetland and cropland maps",
+    "The 2030 forecast flagged as coarse",
+    "A recent satellite view of Lekki"
+   ],
+   "steps": [
+    {
+     "type": "turn",
+     "message": "How fast did Lagos, Nigeria, spread onto farmland and wetlands between 2000 and 2025, and how does that compare with the 2030 urban expansion forecasts?"
+    },
+    {
+     "type": "ui",
+     "action": "tab",
+     "tab": "frame",
+     "note": "Frame: built-up growth onto farmland and wetlands, compared with the 2030 forecast."
+    },
+    {
+     "type": "ui",
+     "action": "tab",
+     "tab": "data",
+     "note": "Data: Landsat since 2000, 30 m wetland and cropland maps; the 5 km forecast grid is flagged as coarse."
+    },
+    {
+     "type": "turn",
+     "message": "Show me a recent cloud-free satellite image of the eastern edge of Lagos around Lekki."
+    },
+    {
+     "type": "ui",
+     "action": "map",
+     "note": "A recent cloud-free view of Lagos' eastern edge."
+    }
+   ],
+   "checks": {
+    "graph_min_nodes": 5,
+    "scope_contains": [
+     6.5,
+     3.4
+    ],
+    "scope_time_start_max": 2000,
+    "picks_min": 3,
+    "no_unverified": true,
+    "picks_any": [
+     "ghsl",
+     "ghs",
+     "wsf",
+     "settlement",
+     "built",
+     "impervious",
+     "gisd",
+     "gaia"
+    ],
+    "picks_any_2": [
+     "urban2030",
+     "forecast",
+     "2030",
+     "seto"
+    ],
+    "tool_used": "map_stac_preview"
+   }
+  },
+  {
+   "id": "yale_dura",
+   "group": "yale",
+   "title": "Yale's Dura-Europos excavations on today's imagery",
+   "field": "Archaeology",
+   "theme": "history",
+   "program": "Dura-Europos excavation archive (Yale University Art Gallery)",
+   "program_url": "https://duraeuropos.artgallery.yale.edu/",
+   "based_on": "Yale excavated Dura-Europos in Syria from 1928 to 1937; the Art Gallery keeps the archive and is building a digital one",
+   "who": "Isabel (fictional), classics PhD student.",
+   "shows": [
+    "Yale's excavation archive as the base",
+    "1960s CORONA film as the baseline",
+    "Sub-meter imagery for pits",
+    "A recent satellite view of the site"
+   ],
+   "steps": [
+    {
+     "type": "turn",
+     "message": "Can I place the 1928-1937 Yale excavation blocks at Dura-Europos, Syria, on today's satellite images and see where looting pits appeared after 2011?"
+    },
+    {
+     "type": "ui",
+     "action": "tab",
+     "tab": "frame",
+     "note": "Frame: excavation blocks and dated imagery, joined by control points that appear on both."
+    },
+    {
+     "type": "ui",
+     "action": "tab",
+     "tab": "data",
+     "note": "Data: Yale's excavation archive, 1960s CORONA film and sub-meter imagery for pits."
+    },
+    {
+     "type": "turn",
+     "message": "Show me a recent satellite image of the site."
+    },
+    {
+     "type": "ui",
+     "action": "map",
+     "note": "A recent image of Dura-Europos on the Euphrates."
+    }
+   ],
+   "checks": {
+    "graph_min_nodes": 4,
+    "scope_contains": [
+     34.747,
+     40.73
+    ],
+    "scope_time_start_max": 1940,
+    "picks_min": 3,
+    "no_unverified": true,
+    "picks_any": [
+     "dura",
+     "art gallery"
+    ],
+    "picks_any_2": [
+     "corona",
+     "declassified",
+     "earthexplorer"
+    ],
+    "tool_used": "map_stac_preview"
+   }
+  },
+  {
+   "id": "yale_overdose",
+   "group": "yale",
+   "title": "Fentanyl deaths and distance to help in Connecticut",
+   "field": "Public health",
+   "theme": "health",
+   "program": "Town-level mapping of overdose deaths in Connecticut (Yale School of Public Health)",
+   "program_url": "https://ysph.yale.edu/enrich/news-article/study-determines-that-opioid-overdose-is-statewide-problem-in-connecticut",
+   "based_on": "Yale School of Public Health researchers mapped overdose deaths across Connecticut towns from medical examiner records",
+   "who": "Marisol (fictional), YSPH MPH student.",
+   "shows": [
+    "Medical examiner records by town",
+    "Treatment and syringe program lists",
+    "Rates per resident, not counts",
+    "Distances as estimates, not access"
+   ],
+   "steps": [
+    {
+     "type": "turn",
+     "message": "Which Connecticut towns had the fastest rise in fentanyl-involved overdose deaths from 2015 to 2024, and how far are they from syringe services and treatment programs?"
+    },
+    {
+     "type": "ui",
+     "action": "tab",
+     "tab": "frame",
+     "note": "Frame: deaths per resident by town, and the distance to treatment and syringe services."
+    },
+    {
+     "type": "ui",
+     "action": "tab",
+     "tab": "data",
+     "note": "Data: medical examiner records by town, with treatment and syringe program lists."
+    }
+   ],
+   "checks": {
+    "graph_min_nodes": 5,
+    "scope_contains": [
+     41.6,
+     -72.7
+    ],
+    "scope_unit_any": [
+     "town",
+     "municipal"
+    ],
+    "picks_min": 3,
+    "no_unverified": true,
+    "picks_any": [
+     "overdose",
+     "drug related",
+     "drug-related",
+     "medical examiner"
+    ],
+    "picks_any_2": [
+     "samhsa",
+     "treatment",
+     "syringe",
+     "naloxone",
+     "findtreatment"
+    ]
+   }
+  },
+  {
+   "id": "yale_herbarium",
+   "group": "yale",
+   "title": "Are Connecticut wildflowers blooming earlier?",
+   "field": "Botany",
+   "theme": "environment",
+   "program": "Yale Peabody Museum botany collections",
+   "program_url": "https://peabody.yale.edu/explore/collections/botany",
+   "based_on": "The Yale Peabody Museum's herbarium holds dated plant specimens from Connecticut since the 1800s",
+   "who": "Ruth (fictional), ecology and evolutionary biology PhD student.",
+   "shows": [
+    "Yale Peabody herbarium records",
+    "NOAA monthly climate since 1895",
+    "Collection bias as a confounder",
+    "The 1890-1894 gap flagged"
+   ],
+   "steps": [
+    {
+     "type": "turn",
+     "message": "Are spring wildflowers in Connecticut flowering earlier than a century ago, judging from dated herbarium specimens from 1890 to 2020 and spring temperatures?"
+    },
+    {
+     "type": "ui",
+     "action": "tab",
+     "tab": "frame",
+     "note": "Frame: flowering date by collection year and spring temperature; collection bias confounds it."
+    },
+    {
+     "type": "ui",
+     "action": "tab",
+     "tab": "data",
+     "note": "Data: Yale Peabody herbarium records and NOAA's gridded climate since 1895."
+    }
+   ],
+   "checks": {
+    "graph_min_nodes": 4,
+    "scope_contains": [
+     41.6,
+     -72.7
+    ],
+    "scope_time_start_max": 1900,
+    "picks_min": 3,
+    "no_unverified": true,
+    "picks_any": [
+     "gbif",
+     "idigbio",
+     "peabody",
+     "herbari",
+     "consortium"
+    ],
+    "picks_any_2": [
+     "prism",
+     "nclimgrid",
+     "daymet",
+     "ushcn",
+     "temperature",
+     "ghcn"
+    ]
+   }
+  },
+  {
+   "id": "yale_xingu",
+   "group": "yale",
+   "title": "Repeated fires in the Xingu Indigenous Territory",
+   "field": "Fire ecology",
+   "theme": "environment",
+   "program": "Fire and drought in the southern Amazon (Paulo Brando, Yale School of the Environment)",
+   "program_url": "https://environment.yale.edu/news/article/amazon-forests-can-recover-fire-some-caveats",
+   "based_on": "Paulo Brando's Yale group studies how drought and repeated fire degrade forests in the Xingu region of Brazil",
+   "who": "Ana (fictional), YSE doctoral student in fire ecology.",
+   "shows": [
+    "MapBiomas Fire year by year",
+    "Tree cover loss after fire",
+    "Flooded versus upland forest",
+    "The territory boundary as the study area"
+   ],
+   "steps": [
+    {
+     "type": "turn",
+     "message": "How much forest in Brazil's Xingu Indigenous Territory burned more than once between 2001 and 2024, and do seasonally flooded forests lose more tree cover after fire than upland forests?"
+    },
+    {
+     "type": "ui",
+     "action": "tab",
+     "tab": "frame",
+     "note": "Frame: repeated burning and forest type drive tree cover loss after fire; drought confounds it."
+    },
+    {
+     "type": "ui",
+     "action": "tab",
+     "tab": "data",
+     "note": "Data: MapBiomas Fire year by year, tree cover loss and surface water history."
+    }
+   ],
+   "checks": {
+    "graph_min_nodes": 5,
+    "scope_contains": [
+     -11.5,
+     -53.2
+    ],
+    "scope_time_start_max": 2001,
+    "picks_min": 3,
+    "no_unverified": true,
+    "picks_any": [
+     "mapbiomas",
+     "burned",
+     "mcd64",
+     "firecci",
+     "fire"
+    ],
+    "picks_any_2": [
+     "hansen",
+     "forest change",
+     "gedi",
+     "tree cover",
+     "prodes"
+    ]
+   }
+  },
+  {
+   "id": "yale_coastal",
+   "group": "yale",
+   "title": "Do coastal flood zones lower home prices in Connecticut?",
+   "field": "Finance",
+   "theme": "society",
+   "program": "Sea level rise and coastal home prices (Yale School of Management)",
+   "program_url": "https://insights.som.yale.edu/insights/study-rising-seas-arent-causing-coastal-property-values-to-decline",
+   "based_on": "A Yale School of Management study tested whether rising seas lower coastal property values",
+   "who": "Daniel (fictional), Yale SOM PhD student in finance.",
+   "shows": [
+    "Every Connecticut home sale since 2001",
+    "FEMA flood zones and parcels",
+    "USGS Sandy high-water marks",
+    "Hedonic comparison as the method"
+   ],
+   "steps": [
+    {
+     "type": "turn",
+     "message": "Did homes in Connecticut's coastal flood zones sell for less than similar homes farther inland from 2012 to 2024, and did the gap grow in towns hit hardest by Storm Sandy?"
+    },
+    {
+     "type": "ui",
+     "action": "tab",
+     "tab": "frame",
+     "note": "Frame: flood zones and Storm Sandy damage against price, holding home features fixed."
+    },
+    {
+     "type": "ui",
+     "action": "tab",
+     "tab": "data",
+     "note": "Data: every Connecticut home sale since 2001, FEMA flood zones, parcels and USGS high-water marks."
+    }
+   ],
+   "checks": {
+    "graph_min_nodes": 5,
+    "scope_contains": [
+     41.27,
+     -72.9
+    ],
+    "scope_time_start_max": 2012,
+    "picks_min": 3,
+    "no_unverified": true,
+    "picks_any": [
+     "real estate",
+     "sales",
+     "ct_real_estate",
+     "corelogic"
+    ],
+    "picks_any_2": [
+     "nfhl",
+     "flood",
+     "fema",
+     "slr"
     ]
    }
   }

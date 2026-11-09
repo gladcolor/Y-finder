@@ -297,3 +297,291 @@ def test_scripts_and_pages_are_never_taken_for_data():
     links, _r = browser.rank([["https://cse.google.com/cse.js?cx=1", "", False], ["https://x.org/app.css", "", True],
                               ["https://x.org/data/trap_counts.csv", "Trap counts", False]], ["https://x.org/static/main.js"])
     assert links == ["https://x.org/data/trap_counts.csv"]
+
+
+def test_geocoder_prefers_the_district_to_its_office_and_retries_without_district(monkeypatch):
+    from yfinder import sources
+    asked = []
+
+    def fake_get(url, params=None, timeout=0):
+        asked.append(params["q"])
+        if params["q"] == "Soroti District, Uganda":  # Nominatim's real answers: an office and a village of the same name
+            return [{"display_name": "Soroti District Local Government", "lat": "1.70", "lon": "33.69", "category": "office",
+                     "type": "government", "boundingbox": ["1.704", "1.705", "33.697", "33.698"]},
+                    {"display_name": "Soroti, Kamuli, Eastern Region, Uganda", "lat": "0.94", "lon": "33.12", "category": "place",
+                     "type": "village", "boundingbox": ["0.92", "0.96", "33.10", "33.14"]}]
+        if params["q"] == "Soroti, Uganda":
+            return [{"display_name": "Soroti, Eastern Region, Uganda", "lat": "1.75", "lon": "33.60", "category": "boundary",
+                     "type": "administrative", "boundingbox": ["1.45", "2.05", "33.40", "34.00"]}]
+        if params["q"] == "Fair Haven, New Haven":
+            return [{"display_name": "Fair Haven, New Haven", "lat": "41.31", "lon": "-72.89", "category": "place",
+                     "type": "suburb", "boundingbox": ["41.30", "41.32", "-72.90", "-72.88"]}]
+        if params["q"] == "Kaberamaido, Uganda":
+            return [{"display_name": "Kaberamaido, Eastern Region, Uganda", "lat": "1.7", "lon": "33.1", "category": "boundary",
+                     "type": "administrative", "boundingbox": ["1.46", "1.91", "32.94", "33.31"]}]
+        return []
+
+    monkeypatch.setattr(sources, "_get", fake_get)
+    monkeypatch.setattr(sources, "_cached", lambda key, ttl, fn: fn())
+    monkeypatch.setattr(sources.time, "sleep", lambda s: None)
+    g = sources.geocode("Soroti District, Uganda")
+    assert g["type"] == "administrative" and g["bbox"] == [33.40, 1.45, 34.00, 2.05]
+    g = sources.geocode("Kaberamaido District, Uganda")
+    assert g and g["name"].startswith("Kaberamaido") and asked[-2:] == ["Kaberamaido District, Uganda", "Kaberamaido, Uganda"]
+    assert sources.geocode("Atlantis") is None and asked[-1] == "Atlantis"  # no admin word, no retry
+    assert sources.geocode("Fair Haven, New Haven")["type"] == "suburb"  # no boundary and no admin word: the first answer
+
+
+def test_the_united_states_geocodes_to_the_contiguous_states(monkeypatch):
+    from yfinder import sources
+    us = [{"display_name": "United States", "name": "United States", "addresstype": "country", "lat": "39.7", "lon": "-100",
+           "category": "boundary", "type": "administrative", "boundingbox": ["-14.76", "71.59", "-180.0", "180.0"]}]
+    monkeypatch.setattr(sources, "_get", lambda url, params=None, timeout=0: us)
+    monkeypatch.setattr(sources, "_cached", lambda key, ttl, fn: fn())
+    monkeypatch.setattr(sources.time, "sleep", lambda s: None)
+    g = sources.geocode("United States")
+    assert g["bbox"] == [-124.85, 24.4, -66.88, 49.39] and "contiguous" in g["name"] and g["geometry"] is None
+
+
+def test_portal_tables_get_their_region_and_years(monkeypatch):
+    """A table from data.ct.gov covers Connecticut, and its date column gives its years (it used to be 'unknown')."""
+    from yfinder import agent, sources
+    from yfinder.session import Session
+    cat = {"results": [{"resource": {"id": "fvw8-89kt", "name": "Residential Solar Investment Program (RSIP) Enrollment",
+                                     "columns_field_name": ["kw_stc", "approved_date", "municipality"],
+                                     "columns_datatype": ["Number", "Calendar date", "Text"], "data_updated_at": "2026-01-02"},
+                        "metadata": {"domain": "data.ct.gov"}, "permalink": "https://data.ct.gov/d/fvw8-89kt"}]}
+    calls = []
+
+    def fake_get(url, params=None, timeout=0):
+        calls.append((url, params))
+        if "api/catalog" in url:
+            return cat
+        assert url == "https://data.ct.gov/resource/fvw8-89kt.json" and params == {"$select": "min(approved_date) as a, max(approved_date) as b"}
+        return [{"a": "2012-03-01T00:00:00.000", "b": "2024-12-31T00:00:00.000"}]
+
+    monkeypatch.setattr(sources, "_get", fake_get)
+    monkeypatch.setattr(sources, "_cached", lambda key, ttl, fn: fn())
+    monkeypatch.setenv("YFINDER_TABLE_SPANS", "1")
+    rows = sources.socrata("solar", 3, "data.ct.gov")
+    assert rows[0]["region"] == "Connecticut" and rows[0]["date_field"] == "approved_date"
+    s = Session(sid="t-span")
+    s.scope = {"bbox": [-73.7, 41.0, -71.8, 42.0], "time_start": "2012", "time_end": "2024"}
+    s.remember(rows)
+    agent.h_recommend_data(s, {"picks": [{"ref": rows[0]["ref"], "title": rows[0]["title"], "factors": [], "role": "core", "why": "",
+                                          "limitations": "", "spatial_resolution_m": None, "time_start": None, "time_end": None,
+                                          "coverage": None, "data_type": "table"}], "methods": [], "next_steps": []})
+    p = s.picks[0]
+    assert p["fit"]["extent"]["label"] == "good" and p["fit"]["time"]["label"] == "good", p["fit"]
+    assert p["t0"] == 2012 and p["t1"] == 2024 and "dates in the table" in p["time"]
+    assert sources._date_field(["x", "date"], ["Number", "Text"]) == "date"  # CDC's wastewater table keeps dates as text
+    assert sources.socrata_span("https://evil.example/resource/abcd-1234.csv; drop", "date") is None
+
+
+def test_a_mapped_boundary_layer_reports_its_extent():
+    from yfinder import agent
+    fc = {"type": "FeatureCollection", "features": [
+        {"type": "Feature", "properties": {}, "geometry": {"type": "Polygon", "coordinates": [[[-80.1, 8.8], [-79.3, 8.8], [-79.3, 9.4], [-80.1, 8.8]]]}}]}
+    assert agent._fc_extent(fc) == [-80.1, 8.8, -79.3, 9.4]
+    assert agent._fc_extent({"features": []}) is None
+
+
+def test_scope_refuses_a_box_that_wraps_around_the_globe():
+    """The model once set [-180, -14.6, 180, 71.6] for "the United States including territories": every US dataset
+    then read as a partial fit. A world study is still fine."""
+    import pytest
+    from yfinder import agent
+    from yfinder.session import Session
+    s = Session(sid="t-wrap")
+    base = {"extent_name": "x", "time_start": "2000", "time_end": "2020", "spatial_resolution_m": None,
+            "unit_of_analysis": "county", "temporal_frequency": "annual", "assumed": [], "rationale": ""}
+    with pytest.raises(agent.ToolError, match="180th meridian"):
+        agent.h_set_scope(s, {**base, "bbox": [-180, -14.6, 180, 71.6]})
+    agent.h_set_scope(s, {**base, "bbox": [-180, -60, 180, 80]})
+    assert s.scope["bbox"] == [-180, -60, 180, 80]
+    agent.h_set_scope(s, {**base, "bbox": [-124.85, 24.4, -66.88, 49.39]})
+    assert s.scope["bbox"][0] == -124.85
+
+
+def test_web_links_lose_their_tracking_parameters():
+    from yfinder.websearch import clean_url
+    u = "https://ysph.yale.edu/hrl/publications/reports/?utm_medium=email&_hsenc=p2AN&_hsmi=1132&utm_source=hs_email"
+    assert clean_url(u) == "https://ysph.yale.edu/hrl/publications/reports/"
+    assert clean_url("https://data.ct.gov/resource/x.csv?$limit=5&fbclid=abc") == "https://data.ct.gov/resource/x.csv?$limit=5"
+    assert clean_url("https://a.org/q?b=1&a=%20x") == "https://a.org/q?b=1&a=%20x"  # untouched when nothing is dropped
+    assert clean_url("https://example.org/page?id=7#top") == "https://example.org/page?id=7#top"
+
+
+def test_showing_part_of_the_area_is_a_view_not_a_new_scope(monkeypatch):
+    """Asked for an image of Lekki, the agent once reset the Lagos study to Lekki in 2026. A view box now searches imagery
+    without touching the scope."""
+    from yfinder import agent, sources
+    from yfinder.session import Session
+    s = Session(sid="t-view")
+    s.scope = {"bbox": [2.7, 6.37, 4.35, 6.7], "time_start": "2000", "time_end": "2025"}
+    seen = {}
+
+    def fake_search(coll, bbox, dt_, cloud, limit):
+        seen["bbox"] = bbox
+        return [{"id": "S2_1", "collection": coll, "bbox": [3.6, 6.3, 4.3, 6.6], "datetime": "2026-01-24T10:00:00Z",
+                 "geometry": {"type": "Polygon", "coordinates": [[[3.6, 6.3], [4.3, 6.3], [4.3, 6.6], [3.6, 6.3]]]}}]
+    monkeypatch.setattr(sources, "stac_search", fake_search)
+    view = [3.62, 6.38, 4.24, 6.56]
+    agent.h_search_stac_items(s, {"collection": "sentinel-2-l2a", "datetime": "2026-01-01/2026-11-09", "max_cloud": 10,
+                                  "limit": 3, "view_bbox": view})
+    assert seen["bbox"] == view and s.scope["bbox"] == [2.7, 6.37, 4.35, 6.7]
+    assert s.stac_items["S2_1"]["covers_pct"] == 100 and s.stac_items["S2_1"]["view_bbox"] == view
+    agent.h_search_stac_items(s, {"collection": "sentinel-2-l2a", "datetime": None, "max_cloud": None, "limit": 3, "view_bbox": None})
+    assert seen["bbox"] == [2.7, 6.37, 4.35, 6.7]
+
+
+def test_download_pages_rank_files_that_name_the_cards_topic():
+    """On the Atack page the browser took 1880StateSamples.xlsx (a census sample) for the railroad card; on STRI's page it
+    took lake levels for a streamflow card. Link text and file names that name the topic now come first."""
+    from yfinder import browser, previews
+    words = browser.topic_words("Historical US railroads and canals, 1826-1911 Railroad access: historical railroad lines by year")
+    anchors = [["https://my.vanderbilt.edu/x/1880StateSamples.xlsx", "1880 State Samples", False],
+               ["https://my.vanderbilt.edu/x/RR1826-1911Modified103123.zip", "Railroads, 1826-1911", False]]
+    ranked, _ = browser.rank(anchors, [], 1916, words)
+    assert ranked[0].endswith("RR1826-1911Modified103123.zip")
+    html = ('<a href="downloads/acp_lakelevel_15min.zip">Download</a> <a href="downloads/acp_discharge_15min.zip">Download</a>')
+    links = previews._data_links("https://striresearch.si.edu/pm/", html, 2025,
+                                 browser.topic_words("Dry-season streamflow: gauge discharge per basin"))
+    assert links[0].endswith("acp_discharge_15min.zip")
+    assert browser.topic_hits("acp_discharge_15min.zip", "", browser.topic_words("river discharge")) == 1
+    assert browser.rank(anchors, [], 1880)[0][0].endswith("1880StateSamples.xlsx")  # no topic words: the old order
+
+
+def test_code_columns_are_never_values():
+    from yfinder import tables
+    header = ["STATE", "CNTYCODE", "CITYCODE", "INDUSTRY", "GEOID", "StationID", "site_id", "No. of deaths", "humidity"]
+    rows = [["IL", str(10 + i), "999", str(200 + i), f"17{i:03d}", str(i), str(i), str(i % 7), str(50 + i)] for i in range(40)]
+    cols = [header[j] for j in tables.value_columns(header, rows, 0, {}, "deaths humidity", k=9)]
+    assert "CNTYCODE" not in cols and "CITYCODE" not in cols and "GEOID" not in cols and "StationID" not in cols and "site_id" not in cols
+    assert "No. of deaths" in cols and "humidity" in cols
+    assert tables.is_code_column("CITYCODE") and tables.is_code_column("anything", [999.0] * 5 + [1.0, 2.0])
+    assert not tables.is_code_column("total_system_cost", [1.0, 2.0, 3.0])
+
+
+def test_curated_socrata_pages_are_read_through_the_api():
+    from yfinder.previews import soda_from_url
+    assert soda_from_url("https://data.ct.gov/d/rybz-nyjw") == "https://data.ct.gov/resource/rybz-nyjw.csv"
+    assert soda_from_url("https://data.ct.gov/Health-and-Human-Services/Accidental-Drug-Related-Deaths-2012-2024/rybz-nyjw") == \
+        "https://data.ct.gov/resource/rybz-nyjw.csv"
+    assert soda_from_url("https://www.cdc.gov/nwss/") == "" and soda_from_url("https://example.org/a/b/c") == ""
+
+
+def test_record_tables_map_rows_per_town_and_medians(monkeypatch):
+    """One row per record (a death, a solar system): rows per town when no column matches the question."""
+    from yfinder import previews
+    from yfinder.session import Session
+    s = Session(sid="t-rows")
+    s.scope = {"bbox": [-73.7, 41.0, -71.8, 42.0]}
+    s.graph = {"nodes": [{"id": "deaths", "label": "Fentanyl overdose deaths", "observable": "deaths by town"}]}
+    sq = {"type": "Polygon", "coordinates": [[[0, 0], [1, 0], [1, 1], [0, 0]]]}
+    towns = {t: {"geometry": sq, "properties": {"name": t.title()}} for t in ("hartford", "new haven", "bristol")}
+    monkeypatch.setattr(previews, "_towns", lambda s_: towns)
+    seen = {}
+
+    def fake_layer(s_, pick, feats, title, src, paint=None, *a, **k):
+        seen["feats"], seen["paint"] = feats, paint
+        return {"id": "x", "n": len(feats)}, ""
+    monkeypatch.setattr(previews, "_vector_layer", fake_layer)
+    rows = ["Date,Age,ResidenceCity"] + [f"2020-01-0{i % 9 + 1},{30 + i},{t}" for i, t in enumerate(["Hartford"] * 6 + ["New Haven"] * 4 + ["Bristol"] * 3)]
+    pick = {"ref": "cur:ct_overdose", "factors": ["deaths"], "why": "deaths by town"}
+    res = previews._table_result(s, pick, {"title": "Overdose deaths"}, "\n".join(rows).encode(), "deaths.csv", "test")
+    by = {f["properties"]["town"]: f["properties"]["rows per town"] for f in seen["feats"]}
+    assert by == {"Hartford": 6.0, "New Haven": 4.0, "Bristol": 3.0} and "one row per record" in res["note"]
+    rows = ["SaleAmount,Town"] + [f"{p},{t}" for p, t in [(100, "Hartford"), (200, "Hartford"), (900, "Hartford"), (50, "Bristol"),
+                                                           (60, "Bristol"), (70, "Bristol")]]
+    s.graph = {"nodes": [{"id": "price", "label": "Home sale amount", "observable": "sale amount"}]}
+    pick = {"ref": "cur:ct_real_estate", "factors": ["price"], "why": "sale amount"}
+    res = previews._table_result(s, pick, {"title": "Sales"}, "\n".join(rows).encode(), "sales.csv", "test")
+    by = {f["properties"]["town"]: f["properties"]["SaleAmount"] for f in seen["feats"]}
+    assert by == {"Hartford": 200.0, "Bristol": 60.0} and "median" in res["note"]  # medians, not means pulled up by one sale
+
+
+def test_a_zipped_csv_becomes_points():
+    import io
+    import zipfile
+    from yfinder import previews
+    buf = io.BytesIO()
+    with zipfile.ZipFile(buf, "w") as z:
+        z.writestr("mrds.csv", "site_name,latitude,longitude\nA,40.1,-89.2\nB,40.2,-89.3\n")
+        z.writestr("mrds.met", "metadata")
+    assert previews._zipped_csv(buf.getvalue())[0] == "mrds.csv"
+    assert previews._zipped_csv(b"name,lat\n") is None
+
+
+def test_explorer_names_must_tell_places_apart_and_small_steady_change_is_named():
+    from yfinder import explore
+    props = [{"state": "CT", "city": c} for c in ["Hartford", "New Haven", "Bristol", "Norwich", "Danbury"] * 3]
+    assert explore._name_key(props) == "city"
+    v = {"label": "Town population", "short": "Town population", "series": {"points": [[2015 + 5 * i, 2238 + 8 * i] for i in range(6)]}}
+    f = explore.profile_series(v, None)
+    assert "steadily but only" in f["headline"] and "no steady trend" not in f["headline"]
+
+
+def test_osm_preview_takes_the_rule_with_most_matching_words(monkeypatch):
+    from yfinder import previews, sources
+    from yfinder.session import Session
+    s = Session(sid="t-osm")
+    s.scope = {"bbox": [-38.47, -12.94, -38.43, -12.91]}
+    s.graph = {"nodes": [{"id": "sewers", "label": "Open sewers and drainage", "observable": "mapped open sewer channels"},
+                         {"id": "blocks", "label": "Residential blocks", "observable": "community building clusters"}]}
+    asked = {}
+    monkeypatch.setattr(sources, "osm_features", lambda tags, bbox, **k: asked.update(tags=tags) or {"features": []})
+    previews._osm(s, {"ref": "cur:osm", "factors": ["sewers", "blocks"], "why": "drains and sewers"}, {})
+    assert asked["tags"][0] == "waterway=drain"
+
+
+def test_a_big_zipped_csv_is_read_from_its_start(monkeypatch):
+    """STRI's discharge zip unpacks to far more than the limit; it was skipped for the lake-level file."""
+    import io
+    import zipfile
+    from yfinder import previews
+    monkeypatch.setattr(previews, "CSV_PART", 200)
+    buf = io.BytesIO()
+    with zipfile.ZipFile(buf, "w") as z:
+        z.writestr("acp_discharge_15min.csv", "station,date,discharge\n" + "".join(f"GAT,2020-01-01 00:{i % 60:02d},{i}\n" for i in range(100)))
+    name, head, full = previews._zipped_csv(buf.getvalue())
+    assert name == "acp_discharge_15min.csv" and full > 200 and len(head) <= 200 and head.endswith(b"\n")
+
+
+def test_explorer_offers_yes_no_columns_to_the_model(monkeypatch):
+    """Overdose records mark fentanyl with a Y column; the model only saw free-text injury descriptions (131 matches)."""
+    from yfinder import explore
+    props = [{"descriptionofinjury": d, "fentanyl": f, "residencecity": c}
+             for d, f, c in [("Used fentanyl", "Y", "Hartford"), ("Drug use", "Y", "Bristol"), ("Ingestion", "", "Hartford"),
+                             ("Injection", "Y", "Norwich"), ("Drug use", "", "Bristol")] * 4]
+    g = explore.Geo.__new__(explore.Geo)
+    g.props, g.n = props, len(props)
+    seen = {}
+
+    def fake_model(s, prompt, schema, name, max_tokens):
+        seen["prompt"] = prompt
+        return {"column": "fentanyl", "values": ["Y"], "why": "the fentanyl column marks fentanyl-involved deaths"}
+    monkeypatch.setattr(explore, "_model_on", lambda: True)
+    monkeypatch.setattr(explore, "_model_json", fake_model)
+    s = type("S", (), {"graph": {"outcome": "d", "question": "fentanyl deaths", "nodes": [{"id": "d", "label": "Fentanyl deaths", "observable": ""}]}})()
+    col, vals, why = explore._question_subset(g, s)
+    assert col == "fentanyl" and vals == ["Y"] and '"fentanyl": ["Y"]' in seen["prompt"]
+
+
+def test_heavy_point_layers_keep_their_name_columns():
+    from yfinder import vector
+    props = {f"metric_{i}": i for i in range(30)}
+    props.update(hospital_name="Yale New Haven Hospital", city="New Haven")
+    f = vector._feature({"type": "Feature", "properties": props, "geometry": {"type": "Point", "coordinates": [-72.9, 41.3]}}, 5, 16)
+    assert f["properties"]["hospital_name"] == "Yale New Haven Hospital" and f["properties"]["city"] == "New Haven"
+    assert len(f["properties"]) == 16
+
+
+def test_heavy_point_layers_keep_columns_that_name_the_topic():
+    from yfinder import vector
+    props = {f"col_{i:02d}": "x" for i in range(30)}
+    props.update(fentanyl="Y", heroin="")
+    f = vector._feature({"type": "Feature", "properties": props, "geometry": {"type": "Point", "coordinates": [0, 0]}}, 5, 16, {"fentanyl"})
+    assert f["properties"].get("fentanyl") == "Y"
+    f = vector._feature({"type": "Feature", "properties": props, "geometry": {"type": "Point", "coordinates": [0, 0]}}, 5, 16)
+    assert "fentanyl" not in f["properties"]  # without topic words the first columns win, as before

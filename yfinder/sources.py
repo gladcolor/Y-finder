@@ -6,8 +6,10 @@ so recommend_data can check them with fit.assess like catalog cards.
 """
 from __future__ import annotations
 
+import datetime as dt
 import ipaddress
 import json
+import os
 import re
 import socket
 import threading
@@ -64,19 +66,48 @@ _nom_lock = threading.Lock()
 _nom_last = [0.0]
 
 
+ADMIN_WORDS = re.compile(r"\b(district|county|province|prefecture|municipality|department|governorate|region|division|sub-?county|parish)\b", re.I)
+
+
+def _is_united_states(d: dict) -> bool:
+    return d.get("addresstype") == "country" and str(d.get("name") or d.get("display_name") or "").startswith("United States")
+
+
+def _boundary(data) -> dict | None:
+    return next((d for d in data or [] if (d.get("category") or d.get("class")) == "boundary"), None)
+
+
 def geocode(place: str) -> dict | None:
-    """Nominatim search (1 request per second, cached). Returns bbox, center and a boundary if available."""
-    def run():
+    """Nominatim search (1 request per second, cached). Returns bbox, center and a boundary if available.
+
+    Of the first five answers a boundary wins, else the first answer. A query naming a district, county or province
+    that finds no boundary is asked again without that word: "Soroti District, Uganda" finds the district office,
+    "Soroti, Uganda" finds the district."""
+    def ask(q):
         with _nom_lock:  # Nominatim usage policy: at most one request per second
             wait = 1.05 - (time.time() - _nom_last[0])
             if wait > 0:
                 time.sleep(wait)
             _nom_last[0] = time.time()
-            data = _get("https://nominatim.openstreetmap.org/search", {
-                "q": place, "format": "jsonv2", "limit": 1, "polygon_geojson": 1, "polygon_threshold": 0.0015})
-        if not data:
+            return _get("https://nominatim.openstreetmap.org/search", {
+                "q": q, "format": "jsonv2", "limit": 5, "polygon_geojson": 1, "polygon_threshold": 0.0015})
+
+    def run():
+        data = ask(place)
+        d = _boundary(data)
+        if d is None and ADMIN_WORDS.search(place):
+            short = re.sub(r"\s+,", ",", re.sub(r"\s{2,}", " ", ADMIN_WORDS.sub("", place))).strip(" ,")
+            if short and short.lower() != place.strip().lower():
+                more = ask(short)
+                d = _boundary(more) or (None if data else (more or [None])[0])
+        d = d or (data or [None])[0]
+        if d is None:
             return None
-        d = data[0]
+        if _is_united_states(d):
+            # the country's box spans the globe (the Aleutians cross 180 degrees): study the contiguous states
+            return {"name": "United States (contiguous 48 states; Alaska, Hawaii and the territories lie outside this box)",
+                    "lat": 39.8, "lon": -98.6, "bbox": [-124.85, 24.4, -66.88, 49.39], "type": "country", "class": "boundary",
+                    "geometry": None}
         s, n, w, e = (float(x) for x in d["boundingbox"])
         geom = d.get("geojson")
         if geom and geom.get("type") not in ("Polygon", "MultiPolygon"):
@@ -176,6 +207,42 @@ SOCRATA_CATALOG = "https://api.us.socrata.com/api/catalog/v1"
 _SOC_ID = re.compile(r"^[a-z0-9]{4}-[a-z0-9]{4}$")
 
 
+SOCRATA_REGION = {  # portal -> what it covers, so a table's extent fit is not "unknown"
+    "data.ct.gov": "Connecticut", "data.cdc.gov": "US", "healthdata.gov": "US", "data.cms.gov": "US",
+    "data.medicaid.gov": "US", "data.transportation.gov": "US", "data.hrsa.gov": "US", "data.energystar.gov": "US",
+}
+DATE_TYPES = {"calendar date", "date", "floating timestamp", "fixed timestamp"}
+
+
+def _date_field(names: list, types: list) -> str | None:
+    """The table's first date column (or a text column named date or year), for its years."""
+    cols = [(str(n), str(t).lower()) for n, t in zip(names or [], types or []) if isinstance(n, str) and not n.startswith(":")]
+    for n, t in cols:
+        if t in DATE_TYPES:
+            return n
+    return next((n for n, t in cols if n.lower() in ("date", "year", "week_end", "week_ending_date")), None)
+
+
+def socrata_span(soda_csv: str, field: str) -> tuple[int, int] | None:
+    """First and last year in a Socrata table's date column (one small query, cached a day)."""
+    m = re.match(r"^https://([a-z0-9.-]+)/resource/([a-z0-9]{4}-[a-z0-9]{4})\.csv$", soda_csv or "")
+    if not m or not re.fullmatch(r"[A-Za-z_][\w]*", field or "") or os.environ.get("YFINDER_TABLE_SPANS", "1") == "0":
+        return None
+
+    def run():
+        try:
+            d = _get(f"https://{m.group(1)}/resource/{m.group(2)}.json",
+                     {"$select": f"min({field}) as a, max({field}) as b"}, timeout=8)
+        except (requests.RequestException, ValueError):
+            return None
+        row = (d or [{}])[0] if isinstance(d, list) else {}
+        ys = [int(x[:4]) for x in (str(row.get("a") or ""), str(row.get("b") or "")) if re.match(r"^\d{4}", x)]
+        if len(ys) != 2 or not (1800 <= ys[0] <= ys[1] <= dt.date.today().year + 1):
+            return None
+        return ys[0], ys[1]
+    return _cached(f"socspan:{soda_csv}:{field}", 86400, run)
+
+
 def socrata(query: str, limit: int = 8, domains: str | None = None) -> list[dict]:
     params = {"q": query, "only": "dataset", "limit": limit}
     if domains:
@@ -192,7 +259,9 @@ def socrata(query: str, limit: int = 8, domains: str | None = None) -> list[dict
         out.append({
             "ref": link, "title": res.get("name"), "source": f"Open data portal ({dom})",
             "provider": res.get("attribution") or dom, "description": _clip(res.get("description")), "url": link,
-            "access": "Open (Socrata API)", "access_class": "open", "region": None, "time": f"Updated {upd}" if upd else "",
+            "access": "Open (Socrata API)", "access_class": "open", "region": SOCRATA_REGION.get(dom),
+            "time": f"Updated {upd}" if upd else "",
+            "date_field": _date_field(res.get("columns_field_name"), res.get("columns_datatype")),
             "t0": None, "t1": None, "res_m": None, "unit": None, "type": "Table", "data_type": "table",
             "columns": [c for c in (res.get("columns_name") or [])[:30] if isinstance(c, str)],
             "soda": f"https://{dom}/resource/{rid}.csv", "rows_updated": upd,

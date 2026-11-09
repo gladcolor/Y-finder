@@ -41,10 +41,12 @@ _slots = threading.BoundedSemaphore(2)   # explorations computing at once on the
 ID_FIELD = re.compile(r"(^|_)(id|fid|oid|objectid|geoid|gid|fips|code|cd|key|zip|zcta|lat|lon|lng|latitude|longitude|x|y|"
                       r"shape|area|len|length|perimeter|rows|moe|n|count_id)($|_)|^(it_|gz_)?(lat|lon)", re.I)
 NAME_PRIORITY = ["name", "namelsad", "neighborhood", "neighbourhood", "town", "county", "country", "district", "province",
-                 "name_1", "name_2", "state", "city", "place", "label", "title", "area_desc", "gz_label", "it_caja", "site", "station"]
+                 "name_1", "name_2", "state", "city", "place", "label", "title", "area_desc", "gz_label", "it_caja", "site", "station",
+                 "facility_name", "hospital_name", "site_name", "station_name", "location_name", "facility"]
 UNIT_NAME = re.compile(r"^(census )?(tract|block group|block|bg)\b", re.I)
-COUNT_WORDS = re.compile(r"permit|count|number|arrest|case|crime|incident|record|death|birth|visit|trip|unit|housing", re.I)
+COUNT_WORDS = re.compile(r"permit|count|number|arrest|case|crime|incident|record|death|birth|visit|trip|unit|housing|\brows?\b", re.I)
 DATE_FIELD = re.compile(r"date|year|^yr|start|time|period|month|day", re.I)
+YES = re.compile(r"^(y|yes|true|t|1|x)$", re.I)
 ISO_DATE = re.compile(r"^(1[5-9]\d\d|20\d\d)(-(\d\d))?")
 UNIT_WORDS = [("block group", "block groups"), ("tract", "tracts"), ("countr", "countries"), ("county", "counties"),
               ("counties", "counties"), ("town", "towns"), ("province", "provinces"), ("district", "districts"), ("state", "states"),
@@ -201,7 +203,9 @@ def _name_key(props: list[dict]) -> str | None:
     sample = props[: min(400, len(props))]
     for want in NAME_PRIORITY:
         k = lower.get(want)
-        if k and sum(1 for p in sample if isinstance(p.get(k), str) and p.get(k).strip()) >= 0.6 * len(sample):
+        vals = [p.get(k).strip() for p in sample if k and isinstance(p.get(k), str) and p.get(k).strip()]
+        # a name must tell places apart: "CT" on every hospital is a state column, not a name
+        if k and len(vals) >= 0.6 * len(sample) and (len(sample) < 4 or len(set(vals)) >= max(2, 0.2 * len(vals))):
             return k
     return None
 
@@ -770,22 +774,27 @@ def _question_subset(g: Geo, s) -> tuple[str, list[str]] | None:
     if not _model_on() or not g.props:
         return None  # unknown: no model to read the categories
     outcome = next((n for n in (s.graph or {}).get("nodes", []) if n["id"] == (s.graph or {}).get("outcome")), {})
-    fields = []
+    fields, flags = [], []
     for k in g.props[0].keys():
         if ID_FIELD.search(k) or DATE_FIELD.search(k):
             continue
         c = Counter(str(p.get(k)).strip() for p in g.props if isinstance(p.get(k), str) and p.get(k).strip())
         if 3 <= len(c) <= 2000 and sum(c.values()) >= 0.5 * g.n and any(re.search(r"[a-z]{3}", w, re.I) for w in list(c)[:20]):
             fields.append((k, c))
-    if not fields:
+        elif 1 <= len(c) <= 2 and re.search(r"[a-z]{3}", k, re.I) and any(YES.match(v) for v in c) and sum(c.values()) >= 3:
+            flags.append((k, c))  # a yes/no column (fentanyl = Y on overdose records): its name says what it marks
+    if not fields and not flags:
         return None
     fields.sort(key=lambda kc: -len(kc[1]))
     menu = {k: [v for v, _n in c.most_common(150)] for k, c in fields[:4]}
+    menu.update({k: [v for v in c if YES.match(v)] for k, c in flags[:16]})
     prompt = ("A researcher's question: " + (s.graph or {}).get("question", "") + "\nThe outcome they study: "
               + outcome.get("label", "") + " (" + outcome.get("observable", "") + ")\n"
-              "A point layer has these text columns with their most common values. If one column has values that pick out "
-              "the records the outcome is about (for example the charges that are street vending), return that column and "
-              "exactly those values. Return an empty column when no values clearly match.\n" + json.dumps(menu, ensure_ascii=False)[:24000])
+              "A point layer has these text columns with their most common values (yes/no columns are listed with their "
+              "yes value). If one column has values that pick out the records the outcome is about (for example the charges "
+              "that are street vending, or a yes/no column named for the drug the question is about), return that column and "
+              "exactly those values. Prefer a yes/no column that names the outcome over matching words in free text. "
+              "Return an empty column when no values clearly match.\n" + json.dumps(menu, ensure_ascii=False)[:24000])
     schema = {"type": "object", "additionalProperties": False, "required": ["column", "values", "why"],
               "properties": {"column": {"type": "string"}, "values": {"type": "array", "items": {"type": "string"}},
                              "why": {"type": "string"}}}
@@ -985,6 +994,8 @@ def profile_series(v: dict, s) -> dict | None:
         head = f"{short} peaked in {peak} ({fmt(ys[i_peak])}) and stood at {fmt(last)} in {y1}"
     elif ch is not None and abs(ch) >= 10 and (r is None or r * ch > 0):
         head = f"{short} {'rose' if ch > 0 else 'fell'} {abs(ch):.0f}% from {y0} to {y1}"
+    elif ch is not None and ch != 0 and r is not None and abs(r) >= 0.8 and r * ch > 0:
+        head = f"{short} {'rose' if ch > 0 else 'fell'} steadily but only {abs(ch):.1f}% from {y0} to {y1}"
     else:
         head = f"{short}: no steady trend from {y0} to {y1}"
     detail = (f"{label}: {fmt(first)} in {y0}, {fmt(last)} in {y1}, highest in {peak} ({fmt(ys[i_peak])}), "

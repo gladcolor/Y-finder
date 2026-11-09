@@ -3,6 +3,7 @@ sample evenly, round coordinates. Used for GeoLibre gallery layers and for downl
 from __future__ import annotations
 
 import json
+import re
 
 from .geo import geojson_bbox, valid_bbox
 
@@ -23,14 +24,16 @@ def _intersects(a, b) -> bool:
 
 
 MAX_PROPS = 16  # heavy layers keep this many attributes per feature (popups stay useful, the file stays light)
+NAME_LIKE = re.compile(r"(^|_)(name|title|label|town|city|county|state|site|station|facility|hospital|place|neighbou?rhood)(_|$)|name$", re.I)
 
 
-def _feature(f: dict, nd: int, max_props: int | None = None) -> dict:
+def _feature(f: dict, nd: int, max_props: int | None = None, keep=None) -> dict:
     g = f["geometry"]
     geom = g if g.get("type") == "GeometryCollection" else {"type": g.get("type"), "coordinates": _round(g.get("coordinates"), nd)}
     props = {k: v for k, v in (f.get("properties") or {}).items() if isinstance(v, (str, int, float, bool)) or v is None}
-    if max_props and len(props) > max_props:
-        props = {k: v for k, v in list(props.items())[:max_props] if v not in (None, "")}
+    if max_props and len(props) > max_props:  # names first (hospital_name, city), then columns that name the topic (fentanyl)
+        keys = sorted(props, key=lambda k: 0 if NAME_LIKE.search(k) else 1 if keep and any(w in k.lower() for w in keep) else 2)
+        props = {k: props[k] for k in keys[:max_props] if props[k] not in (None, "")}
     return {"type": "Feature", "properties": props, "geometry": geom}
 
 
@@ -52,7 +55,7 @@ def one_year(feats: list[dict], want: int | None):
     return feats, None
 
 
-def slim(feats: list[dict], study_bbox=None, raw_bytes: int | None = None) -> tuple[dict | None, str | None, int]:
+def slim(feats: list[dict], study_bbox=None, raw_bytes: int | None = None, keep=None) -> tuple[dict | None, str | None, int]:
     """Returns (FeatureCollection or None when nothing is left, note, total features before cutting).
 
     Small layers are kept whole. Large ones are cut to the features touching the study area; what is still too
@@ -74,7 +77,7 @@ def slim(feats: list[dict], study_bbox=None, raw_bytes: int | None = None) -> tu
     points = all(f["geometry"].get("type") in ("Point", "MultiPoint") for f in feats[:200])
     heavy = kept > SMALL_LAYER
     for nd in ((5, 4) if points else (5, 4, 3)):
-        fc = {"type": "FeatureCollection", "features": [_feature(f, nd, MAX_PROPS if heavy else None) for f in feats]}
+        fc = {"type": "FeatureCollection", "features": [_feature(f, nd, MAX_PROPS if heavy else None, keep) for f in feats]}
         size = len(json.dumps(fc, separators=(",", ":")))
         if size <= TARGET_BYTES:
             break

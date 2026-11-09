@@ -13,7 +13,8 @@
     "Recent aerial photo loaded on the map"
    ],
    "recorded": "2026-11-09",
-   "model": "gpt-6.1-terra"
+   "model": "gpt-6.1-terra",
+   "theme": "health"
   },
   {
    "id": "smoke",
@@ -28,7 +29,8 @@
     "Access handbook with Python code"
    ],
    "recorded": "2026-11-08",
-   "model": "gpt-6.1-terra"
+   "model": "gpt-6.1-terra",
+   "theme": "health"
   },
   {
    "id": "zoning",
@@ -43,7 +45,8 @@
     "Editing the scope re-checks every dataset"
    ],
    "recorded": "2026-11-08",
-   "model": "gpt-6.1-terra"
+   "model": "gpt-6.1-terra",
+   "theme": "society"
   },
   {
    "id": "waterfront",
@@ -57,7 +60,8 @@
     "Hand-off to GeoLibre for full GIS"
    ],
    "recorded": "2026-11-09",
-   "model": "gpt-6.1-terra"
+   "model": "gpt-6.1-terra",
+   "theme": "history"
   },
   {
    "id": "foottraffic",
@@ -71,7 +75,8 @@
     "Follow-up searches with consent"
    ],
    "recorded": "2026-11-08",
-   "model": "gpt-6.1-terra"
+   "model": "gpt-6.1-terra",
+   "theme": "society"
   },
   {
    "id": "kenya",
@@ -85,7 +90,8 @@
     "Field data needs called out"
    ],
    "recorded": "2026-11-09",
-   "model": "gpt-6.1-terra"
+   "model": "gpt-6.1-terra",
+   "theme": "health"
   },
   {
    "id": "yale_trees",
@@ -101,6 +107,7 @@
    "recorded": "2026-11-09",
    "model": "gpt-6.1-terra",
    "group": "yale",
+   "theme": "environment",
    "program": "Urban Resources Initiative (YSE)",
    "program_url": "https://uri.yale.edu/",
    "based_on": "URI plants street trees with the City of New Haven; YSE work maps heat and canopy to guide planting"
@@ -119,6 +126,7 @@
    "recorded": "2026-11-09",
    "model": "gpt-6.1-terra",
    "group": "yale",
+   "theme": "history",
    "program": "New Haven Digital Atlas (YCGS app)",
    "program_url": "https://news.yale.edu/2026/05/29/building-maps-connect-new-havens-past-present",
    "based_on": "Yale Environmental Humanities and YCGS compare the 1846 harbor survey with today's city"
@@ -137,6 +145,7 @@
    "recorded": "2026-11-09",
    "model": "gpt-6.1-terra",
    "group": "yale",
+   "theme": "environment",
    "program": "YCGS maps of ephemeral streams",
    "program_url": "https://geospatial.yale.edu/posts/2026-06-24-mapping-ephemeral-stream-contributions-to-us-watersheds",
    "based_on": "A Yale study in Science modeled ephemeral streams across the U.S.; YCGS mapped how they feed drinking water in five states, Iowa among them"
@@ -155,6 +164,7 @@
    "recorded": "2026-11-09",
    "model": "gpt-6.1-terra",
    "group": "yale",
+   "theme": "society",
    "program": "Geographies of Arrest (YCGS with Leigh-Anna Hidalgo)",
    "program_url": "https://geospatial.yale.edu/geographies-of-arrest-street-vending-race-and-policing-in-los-angeles",
    "based_on": "YCGS screened more than 1.6 million LAPD arrest records from 2010 to 2024 for vending-related charges"
@@ -173,6 +183,7 @@
    "recorded": "2026-11-09",
    "model": "gpt-6.1-terra",
    "group": "yale",
+   "theme": "history",
    "program": "HGIS de las Indias (Bridging the Atlantic initiative)",
    "program_url": "https://geospatial.yale.edu/posts/2026-03-10-bridging-the-atlantic-migrations-their-legacies",
    "based_on": "YCGS supports HGIS de las Indias, an atlas of late colonial Spanish America whose data sit on Yale Dataverse"
@@ -191,6 +202,7 @@
    "recorded": "2026-11-09",
    "model": "gpt-6.1-terra",
    "group": "yale",
+   "theme": "environment",
    "program": "Observing Earth from Space (EPS 362 / ENV 726)",
    "program_url": "https://geospatial.yale.edu/observing-earth-from-space",
    "based_on": "A 2025 student project in Prof. Xuhui Lee's course used TEMPO NO2 to study daily traffic in Los Angeles; YCGS hosts the course projects"
@@ -209,6 +221,7 @@
    "recorded": "2026-11-09",
    "model": "gpt-6.1-terra",
    "group": "yale",
+   "theme": "environment",
    "program": "Environmental Performance Index",
    "program_url": "https://epi.yale.edu/",
    "based_on": "The 2026 EPI (Yale Center for Environmental Law & Policy, supported by YCGS) ranks 177 countries"
@@ -227,6 +240,7 @@
    "recorded": "2026-11-09",
    "model": "gpt-6.1-terra",
    "group": "yale",
+   "theme": "society",
    "program": "Yale Climate Opinion Maps",
    "program_url": "https://climatecommunication.yale.edu/visualizations-data/ycom-us/",
    "based_on": "The Yale Program on Climate Change Communication models opinion for states, districts and counties"
@@ -245,6 +259,7 @@
    "recorded": "2026-11-09",
    "model": "gpt-6.1-terra",
    "group": "yale",
+   "theme": "society",
    "program": "Geospatial measurement of economic activity",
    "program_url": "https://www.nber.org/papers/w33619",
    "based_on": "Yale economists use pollution, night light and heat data to estimate plant output; featured by YCGS"
@@ -263,6 +278,7 @@
    "recorded": "2026-11-09",
    "model": "gpt-6.1-terra",
    "group": "yale",
+   "theme": "environment",
    "program": "YCGS lidar biomass project",
    "program_url": "https://geospatial.yale.edu/high-resolution-lidar-for-biomass-estimation-a-deep-dive-into-connecticuts-forest-carbon-stock",
    "based_on": "YCGS compared 2016 and 2023 Connecticut lidar for forest carbon; its drone workshop flies Yale-Myers Forest"
@@ -281,6 +297,7 @@
    "recorded": "2026-11-09",
    "model": "gpt-6.1-terra",
    "group": "yale",
+   "theme": "environment",
    "program": "YCGS tropical forest carbon project",
    "program_url": "https://geospatial.yale.edu/unveiling-carbon-dynamics-in-african-tropical-forests-using-sentinel-2-spectral-indices",
    "based_on": "YCGS mapped land cover and carbon in the Lac Tele-Likouala aux Herbes reserve, Republic of Congo, from 2018 to 2023 with Sentinel-2"
@@ -299,9 +316,390 @@
    "recorded": "2026-11-09",
    "model": "gpt-6.1-terra",
    "group": "yale",
+   "theme": "environment",
    "program": "Community sensing of climate impacts (Yale Planetary Solutions grant)",
    "program_url": "https://planetarysolutions.yale.edu/scaling-community-sensing-and-recalling-of-historical-climate-impact-data",
    "based_on": "A 2025 Yale Planetary Solutions project collects smallholder farmers' climate reports by SMS game and field-tested it in Cauca, Colombia"
+  },
+  {
+   "id": "yale_election",
+   "title": "Election swings and split tickets in Connecticut",
+   "field": "Political science",
+   "who": "Elena (fictional), political science PhD student at ISPS.",
+   "shows": [
+    "Official town returns from the state's election site",
+    "Swing and split tickets as two measures",
+    "Town boundaries on the map",
+    "Why town totals cannot show individual split voters"
+   ],
+   "recorded": "2026-11-09",
+   "model": "gpt-6.1-terra",
+   "group": "yale",
+   "theme": "society",
+   "program": "The US election landscape (YCGS and ISPS panel)",
+   "program_url": "https://isps.yale.edu/news/blog/2024/12/analyzing-election-maps-insights-from-yales-post-election-panel",
+   "based_on": "YCGS, ISPS and the Data-Intensive Social Science Center held a 2024 panel on reading election maps; ISPS fellow Shiro Kuriwaki studies ticket splitting"
+  },
+  {
+   "id": "yale_circus",
+   "title": "Traveling circuses from wagons to rails",
+   "field": "Architectural history",
+   "who": "Marcus (fictional), architecture history PhD student.",
+   "shows": [
+    "Circus route books in a library collection",
+    "Year-by-year railroad maps, flagged where they end",
+    "Historical census counts by county",
+    "A window from 1863 to 1916"
+   ],
+   "recorded": "2026-11-09",
+   "model": "gpt-6.1-terra",
+   "group": "yale",
+   "theme": "history",
+   "program": "Tracking the traveling circus (Yale GIS Accelerator)",
+   "program_url": "https://library.yale.edu/news/tracking-traveling-circus-student-maps-data-visualize-american-history",
+   "based_on": "A Yale architecture PhD student mapped circus route books against rail lines and census data in the Yale GIS Accelerator"
+  },
+  {
+   "id": "yale_tsetse",
+   "title": "Tsetse habitat near cattle and villages in Uganda",
+   "field": "Vector biology",
+   "who": "Grace (fictional), YSPH epidemiology PhD student.",
+   "shows": [
+    "Districts found by name",
+    "10 m land cover for fly habitat",
+    "Cattle density grids",
+    "Candidate trap areas, not proof of flies"
+   ],
+   "recorded": "2026-11-09",
+   "model": "gpt-6.1-terra",
+   "group": "yale",
+   "theme": "health",
+   "program": "Aksoy Lab: tsetse flies and sleeping sickness (Yale School of Public Health)",
+   "program_url": "https://medicine.yale.edu/lab/aksoy/",
+   "based_on": "Yale's Aksoy Lab studies tsetse flies and the parasites behind sleeping sickness with partners in Uganda and Kenya"
+  },
+  {
+   "id": "yale_hrl",
+   "title": "Damage and displacement around El Fasher, Sudan",
+   "field": "Humanitarian research",
+   "who": "Amira (fictional), research assistant at a humanitarian lab.",
+   "shows": [
+    "Open fire detections and imagery first",
+    "Building-level needs named as commercial imagery",
+    "Field reports linked as context",
+    "A preview that is not a damage assessment"
+   ],
+   "recorded": "2026-11-09",
+   "model": "gpt-6.1-terra",
+   "group": "yale",
+   "theme": "health",
+   "program": "Humanitarian Research Lab (Yale School of Public Health)",
+   "program_url": "https://ysph.yale.edu/hrl/",
+   "based_on": "Yale's Humanitarian Research Lab documents attacks on civilians in El Fasher, Sudan, from satellite imagery and open sources"
+  },
+  {
+   "id": "yale_mol",
+   "title": "Endemic species and forest loss in Tanzania's Eastern Arc",
+   "field": "Biodiversity",
+   "who": "Joseph (fictional), YSE master's student in conservation.",
+   "shows": [
+    "Species ranges from Yale's Map of Life",
+    "Protected areas (WDPA)",
+    "Forest loss year by year",
+    "Coarse ranges flagged against 30 m forest data"
+   ],
+   "recorded": "2026-11-09",
+   "model": "gpt-6.1-terra",
+   "group": "yale",
+   "theme": "environment",
+   "program": "Map of Life (Yale Center for Biodiversity and Global Change)",
+   "program_url": "https://mol.org/",
+   "based_on": "Yale's Map of Life gathers species ranges and records worldwide and computes habitat and protection indicators"
+  },
+  {
+   "id": "yale_ygdp",
+   "title": "Where Americans say 'the car needs washed'",
+   "field": "Linguistics",
+   "who": "Hannah (fictional), linguistics PhD student.",
+   "shows": [
+    "Yale's dialect survey maps",
+    "Historical census tables by county",
+    "The contiguous US as the study area",
+    "Pattern versus cause stated plainly"
+   ],
+   "recorded": "2026-11-09",
+   "model": "gpt-6.1-terra",
+   "group": "yale",
+   "theme": "history",
+   "program": "Yale Grammatical Diversity Project",
+   "program_url": "https://ygdp.yale.edu/",
+   "based_on": "The Yale Grammatical Diversity Project maps regional English grammar from nationwide acceptability surveys"
+  },
+  {
+   "id": "yale_wastewater",
+   "title": "Wastewater warnings before hospital visits",
+   "field": "Environmental engineering",
+   "who": "Wei (fictional), environmental engineering PhD student.",
+   "shows": [
+    "CDC wastewater series by plant",
+    "Connecticut hospital tables",
+    "The plant's service towns from its operator",
+    "Lead and lag as the method"
+   ],
+   "recorded": "2026-11-09",
+   "model": "gpt-6.1-terra",
+   "group": "yale",
+   "theme": "health",
+   "program": "Wastewater surveillance (Peccia Lab, Yale Engineering)",
+   "program_url": "https://engineering.yale.edu/research-and-faculty/faculty-directory/jordan-peccia",
+   "based_on": "Yale engineers began testing New Haven's East Shore plant for SARS-CoV-2 in 2020 and showed it led hospital admissions by days"
+  },
+  {
+   "id": "yale_lepto",
+   "title": "Flooding, rats and leptospirosis in Salvador, Brazil",
+   "field": "Global health",
+   "who": "Lucas (fictional), YSPH global health student.",
+   "shows": [
+    "A study map of terrain and sewers",
+    "Rainfall and elevation grids flagged as coarse",
+    "Street-level photos and open maps",
+    "Recent satellite view of the valleys"
+   ],
+   "recorded": "2026-11-09",
+   "model": "gpt-6.1-terra",
+   "group": "yale",
+   "theme": "health",
+   "program": "Leptospirosis cohort in Pau da Lima (Albert Ko, Yale School of Public Health)",
+   "program_url": "https://ysph.yale.edu/profile/albert-ko/",
+   "based_on": "Albert Ko's Yale group has followed leptospirosis, rats and flooding in Salvador's Pau da Lima community since the 1990s"
+  },
+  {
+   "id": "yale_leanseason",
+   "title": "The lean season in northern Bangladesh",
+   "field": "Development economics",
+   "who": "Rahim (fictional), economics PhD student at the Economic Growth Center.",
+   "shows": [
+    "Satellite rainfall and crop condition",
+    "Upazilas as the unit",
+    "The Yale migration experiment's data on Dataverse",
+    "A 2022 poverty map by upazila"
+   ],
+   "recorded": "2026-11-09",
+   "model": "gpt-6.1-terra",
+   "group": "yale",
+   "theme": "society",
+   "program": "Seasonal migration subsidies in Bangladesh (Yale Economic Growth Center)",
+   "program_url": "https://egc.yale.edu/research/meghir_et_al_2022",
+   "based_on": "Yale economists tested travel subsidies for seasonal migration during the pre-harvest lean season in Rangpur, Bangladesh"
+  },
+  {
+   "id": "yale_solar",
+   "title": "Did Solarize campaigns keep rooftop solar growing?",
+   "field": "Energy economics",
+   "who": "Olivia (fictional), YSE doctoral student in energy economics.",
+   "shows": [
+    "State solar incentive records by town",
+    "Campaign dates from a research appendix",
+    "Towns on the map",
+    "Event-time comparison as the method"
+   ],
+   "recorded": "2026-11-09",
+   "model": "gpt-6.1-terra",
+   "group": "yale",
+   "theme": "society",
+   "program": "Solarize Connecticut studies (Kenneth Gillingham, Yale School of the Environment)",
+   "program_url": "https://news.yale.edu/2017/04/18/national-guidebook-maps-way-toward-tipping-points-solar-adoption",
+   "based_on": "Yale economists ran randomized Solarize campaigns in Connecticut towns and measured peer effects in rooftop solar adoption"
+  },
+  {
+   "id": "yale_weathering",
+   "title": "Where to spread crushed rock on Illinois farms",
+   "field": "Biogeochemistry",
+   "who": "Nora (fictional), Earth and planetary sciences PhD student.",
+   "shows": [
+    "Soil pH from the soil survey",
+    "Field boundaries and cropland",
+    "Quarries from USGS",
+    "Rainfall normals from PRISM"
+   ],
+   "recorded": "2026-11-09",
+   "model": "gpt-6.1-terra",
+   "group": "yale",
+   "theme": "environment",
+   "program": "Enhanced weathering trials (Yale Center for Natural Carbon Capture)",
+   "program_url": "https://naturalcarboncapture.yale.edu/",
+   "based_on": "Yale's Center for Natural Carbon Capture runs enhanced rock weathering trials on farms in eight US states"
+  },
+  {
+   "id": "yale_airsensors",
+   "title": "Fine particles in Dwight and East Rock",
+   "field": "Environmental justice",
+   "who": "Jasmine (fictional), Yale College senior in environmental studies.",
+   "shows": [
+    "Yale's sensor network and PurpleAir",
+    "The EPA monitor for calibration",
+    "Weather as a confounder",
+    "Street-level claims tied to sensor coverage"
+   ],
+   "recorded": "2026-11-09",
+   "model": "gpt-6.1-terra",
+   "group": "yale",
+   "theme": "health",
+   "program": "Low-cost air sensor network in New Haven (Yale Planetary Solutions)",
+   "program_url": "https://planetarysolutions.yale.edu/deployment-of-a-low-cost-sensor-network-to-measure-co2-emissions-and-pollution-exposure-across-the",
+   "based_on": "A Yale Planetary Solutions project placed low-cost sensors across New Haven; a 2025 study compared air in Dwight and East Rock"
+  },
+  {
+   "id": "yale_familyforest",
+   "title": "Family forests at risk of being split up",
+   "field": "Forest policy",
+   "who": "Ben (fictional), YSE master's student working with land trusts.",
+   "shows": [
+    "Parcels in two states",
+    "Protected land and easements (PAD-US)",
+    "Land cover over time",
+    "Risk ranked for outreach, not forecast as fact"
+   ],
+   "recorded": "2026-11-09",
+   "model": "gpt-6.1-terra",
+   "group": "yale",
+   "theme": "environment",
+   "program": "Sustaining Family Forests Initiative (Yale School of the Environment)",
+   "program_url": "https://sffi.yale.edu/",
+   "based_on": "Yale's Sustaining Family Forests Initiative studies family forest owners with the USDA Forest Service to help keep their land in forest"
+  },
+  {
+   "id": "yale_aguasalud",
+   "title": "Young forests and dry-season water in the Panama Canal watershed",
+   "field": "Tropical restoration",
+   "who": "Camila (fictional), YSE master's student in tropical forestry.",
+   "shows": [
+    "Landsat for forest regrowth",
+    "Canal sub-basins from an ArcGIS layer",
+    "Canal Authority discharge records via STRI",
+    "Rainfall as the confounder"
+   ],
+   "recorded": "2026-11-09",
+   "model": "gpt-6.1-terra",
+   "group": "yale",
+   "theme": "environment",
+   "program": "ELTI and the Agua Salud Project, Panama (Yale School of the Environment)",
+   "program_url": "https://restoration.elti.yale.edu/resource/agua-salud-project-central-panama",
+   "based_on": "Yale's Environmental Leadership and Training Initiative teaches restoration at the Agua Salud Project, which tests how regrowing forest affects canal water"
+  },
+  {
+   "id": "yale_lagos",
+   "title": "Lagos spreading onto farmland and wetlands",
+   "field": "Urban science",
+   "who": "Tunde (fictional), YSE doctoral student in urban land change.",
+   "shows": [
+    "Landsat from 2000 to 2025",
+    "30 m wetland and cropland maps",
+    "The 2030 forecast flagged as coarse",
+    "A recent satellite view of Lekki"
+   ],
+   "recorded": "2026-11-09",
+   "model": "gpt-6.1-terra",
+   "group": "yale",
+   "theme": "society",
+   "program": "Urban expansion forecasts (Karen Seto, Yale School of the Environment)",
+   "program_url": "https://environment.yale.edu/directory/faculty/karen-seto",
+   "based_on": "Karen Seto's group at Yale forecast global urban expansion to 2030 and its impact on farmland and habitats"
+  },
+  {
+   "id": "yale_dura",
+   "title": "Yale's Dura-Europos excavations on today's imagery",
+   "field": "Archaeology",
+   "who": "Isabel (fictional), classics PhD student.",
+   "shows": [
+    "Yale's excavation archive as the base",
+    "1960s CORONA film as the baseline",
+    "Sub-meter imagery for pits",
+    "A recent satellite view of the site"
+   ],
+   "recorded": "2026-11-09",
+   "model": "gpt-6.1-terra",
+   "group": "yale",
+   "theme": "history",
+   "program": "Dura-Europos excavation archive (Yale University Art Gallery)",
+   "program_url": "https://duraeuropos.artgallery.yale.edu/",
+   "based_on": "Yale excavated Dura-Europos in Syria from 1928 to 1937; the Art Gallery keeps the archive and is building a digital one"
+  },
+  {
+   "id": "yale_overdose",
+   "title": "Fentanyl deaths and distance to help in Connecticut",
+   "field": "Public health",
+   "who": "Marisol (fictional), YSPH MPH student.",
+   "shows": [
+    "Medical examiner records by town",
+    "Treatment and syringe program lists",
+    "Rates per resident, not counts",
+    "Distances as estimates, not access"
+   ],
+   "recorded": "2026-11-09",
+   "model": "gpt-6.1-terra",
+   "group": "yale",
+   "theme": "health",
+   "program": "Town-level mapping of overdose deaths in Connecticut (Yale School of Public Health)",
+   "program_url": "https://ysph.yale.edu/enrich/news-article/study-determines-that-opioid-overdose-is-statewide-problem-in-connecticut",
+   "based_on": "Yale School of Public Health researchers mapped overdose deaths across Connecticut towns from medical examiner records"
+  },
+  {
+   "id": "yale_herbarium",
+   "title": "Are Connecticut wildflowers blooming earlier?",
+   "field": "Botany",
+   "who": "Ruth (fictional), ecology and evolutionary biology PhD student.",
+   "shows": [
+    "Yale Peabody herbarium records",
+    "NOAA monthly climate since 1895",
+    "Collection bias as a confounder",
+    "The 1890-1894 gap flagged"
+   ],
+   "recorded": "2026-11-09",
+   "model": "gpt-6.1-terra",
+   "group": "yale",
+   "theme": "environment",
+   "program": "Yale Peabody Museum botany collections",
+   "program_url": "https://peabody.yale.edu/explore/collections/botany",
+   "based_on": "The Yale Peabody Museum's herbarium holds dated plant specimens from Connecticut since the 1800s"
+  },
+  {
+   "id": "yale_xingu",
+   "title": "Repeated fires in the Xingu Indigenous Territory",
+   "field": "Fire ecology",
+   "who": "Ana (fictional), YSE doctoral student in fire ecology.",
+   "shows": [
+    "MapBiomas Fire year by year",
+    "Tree cover loss after fire",
+    "Flooded versus upland forest",
+    "The territory boundary as the study area"
+   ],
+   "recorded": "2026-11-09",
+   "model": "gpt-6.1-terra",
+   "group": "yale",
+   "theme": "environment",
+   "program": "Fire and drought in the southern Amazon (Paulo Brando, Yale School of the Environment)",
+   "program_url": "https://environment.yale.edu/news/article/amazon-forests-can-recover-fire-some-caveats",
+   "based_on": "Paulo Brando's Yale group studies how drought and repeated fire degrade forests in the Xingu region of Brazil"
+  },
+  {
+   "id": "yale_coastal",
+   "title": "Do coastal flood zones lower home prices in Connecticut?",
+   "field": "Finance",
+   "who": "Daniel (fictional), Yale SOM PhD student in finance.",
+   "shows": [
+    "Every Connecticut home sale since 2001",
+    "FEMA flood zones and parcels",
+    "USGS Sandy high-water marks",
+    "Hedonic comparison as the method"
+   ],
+   "recorded": "2026-11-09",
+   "model": "gpt-6.1-terra",
+   "group": "yale",
+   "theme": "society",
+   "program": "Sea level rise and coastal home prices (Yale School of Management)",
+   "program_url": "https://insights.som.yale.edu/insights/study-rising-seas-arent-causing-coastal-property-values-to-decline",
+   "based_on": "A Yale School of Management study tested whether rising seas lower coastal property values"
   }
  ]
 }

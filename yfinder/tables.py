@@ -175,7 +175,8 @@ def detect_key(header: list[str], rows: list[list[str]], iso3: set[str] | None =
     return best
 
 
-TOWN_COLUMN = re.compile(r"^(towns?|town[ _]?name|municipalit(y|ies)|municipality[ _]name|city|city[/_ ]town|jurisdiction|community|place)$", re.I)
+TOWN_COLUMN = re.compile(r"^((residence|death|injury|incident|host[ _]?customer|customer|property|owner|site|facility|location)[ _]?)?"
+                         r"(towns?|town[ _]?name|municipalit(y|ies)|municipality[ _]name|city|city[/_ ]town|jurisdiction|community|place)$", re.I)
 YEAR_NAME = re.compile(r"^[_ ]?((?:19|20)\d\d)$")
 
 
@@ -204,8 +205,12 @@ def wide_series(header: list[str], rows: list[list[str]], label: str = "") -> di
 
 
 def detect_town(header: list[str], rows: list[list[str]], towns: set[str]) -> int | None:
-    """A town-name column (Connecticut data is often by town) whose values match the towns in the area."""
-    for j, name in enumerate(header):
+    """A town-name column (Connecticut data is often by town) whose values match the towns in the area. The town of
+    residence comes first (overdose records also give the towns of injury and death), then plain town columns."""
+    order = sorted(range(len(header)), key=lambda j: (0 if header[j].strip().lower().startswith("residence") else
+                                                      1 if re.match(r"^(towns?|town[ _]?name|municipalit|city$)", header[j].strip(), re.I) else 2, j))
+    for j in order:
+        name = header[j]
         if not TOWN_COLUMN.match(name.strip()):
             continue
         vals = [r[j].strip().lower() for r in rows[:400] if len(r) > j and r[j].strip()]
@@ -253,7 +258,26 @@ def key_value(kind: str, v: str) -> str:
 
 
 def _tokens(text: str) -> set[str]:
-    return {t for t in re.findall(r"[a-z0-9.]+", (text or "").lower().replace("₂", "2").replace(".", " ")) if t not in STOP and len(t) > 1}
+    text = re.sub(r"([a-z])([A-Z])", r"\1 \2", text or "")  # SaleAmount -> sale amount
+    return {t for t in re.findall(r"[a-z0-9.]+", text.lower().replace("₂", "2").replace(".", " ")) if t not in STOP and len(t) > 1}
+
+
+SENTINELS = {9.0, 99.0, 999.0, 9999.0, 99999.0, -9.0, -99.0, -999.0, -9999.0}
+
+
+def is_code_column(name: str, nums: list[float] | None = None) -> bool:
+    """An identifier, code, coordinate or year column (CNTYCODE, GEOID, site_id, StationID, zip), or one full of
+    placeholder values such as 999: never a measure."""
+    low = name.lower().strip()
+    if re.search(r"(^|[._ \-])(year|yr|rank|lat|lon|lng|latitude|longitude|x|y|id|fid|oid|key|serial|seq)($|[._ \-])", low):
+        return True
+    if re.search(r"code|fips|geoid|objectid|zipcode|^zip|zcta", low) or re.search(r"(ID|Id)$", name.strip()) or low.endswith("_id"):
+        return True
+    if nums:
+        top = max(set(nums), key=nums.count)
+        if top in SENTINELS and nums.count(top) >= 0.3 * len(nums):
+            return True
+    return False
 
 
 def value_columns(header: list[str], rows: list[list[str]], key: int, labels: dict[str, str], text: str, k: int = 3) -> list[int]:
@@ -267,7 +291,7 @@ def value_columns(header: list[str], rows: list[list[str]], key: int, labels: di
         nums = [x for x in (_num(v) for v in vals) if x is not None]
         if len(vals) < 3 or len(nums) < 0.6 * len(vals):
             continue
-        if re.search(r"(^|[._ ])(year|yr|id|code|fips|rank|lat|lon|latitude|longitude|x|y)($|[._ ])", name.lower()) and not labels.get(name.split(".")[0]):
+        if is_code_column(name, nums) and not labels.get(name.split(".")[0]):
             continue
         label = labels.get(name) or labels.get(name.split(".")[0]) or ""
         hay = _tokens(name + " " + label)

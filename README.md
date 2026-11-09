@@ -17,7 +17,7 @@ Y-finder is an independent prototype by Huan Ning, prepared for the Yale Center 
 - **Map first:** study area, imagery previews, OpenStreetMap features, Census boundaries and dataset coverage on a Google-Maps-like map with a legend; open the same layers in GeoLibre for full GIS.
 - **Access handbooks:** Agent-Skill style `SKILL.md` per source (endpoint, Python example, pitfalls), exportable to LLM-Find's TOML handbooks.
 - **People in the loop:** quick replies, scope editing, consultation summary for YCGS staff, opt-in follow-up searches.
-- **Demo cases:** six cases grounded in real YCGS projects and Yale programs (Urban Resources Initiative, New Haven Digital Atlas, YCGS lidar biomass, EPI, Yale Climate Opinion Maps, satellite measurement of economic activity) and six general ones, recorded from real runs and continued live.
+- **Demo cases:** 32 cases grounded in real YCGS projects and Yale programs (Urban Resources Initiative, New Haven Digital Atlas, Map of Life, the Humanitarian Research Lab, the Grammatical Diversity Project, the Economic Growth Center, the Peabody herbarium, the Dura-Europos archive and more) and six general ones, recorded from real runs and continued live. The welcome screen shows six; the rest are grouped by theme with a search box.
 
 ## Run locally
 
@@ -43,7 +43,7 @@ handbooks/      <source>/SKILL.md access handbooks
 scripts/        build_catalog.py, write_handbooks.py, record_demos.py, run_personas.py, mutation_check.py, run_watches.py
 tests/          pytest suite, personas.json
 deploy/         systemd units, nginx snippet, deploy.sh
-docs/           design.md, literature_review.md, persona_results.md, demo_case_results.md, demo_data_audit.md
+docs/           design.md, literature_review.md, persona_results.md, demo_case_results.md, demo_data_audit.md, demo_batch3_review.md
 ```
 
 ## Tests

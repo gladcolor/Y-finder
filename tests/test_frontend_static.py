@@ -35,3 +35,14 @@ def test_dark_text_on_light_and_no_leftover_debug():
     defined = set(re.findall(r"--([\w-]+)\s*:", CSS))
     fallback_ok = {"muted", "ink"}  # used with a fallback value where they appear
     assert not (used - defined - fallback_ok), f"undefined CSS variables: {sorted(used - defined - fallback_ok)}"
+
+
+def test_no_control_characters_in_source():
+    """A patch once turned the regex word boundary into a backspace character, so "hours" never matched."""
+    bad = []
+    for p in list((ROOT / "yfinder").glob("*.py")) + list((ROOT / "tests").glob("*.py")) + list((ROOT / "scripts").glob("*.py")) + \
+            [ROOT / "static" / "app.js", ROOT / "static" / "app.css", ROOT / "static" / "index.html"]:
+        for i, line in enumerate(p.read_text(encoding="utf-8").split("\n"), 1):
+            if re.search(r"[\x00-\x08\x0b\x0c\x0e-\x1f]", line):
+                bad.append(f"{p.name}:{i}")
+    assert not bad, bad

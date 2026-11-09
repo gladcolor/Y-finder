@@ -70,7 +70,7 @@ def s(tmp_path, monkeypatch):
 def _fake_browser(monkeypatch, found: dict, steps: list):
     threads = []
 
-    def submit(url, progress, done, year=None, alive=lambda: True):
+    def submit(url, progress, done, year=None, alive=lambda: True, words=None):
         steps.append(("submit", url))
         progress(f"Opening {found.get('host')} in Y-finder's browser")
         steps.append(("step", "opened"))
@@ -112,7 +112,7 @@ def test_a_page_with_nothing_for_plain_requests_goes_to_the_browser_and_maps_its
 def test_progress_shows_on_the_card_while_the_browser_works(s, monkeypatch):
     monkeypatch.setattr(previews, "_landing", lambda *a: None)
     seen = {}
-    monkeypatch.setattr(browser, "submit", lambda url, progress, done, year=None, alive=None: (progress("Clicking “Download” on data.example.org"),
+    monkeypatch.setattr(browser, "submit", lambda url, progress, done, year=None, alive=None, words=None: (progress("Clicking “Download” on data.example.org"),
                                                                                                 seen.update(pub=previews.public(s))))
     s.picks = [dict(PAGE)]
     previews._one(s, s.picks[0], previews._sig(s.scope))
@@ -166,7 +166,7 @@ def test_a_session_sends_only_a_few_pages(s):
 def test_a_result_after_the_scope_changed_is_dropped(s, monkeypatch):
     monkeypatch.setattr(previews, "_landing", lambda *a: None)
     held = {}
-    monkeypatch.setattr(browser, "submit", lambda url, progress, done, year=None, alive=None: held.update(done=done))
+    monkeypatch.setattr(browser, "submit", lambda url, progress, done, year=None, alive=None, words=None: held.update(done=done))
     s.picks = [dict(PAGE)]
     previews._one(s, s.picks[0], previews._sig(s.scope))
     s.scope = dict(s.scope, time_start="2010")

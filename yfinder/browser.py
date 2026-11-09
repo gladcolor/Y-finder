@@ -101,8 +101,32 @@ TRACKERS = re.compile(r"doubleclick|googlesyndication|googleadservices|google-an
 NOT_DATA = re.compile(r"\.(js|mjs|css|html?|php|aspx?|jsp|svg|png|jpe?g|gif|webp|ico|woff2?|ttf|map)$")
 
 
-def rank(anchors: list, loaded: list, year: int | None = None) -> tuple[list[str], list[str]]:
-    """File links worth trying (best first) and raster files the page offers (reported, not drawn)."""
+TOPIC_STOP = {"data", "dataset", "datasets", "file", "files", "download", "downloads", "with", "from", "this", "that", "their",
+              "each", "over", "into", "per", "and", "the", "for", "map", "maps", "mapped", "layer", "table", "tables", "records",
+              "record", "year", "years", "annual", "daily", "monthly", "time", "source", "sources", "open", "public", "study",
+              "area", "areas", "level", "united", "states", "national", "global", "historical", "historic", "about", "using",
+              "where", "which", "what", "when", "how", "more", "less", "most", "between", "across", "within", "near", "other"}
+
+
+def _stem(w: str) -> str:
+    return w[:-1] if len(w) > 4 and w.endswith("s") and not w.endswith("ss") else w
+
+
+def topic_words(text: str) -> frozenset:
+    """Words that name a card's topic (rail, discharge, burned), for matching file names and link text."""
+    return frozenset(_stem(w) for w in re.findall(r"[a-z]{4,}", (text or "").lower()) if w not in TOPIC_STOP)
+
+
+def topic_hits(name: str, text: str, words) -> int:
+    if not words:
+        return 0
+    have = {_stem(w) for w in re.findall(r"[a-z]{4,}", re.sub(r"([a-z])([A-Z])", r"\1 \2", f"{name} {text}").lower())}
+    return sum(1 for w in words if w in have or any(len(w) >= 5 and len(h) >= 5 and (h.startswith(w) or w.startswith(h)) for h in have))
+
+
+def rank(anchors: list, loaded: list, year: int | None = None, words=None) -> tuple[list[str], list[str]]:
+    """File links worth trying (best first) and raster files the page offers (reported, not drawn). Links whose file
+    name or text names the card's topic rank higher: "Railroads, 1826-1911" before "1880 State Samples"."""
     cands: dict[str, int] = {}
     rasters = []
     for item in anchors:
@@ -124,7 +148,7 @@ def rank(anchors: list, loaded: list, year: int | None = None) -> tuple[list[str
         by_text = bool(dl) or bool(re.search(r"download|export", path)) and bool(FMT_TEXT.search(text or "") or fmt)
         if not (by_ext or fmt or by_text):
             continue
-        s = link_score(name or (text or "").lower(), text, year, bool(dl))
+        s = link_score(name or (text or "").lower(), text, year, bool(dl)) + 3 * min(2, topic_hits(name, text or "", words))
         if path.endswith(".json") and "geo" not in path and not fmt:
             s -= 4  # plain JSON is usually page configuration, not data
         cands[href] = max(cands.get(href, -99), s)
@@ -164,10 +188,10 @@ def ahead() -> int:
     return _jobs.qsize() + (1 if _busy.is_set() else 0)
 
 
-def submit(url: str, progress, done, year: int | None = None, alive=lambda: True) -> int:
+def submit(url: str, progress, done, year: int | None = None, alive=lambda: True, words=None) -> int:
     """Queue a page. progress(text) reports steps; done(found) is called on its own thread with the result."""
     n = ahead()
-    _jobs.put((url, progress, done, year, alive))
+    _jobs.put((url, progress, done, year, alive, words))
     with _start_lock:
         if not (_st["thread"] and _st["thread"].is_alive()):
             _st["thread"] = threading.Thread(target=_worker, name="yfinder-browser", daemon=True)
@@ -178,7 +202,7 @@ def submit(url: str, progress, done, year: int | None = None, alive=lambda: True
 def _worker():
     while True:
         try:
-            url, progress, done, year, alive = _jobs.get(timeout=IDLE_SECONDS)
+            url, progress, done, year, alive, words = _jobs.get(timeout=IDLE_SECONDS)
         except queue.Empty:
             _close()
             continue
@@ -187,7 +211,7 @@ def _worker():
             continue  # the session ended while the job waited
         _busy.set()
         try:
-            found = find(url, progress, year)
+            found = find(url, progress, year, words)
         except Exception as e:  # a crashed page must not stop the queue
             log.exception("browser job failed: %s", url)
             found = {"host": host, "wall": "error", "error": type(e).__name__, "links": [], "files": [], "services": [], "rasters": []}
@@ -254,7 +278,7 @@ def _cookies(ctx) -> dict[str, str]:
     return {d: "; ".join(v) for d, v in jar.items()}
 
 
-def find(url: str, progress=lambda _t: None, year: int | None = None) -> dict:
+def find(url: str, progress=lambda _t: None, year: int | None = None, words=None) -> dict:
     """Open url and report what a person could download there."""
     from playwright.sync_api import Error as PWError
     from playwright.sync_api import TimeoutError as PWTimeout
@@ -319,7 +343,7 @@ def find(url: str, progress=lambda _t: None, year: int | None = None) -> dict:
             svc = service_layer(a[0]) if a and isinstance(a[0], str) else None
             if svc and svc not in services:
                 services.append(svc)
-        links, rasters = rank(anchors, loaded, year)
+        links, rasters = rank(anchors, loaded, year, words)
         if not links and not services:
             labels = page.evaluate(_FIND_BUTTONS, MAX_BUTTONS) or []
             for i, label in enumerate(labels):
@@ -334,7 +358,7 @@ def find(url: str, progress=lambda _t: None, year: int | None = None) -> dict:
                     out["wall"] = wall(page)
                     break
                 # the button may have opened a menu of formats or a panel with file links
-                links, more = rank(page.evaluate(_ANCHORS), loaded, year)
+                links, more = rank(page.evaluate(_ANCHORS), loaded, year, words)
                 rasters += more
                 if links or services:
                     break

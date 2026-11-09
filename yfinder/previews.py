@@ -19,6 +19,7 @@ import datetime as dt
 import io
 import os
 import re
+import statistics
 import threading
 import time
 import zipfile
@@ -94,7 +95,8 @@ def _paint(prop: str, values: list[float], ramp: str, label: str = "") -> dict |
 
 def _vector_layer(s, pick, fc_feats: list[dict], title: str, source: str, paint: dict | None = None,
                   label: str = "") -> tuple[dict | None, str | None]:
-    fc, note, _total = vector.slim(fc_feats, s.scope.get("bbox"))
+    keep = {w for w in _pick_words(s, pick, pick.get("meta") or {}) if len(w) >= 5}  # columns that name the topic stay
+    fc, note, _total = vector.slim(fc_feats, s.scope.get("bbox"), keep=keep)
     if fc is None:
         return None, note
     layer = save_layer(fc, title[:100], source, style="preview")
@@ -616,9 +618,13 @@ _BAD_LINK = re.compile(r"method|technical|appendix|readme|codebook|dictionary|te
 _GOOD_LINK = re.compile(r"result|score|data|indicator|value|estimate|table", re.I)
 
 
-def _data_links(page_url: str, html_text: str, year: int | None) -> list[str]:
+_ANCHOR = re.compile(r"""<a\b[^>]*?href\s*=\s*["']([^"']+)["'][^>]*>(.*?)</a>""", re.I | re.S)
+
+
+def _data_links(page_url: str, html_text: str, year: int | None, words=None) -> list[str]:
     from urllib.parse import urljoin, urlparse
     links, seen = [], set()
+    texts = {h.strip(): re.sub(r"<[^>]+>|\s+", " ", t)[:200] for h, t in _ANCHOR.findall(html_text)}
     for href in _HREF.findall(html_text):
         u = urljoin(page_url, href.strip())
         path = urlparse(u).path.lower()
@@ -629,6 +635,7 @@ def _data_links(page_url: str, html_text: str, year: int | None) -> list[str]:
         score = (3 if _GOOD_LINK.search(name) else 0) - (6 if _BAD_LINK.search(name) else 0)
         score += 2 if name.endswith((".xlsx", ".csv", ".geojson")) else 0
         score += 1 if year and str(year) in name else 0
+        score += 3 * min(2, browser.topic_hits(name, texts.get(href.strip(), ""), words))  # the card's topic in the name or link text
         links.append((score, -len(name), u))
     links.sort(reverse=True)
     return [u for _s, _l, u in links]
@@ -721,7 +728,7 @@ def _landing(s, pick, meta):
                 "retry_browser": True}
     if r.status_code != 200 or "html" not in (r.headers.get("Content-Type") or "") or not sources.safe_url(r.url):
         return None
-    links = _data_links(r.url, r.text[:3_000_000], _study_year(s.scope))
+    links = _data_links(r.url, r.text[:3_000_000], _study_year(s.scope), _pick_words(s, pick, meta))
     res, _why = _try_links(s, pick, meta, links[:3])
     return res
 
@@ -752,7 +759,39 @@ def _read_raw(s, pick, meta, raw_path, fname: str, host: str):
             return {"status": "ready", "kind": "slice", "layers": layers, "note": f"{fname} downloaded for this session"}
         return None
     # tables: points from coordinates, a map joined on place codes or town names, else a table preview
+    inner = _zipped_csv(raw)
+    if inner:  # a zip holding one main CSV (USGS mines): read the CSV, so its coordinates become points
+        name, raw, part = inner
+        res = _table_result(s, pick, meta, raw, name, f"{name} in {fname} from {host} (downloaded for this session)")
+        if res and part:
+            res["note"] = (res.get("note") or name) + f"; read from the first {CSV_PART // 1_000_000} MB of a {part // 1_000_000} MB file"
+        return res
     return _table_result(s, pick, meta, raw, fname, f"{fname} from {host} (downloaded for this session)")
+
+
+CSV_PART = 60_000_000  # a CSV bigger than this inside a zip is read from its start (the rows read are capped anyway)
+
+
+def _zipped_csv(raw: bytes):
+    """(name, bytes, full size if only the start was read) of the main CSV in a zip, else None."""
+    if raw[:2] != b"PK":
+        return None
+    try:
+        z = zipfile.ZipFile(io.BytesIO(raw))
+        members = [i for i in z.infolist() if i.filename.lower().endswith((".csv", ".tsv", ".txt")) and not i.filename.startswith("__MACOSX")]
+    except (zipfile.BadZipFile, OSError):
+        return None
+    if not members:
+        return None
+    big = max(members, key=lambda i: i.file_size)
+    if big.file_size < 0.5 * sum(i.file_size for i in members):
+        return None  # several tables of the same weight (read as a workbook instead)
+    name = big.filename.rsplit("/", 1)[-1]
+    if big.file_size <= CSV_PART:
+        return name, z.read(big), 0
+    with z.open(big) as f:
+        head = f.read(CSV_PART)
+    return name, head[: head.rfind(b"\n") + 1], big.file_size
 
 
 def _try_links(s, pick, meta, links: list[str], cookies: dict | None = None, progress=None):
@@ -820,7 +859,7 @@ def _pollutants(text: str) -> list[tuple]:
     return (hits or [POLLUTANTS[0]])[:2]
 
 
-HOUR_WORDS = re.compile(r"hourly|hours?|rush|diurnal|time of day|morning|evening|commut|weekday|weekend")
+HOUR_WORDS = re.compile(r"hourly|\bhours?\b|rush|diurnal|time of day|morning|evening|commut|weekday|weekend")
 
 
 def _aqs_hourly(s, code: str, pname: str, year: int, sites: dict, d0: str, d1: str) -> tuple[dict | None, str]:
@@ -1019,23 +1058,32 @@ def _table_result(s, pick, meta, raw: bytes, fname: str, src: str):
             end = _study_year(s.scope) or 9999
             cols = ([max((j for y, j in years if y <= end), default=years[-1][1])] if years
                     else tables.value_columns(header, body, tc, {}, text, k=1))
-            if cols:
-                c = cols[0]
+            in_towns = [r for r in body if len(r) > tc and r[tc].strip().lower() in towns]
+            per_town = len(in_towns) / max(1, len({r[tc].strip().lower() for r in in_towns}))
+            # one row per record (a solar system, a death, a sale): count rows per town unless a column matches the question
+            records = not years and per_town >= 3
+            count = records and (not cols or not (tables._tokens(text) & tables._tokens(header[cols[0]])))
+            if cols or count:
+                c = None if count else cols[0]
+                prop = "rows per town" if count else header[c]
                 agg: dict[str, list[float]] = {}
-                for r in body:
-                    if len(r) > max(tc, c) and r[tc].strip().lower() in towns and tables._num(r[c]) is not None:
-                        agg.setdefault(r[tc].strip().lower(), []).append(tables._num(r[c]))
+                for r in in_towns:
+                    v = 1.0 if count else (tables._num(r[c]) if len(r) > c else None)
+                    if v is not None:
+                        agg.setdefault(r[tc].strip().lower(), []).append(v)
+                how = (lambda v: float(len(v))) if count else ((lambda v: float(statistics.median(v))) if records else (lambda v: sum(v) / len(v)))
                 feats = [{"type": "Feature", "geometry": towns[t]["geometry"],
-                          "properties": {"town": towns[t]["properties"]["name"], header[c]: round(sum(v) / len(v), 4), "rows": len(v)}}
+                          "properties": {"town": towns[t]["properties"]["name"], prop: round(how(v), 4), "rows": len(v)}}
                          for t, v in agg.items()]
-                layer, _n = _vector_layer(s, pick, feats, f"{short_title(meta.get('title') or '')}: {header[c].strip('_ ')}"[:100], src,
-                                          _paint(header[c], [f["properties"][header[c]] for f in feats], "blues",
-                                                 f"{header[c].strip('_ ')} (per town)"), "table preview")
+                label = ("Rows per town (one row per record in this table)" if count
+                         else f"{header[c].strip('_ ')} ({'median ' if records else ''}per town)")
+                layer, _n = _vector_layer(s, pick, feats, f"{short_title(meta.get('title') or '')}: {'rows per town' if count else header[c].strip('_ ')}"[:100], src,
+                                          _paint(prop, [f["properties"][prop] for f in feats], "blues", label), "table preview")
                 if layer:
-                    town_rows = [r for r in body if len(r) > tc and r[tc].strip().lower() in towns]
                     return {"status": "ready", "kind": "slice", "layers": [layer], "csv": _csv(s, pick, [header] + body[:50000]),
-                            "table": tables.preview(header, body), "series": tables.wide_series(header, town_rows, "Towns in the area"),
-                            "note": f"{fname}: {len(feats)} towns, {header[c].strip('_ ')}"}
+                            "table": tables.preview(header, body), "series": tables.wide_series(header, in_towns, "Towns in the area"),
+                            "note": f"{fname}: {len(feats)} towns, " + ("rows per town (one row per record)" if count
+                                                                         else f"{header[c].strip('_ ')}{' (median per town)' if records else ''}")}
     nodes = {n["id"]: n.get("label", "") for n in (s.graph or {}).get("nodes", [])}
     text = " ".join([_scope_text(s), " ".join(nodes.get(f, "") for f in pick.get("factors") or []), pick.get("why") or ""])
     vc = tables.value_columns(header, body, -1, tables.dictionary(tbls), text, k=1)
@@ -1062,11 +1110,17 @@ def _download_table(s, pick, meta, url: str, fname: str, src: str):
         raw_path.unlink(missing_ok=True)
 
 
+def soda_from_url(url: str) -> str:
+    """The SODA CSV address of a Socrata dataset page (data.ct.gov/d/rybz-nyjw, or /Category/Name/rybz-nyjw)."""
+    m = re.match(r"^https://([a-z0-9-]+(?:\.[a-z0-9-]+)+)/(?:d/|resource/|[^/?#]+/[^/?#]+/)([a-z0-9]{4}-[a-z0-9]{4})(?:[/?#.]|$)", url or "")
+    return f"https://{m.group(1)}/resource/{m.group(2)}.csv" if m else ""
+
+
 def _socrata(s, pick, meta):
     """A table on a Socrata open data portal through the SODA API. With a date column and a study window: an even
     sample over the years of the window (the first 50,000 rows can all come from one year) and the portal's count
     of every row per year; otherwise its first 50,000 rows."""
-    soda = meta.get("soda") or ""
+    soda = meta.get("soda") or soda_from_url(meta.get("url") or pick.get("url") or "")
     if not re.fullmatch(r"https://[a-z0-9.-]+/resource/[a-z0-9]{4}-[a-z0-9]{4}\.csv", soda):
         return None
     dom, rid = soda.split("/")[2], soda.rsplit("/", 1)[-1][:-4]
@@ -1507,6 +1561,7 @@ OSM_TAGS = [  # words in the pick's factors -> OpenStreetMap tags, and the large
     (r"village|settlement|hamlet|communit|household|town", ["place=village", "place=hamlet", "place=town"], 60000),
     (r"school", ["amenity=school"], 10000),
     (r"clinic|hospital|health (facilit|care|centre|center)", ["amenity=hospital", "amenity=clinic", "healthcare"], 10000),
+    (r"drain|sewer|canal|ditch|culvert|channel", ["waterway=drain", "waterway=ditch", "waterway=canal", "waterway=stream"], 2500),
     (r"water|pond|wetland|lake", ["natural=water", "natural=wetland"], 2500),
     (r"park|green ?space", ["leisure=park"], 2500),
     (r"road|street|highway", ["highway=primary", "highway=secondary", "highway=tertiary"], 2500),
@@ -1521,7 +1576,8 @@ def _osm(s, pick, meta):
         return {"status": "none", "note": "Set a study area to preview OpenStreetMap features"}
     nodes = {n["id"]: n.get("label", "") + " " + n.get("observable", "") for n in (s.graph or {}).get("nodes", [])}
     text = " ".join([nodes.get(f, "") for f in pick.get("factors") or []] + [pick.get("why") or ""]).lower()
-    hit = next(((tags, lim) for rx, tags, lim in OSM_TAGS if re.search(rx, text)), None)
+    best = max((len(re.findall(rx, text)), -i, tags, lim) for i, (rx, tags, lim) in enumerate(OSM_TAGS))
+    hit = (best[2], best[3]) if best[0] else None  # the rule with the most matching words (drains before villages)
     if not hit:
         return {"status": "none", "note": "OpenStreetMap has many feature types; ask Y-finder for the ones you need (villages, schools, roads...)"}
     tags, lim = hit
@@ -1700,12 +1756,20 @@ def _step(s, ref: str, sig: str, text: str):
             cur["step"] = text[:120]
 
 
+def _pick_words(s, pick, meta):
+    """The card's topic in words: its title, the graph factors it measures and why it was picked."""
+    nodes = {n["id"]: f"{n.get('label', '')} {n.get('observable', '')}" for n in (s.graph or {}).get("nodes", [])}
+    return browser.topic_words(" ".join([meta.get("title") or "", pick.get("title") or "", pick.get("why") or "",
+                                         " ".join(nodes.get(f, "") for f in pick.get("factors") or [])]))
+
+
 def _submit_browser(s, pick, sig):
     meta = pick.get("meta") or catalog_mod.load().get(pick["ref"]) or {}
     url = meta.get("url") or pick.get("url")
     ref = pick["ref"]
     browser.submit(url, lambda t: _step(s, ref, sig, t), lambda found: _browser_done(s, pick, meta, sig, found),
-                   year=_study_year(s.scope), alive=lambda: session.peek(s.sid) is s and (s.previews.get(ref) or {}).get("sig") == sig)
+                   year=_study_year(s.scope), alive=lambda: session.peek(s.sid) is s and (s.previews.get(ref) or {}).get("sig") == sig,
+                   words=_pick_words(s, pick, meta))
 
 
 def _from_browser(s, pick, meta, found: dict, progress) -> dict:

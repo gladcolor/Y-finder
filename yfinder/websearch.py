@@ -80,6 +80,25 @@ def _post(url: str, body: dict, timeout: int) -> dict:
     raise WebError("Web search did not answer")
 
 
+TRACKING = re.compile(r"^(utm_\w+|_hsenc|_hsmi|fbclid|gclid|dclid|msclkid|mc_cid|mc_eid|mkt_tok|ref_src|igshid)$", re.I)
+
+
+def clean_url(url: str) -> str:
+    """Drop email and ad tracking parameters (utm_*, _hsenc, fbclid...) so links on data cards are the page itself."""
+    from urllib.parse import parse_qsl, urlencode, urlsplit, urlunsplit
+    try:
+        p = urlsplit(url)
+    except ValueError:
+        return url
+    if not p.query:
+        return url
+    pairs = parse_qsl(p.query, keep_blank_values=True)
+    keep = [(k, v) for k, v in pairs if not TRACKING.match(k)]
+    if len(keep) == len(pairs):
+        return url  # nothing to drop: leave the link exactly as found
+    return urlunsplit((p.scheme, p.netloc, p.path, urlencode(keep, safe="$,:/"), p.fragment))
+
+
 def search(query: str, count: int = 8, question: str | None = None) -> list[dict]:
     q = re.sub(r"\s+", " ", query or "").strip()[:128]
     if not q:
@@ -94,7 +113,7 @@ def search(query: str, count: int = 8, question: str | None = None) -> list[dict
     for r in _post(SEARCH_URL, body, 30).get("results") or []:
         if not isinstance(r, dict) or not str(r.get("url", "")).startswith(("http://", "https://")):
             continue
-        out.append({"title": (r.get("title") or "")[:200], "url": r["url"], "site": r.get("site_name") or "",
+        out.append({"title": (r.get("title") or "")[:200], "url": clean_url(r["url"]), "site": r.get("site_name") or "",
                     "date": (r.get("date") or "")[:10], "snippet": (r.get("snippet") or "")[:240],
                     "summary": (r.get("summary") or "")[:800], "authority": r.get("authority"),
                     "score": r.get("rerank_score")})

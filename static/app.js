@@ -1508,19 +1508,42 @@
 
   // ------------------------------------------------------------------ demo cases (recorded runs, replayed, then live)
   const wait = (ms) => new Promise((r) => setTimeout(r, ms));
+  const DEMO_THEMES = [['health', 'Health'], ['environment', 'Environment'], ['society', 'Cities and society'], ['history', 'History and culture']];
   async function loadDemos() {
     try {
       const j = await getJSON('static/demos/index.json?v=' + (window.YF_VERSION || '')); if (!j.cases || !j.cases.length) return;
-      const card = (c) => `<button class="demo-card" data-id="${esc(c.id)}" title="${esc(c.who + (c.program ? '\nBased on: ' + c.program : '') + '\nShows: ' + c.shows.join('; '))}">
+      const words = (c) => [c.title, c.field, c.program, c.who, c.based_on, ...(c.shows || [])].join(' ').toLowerCase();
+      const card = (c) => `<button class="demo-card" data-id="${esc(c.id)}" data-theme="${esc(c.theme || '')}" data-text="${esc(words(c))}" title="${esc(c.who + (c.program ? '\nBased on: ' + c.program : '') + '\nShows: ' + c.shows.join('; '))}">
         <div class="field">${esc(c.program ? c.program : c.field)}</div><div class="title">${esc(c.title)}</div></button>`;
       const yaleAll = j.cases.filter((c) => c.group === 'yale');
       // six Yale research cases from different fields up front; the other Yale cases and the general demos stay one click away
       const yale = yaleAll.slice(0, 6), rest = yaleAll.slice(6).concat(j.cases.filter((c) => c.group !== 'yale'));
+      // a long list gets theme chips and a search box (words from the title, field, program, person and what it shows)
+      const themes = DEMO_THEMES.filter(([k]) => rest.some((c) => c.theme === k));
+      const finder = rest.length > 9 ? `<div class="demo-find"><div class="demo-chips" role="group" aria-label="Show demos by theme">
+          <button type="button" data-t="" aria-pressed="true">All ${rest.length}</button>${themes.map(([k, label]) => `<button type="button" data-t="${k}" aria-pressed="false">${label} ${rest.filter((c) => c.theme === k).length}</button>`).join('')}</div>
+          <input type="search" id="demoQ" placeholder="Find a demo: place, field or data" aria-label="Find a demo by place, field or data"></div>` : '';
       $('#demos').innerHTML = yale.length
-        ? `<div class="demo-grid">${yale.map(card).join('')}</div>${rest.length ? `<details class="more-demos"><summary>More demos (${rest.length})</summary><div class="demo-grid">${rest.map(card).join('')}</div></details>` : ''}`
+        ? `<div class="demo-grid">${yale.map(card).join('')}</div>${rest.length ? `<details class="more-demos"><summary>More demos (${rest.length})</summary>${finder}<div class="demo-grid" id="moreGrid">${rest.map(card).join('')}</div><p class="demo-none" hidden>No demo matches. Try another word or theme.</p></details>` : ''}`
         : `<div class="demo-grid">${rest.map(card).join('')}</div>`;
       if (yale.length) $('#demoWrap .sec-h').textContent = 'Watch a demo: Yale research cases';
       $$('.demo-card').forEach((b) => { b.onclick = () => playDemo(b.dataset.id); });
+      if (finder) {
+        let theme = '';
+        const filter = () => {
+          const q = $('#demoQ').value.toLowerCase().split(/\s+/).filter(Boolean);
+          let n = 0;
+          $$('#moreGrid .demo-card').forEach((b) => {
+            const show = (!theme || b.dataset.theme === theme) && q.every((w) => b.dataset.text.includes(w));
+            b.hidden = !show; n += show;
+          });
+          $('.more-demos .demo-none').hidden = n > 0;
+        };
+        $$('.demo-chips button').forEach((b) => { b.onclick = () => {
+          theme = b.dataset.t; $$('.demo-chips button').forEach((x) => x.setAttribute('aria-pressed', String(x === b))); filter();
+        }; });
+        $('#demoQ').oninput = filter;
+      }
       $('#demoWrap').hidden = false;
     } catch { /* no recorded demos on this server */ }
   }

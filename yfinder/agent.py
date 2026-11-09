@@ -37,7 +37,11 @@ Work in three projections (tri-projection), in order, and keep the user in the l
    The extent must cover the whole place the question names. If geocode finds only a smaller feature inside
    it (a lake inside a reserve, one building of a campus), do not keep that box: geocode a containing unit
    (district, county, department) or take the place's extent from a web search, set a box that covers it all,
-   and list "extent" in "assumed".
+   and list "extent" in "assumed". Natural regions (watersheds, mountain ranges, protected areas, indigenous
+   lands) are often missing under their English name: try the official or local name (e.g. "Parque Indigena do
+   Xingu"), or map a boundary layer you found (map_feature_service returns its extent), or take the extent from
+   a web search. A whole country's box is a last resort. A single site (an archaeological site, a campus, a park,
+   a plant) is the place itself: keep a box around it with a margin of about a kilometre, not its district.
 3. Scope -> data. For each core factor, search. Start with search_catalog (YCGS curated cards with Yale access
    routes, Planetary Computer, Earth Engine and its community catalog, and the layers collected in GeoLibre:
    gallery maps "gl:" and web services "gls:"). Use live sources when they can add something:
@@ -57,6 +61,8 @@ Put useful data on the map: the study area appears after geocode; add one or two
 local features such as water or parks, map_feature_service for an ArcGIS layer you found, map_catalog_layer for
 a GeoLibre gallery map or service marked "map": true in search_catalog, download_data for a direct link to a
 GeoJSON, CSV with coordinates, KML/KMZ or zipped shapefile file, from a search result or the user).
+A request to see one part of the study area (a neighborhood, a site, an edge of a city) is a view, not a new study:
+geocode the part and pass its box as view_bbox to search_stac_items. Never call set_scope just to show a map or an image.
 Downloaded files stay on the server only for this conversation's session; say so when you use it. GeoLibre gallery maps are snapshots
 made for display: say so, and point to the original data source for analysis.
 
@@ -66,7 +72,9 @@ Rules:
   resolutions or dates.
 - Prefer Yale-licensed sources when they fit better, and say how to get access (NetID, request form, YCGS).
 - Be brief: at most 90 words in total. One plain sentence with the main answer, then at most three bullets of
-  one line each. No headings, no tables. The interface already shows the graph, scope, map layers and every data
+  one line each. The main answer is the data route: what to combine, from which key source, to answer the question
+  (or the finding itself when a tool or a page you read gave it). Do not open with what is not yet known, or with
+  "requires analysis": users know Y-finder finds the data and the analysis comes next. No headings, no tables. The interface already shows the graph, scope, map layers and every data
   card with its fit label, so do not list datasets or restate the scope; name at most two key sources, and say
   "see Data" for the rest. Do not narrate what you are about to do.
 - When you rely on a web page, link it inline as [short name](url). Read a page with read_web_page before quoting
@@ -135,7 +143,9 @@ TOOLS = [
         "collection": S,
         "datetime": {"type": ["string", "null"], "description": "YYYY-MM-DD/YYYY-MM-DD; null to use the scope window"},
         "max_cloud": {"type": ["number", "null"], "description": "max cloud cover percent, or null"},
-        "limit": {"type": "integer", "description": "1 to 12"}}),
+        "limit": {"type": "integer", "description": "1 to 12"},
+        "view_bbox": {"type": ["array", "null"], "items": {"type": "number"},
+                      "description": "[west, south, east, north] of the part of the study area the user wants to see (geocode it first); null for the whole study area"}}),
     _tool("search_yale_dataverse", "Search Yale Dataverse, Yale's research data repository.", {"query": S}),
     _tool("search_yale_geoblacklight", "Search Yale Library GeoBlacklight for historical maps and GIS layers.", {
         "query": S, "within_study_area": {"type": "boolean"}}),
@@ -283,6 +293,10 @@ def h_set_scope(s: Session, a: dict):
     if len(b) != 4 or not valid_bbox(b):
         raise ToolError("bbox must be [west, south, east, north] in degrees; call geocode first")
     b = clamp_bbox(b)
+    if b[2] - b[0] > 300 and b[3] - b[1] < 100:  # a country that crosses 180 degrees (US territories, Russia, Fiji), not a world study
+        raise ToolError("This box wraps around the globe because the place crosses the 180th meridian, so every dataset would "
+                        "look like a partial fit. Use the box geocode gave (for the US, the contiguous 48 states), and treat "
+                        "Alaska, Hawaii or the territories as separate study areas if the question needs them.")
     scope = {k: a.get(k) for k in ("extent_name", "time_start", "time_end", "spatial_resolution_m",
                                    "unit_of_analysis", "temporal_frequency", "assumed", "rationale")}
     scope["bbox"] = [round(x, 5) for x in b]
@@ -347,10 +361,13 @@ def h_search_stac_items(s: Session, a: dict):
     if not s.scope.get("bbox"):
         raise ToolError("Set the scope first (set_scope) so the search has a study area")
     coll = a["collection"].strip().removeprefix("pc:")
-    items = sources.stac_search(coll, s.scope["bbox"], a.get("datetime") or _scope_datetime(s.scope),
+    vb = a.get("view_bbox")
+    box = clamp_bbox(vb) if isinstance(vb, list) and len(vb) == 4 and valid_bbox(vb) else s.scope["bbox"]  # a view keeps the scope
+    items = sources.stac_search(coll, box, a.get("datetime") or _scope_datetime(s.scope),
                                 a.get("max_cloud"), max(int(a.get("limit") or 8), 12))
-    for it in items:  # how much of the study box each scene covers, so the best one is picked for previews
-        it["covers_pct"] = round(100 * coverage_fraction(it["bbox"], s.scope["bbox"])) if it.get("bbox") else 0
+    for it in items:  # how much of the box each scene covers, so the best one is picked for previews
+        it["covers_pct"] = round(100 * coverage_fraction(it["bbox"], box)) if it.get("bbox") else 0
+        it["view_bbox"] = box
         s.stac_items[it["id"]] = it
     def date_key(it):
         d = (it.get("datetime") or "")[:10].replace("-", "")
@@ -447,8 +464,8 @@ def _safe_call(fn):
 
 
 def _mosaic_partners(s: Session, it: dict, max_extra: int = 5) -> list[dict]:
-    """Scenes from the same collection within 10 days that cover parts of the study box the chosen scene misses."""
-    sb = s.scope.get("bbox")
+    """Scenes from the same collection within 10 days that cover parts of the study (or view) box the chosen scene misses."""
+    sb = it.get("view_bbox") or s.scope.get("bbox")
     if not sb or not it.get("bbox") or coverage_fraction(it["bbox"], sb) >= 0.97:
         return []
     d0 = (it.get("datetime") or "")[:10]
@@ -492,12 +509,32 @@ def h_map_stac_preview(s: Session, a: dict):
              "minzoom": parts[0]["minzoom"], "maxzoom": parts[0]["maxzoom"], "parts": parts[1:], "preview": it.get("preview"),
              "date": date, "collection": it["collection"]}
     s.layers.append(layer)
-    events = [{"type": "layer", "layer": layer}, {"type": "zoom", "bbox": s.scope.get("bbox") or layer["bbox"]}]
+    box = it.get("view_bbox") or s.scope.get("bbox")
+    events = [{"type": "layer", "layer": layer}, {"type": "zoom", "bbox": box or layer["bbox"]}]
     covered = coverage_fraction([min(s.stac_items[i]["bbox"][0] for i in shown), min(s.stac_items[i]["bbox"][1] for i in shown),
                                  max(s.stac_items[i]["bbox"][2] for i in shown), max(s.stac_items[i]["bbox"][3] for i in shown)],
-                                s.scope["bbox"]) if s.scope.get("bbox") else None
+                                box) if box else None
     label = (a.get("title") or it["id"]) + (f" ({len(shown)} scenes)" if len(shown) > 1 else "")
     return {"ok": True, "shown": shown, "approx_study_area_covered_pct": round(100 * covered) if covered is not None else None}, events, label
+
+
+def _fc_extent(fc: dict) -> list[float] | None:
+    """[west, south, east, north] of a feature collection, so a mapped boundary layer can set the study area."""
+    xs, ys = [], []
+
+    def walk(c):
+        if c and isinstance(c[0], (int, float)):
+            xs.append(c[0])
+            ys.append(c[1])
+        else:
+            for x in c or []:
+                walk(x)
+    for f in fc.get("features") or []:
+        walk((f.get("geometry") or {}).get("coordinates") or [])
+    if not xs:
+        return None
+    b = [round(min(xs), 5), round(min(ys), 5), round(max(xs), 5), round(max(ys), 5)]
+    return b if valid_bbox(b) else None
 
 
 def _vector(s: Session, fc: dict, title: str, source: str, style: str = "default"):
@@ -506,7 +543,8 @@ def _vector(s: Session, fc: dict, title: str, source: str, style: str = "default
         return {"ok": True, "features": 0, "note": "Nothing found inside the study area"}, [], "No features found"
     layer = save_layer(fc, title, source, style)
     s.layers.append(layer)
-    return ({"ok": True, "features": summ["n"], "geometry_types": summ["geometry_types"]},
+    ext = _fc_extent(fc)
+    return ({"ok": True, "features": summ["n"], "geometry_types": summ["geometry_types"], **({"extent": ext} if ext else {})},
             [{"type": "layer", "layer": layer}], f"{summ['n']} features")
 
 
@@ -781,6 +819,10 @@ def h_recommend_data(s: Session, a: dict):
                     filled = True
         if p.get("data_type") == "table":
             meta.setdefault("data_type", "table")
+        if meta.get("soda") and meta.get("date_field") and not (meta.get("t0") or meta.get("t1")):
+            span = sources.socrata_span(meta["soda"], meta["date_field"])  # the years the table's own dates cover
+            if span:
+                meta.update(t0=span[0], t1=span[1], time=f"{span[0]} to {span[1]} (dates in the table)")
         f = fit.assess(meta, s.scope)
         new.append({
             "ref": p.get("ref"), "title": meta.get("title") or p.get("title"), "url": meta.get("url") or "",

@@ -12,11 +12,11 @@ import re
 # whether a dataset can cover a study area, so a tight box would cause false "no".
 REGION_BBOX = {
     "global": [-180.0, -90.0, 180.0, 90.0],
-    "us": [-179.2, 18.9, -66.9, 71.4],
+    "us": [-180.0, 17.5, -64.5, 72.0],  # all 50 states, Puerto Rico and the Virgin Islands (a 50-state study box fits inside)
     "us / north america": [-170.0, 14.0, -50.0, 72.0],
     "north america": [-170.0, 14.0, -50.0, 72.0],
     "conus": [-125.0, 24.4, -66.9, 49.4],
-    "us coasts": [-179.2, 18.9, -66.9, 71.4],
+    "us coasts": [-180.0, 17.5, -64.5, 72.0],
     "americas": [-170.0, -56.0, -30.0, 72.0],
     "connecticut": [-73.73, 40.95, -71.78, 42.06],
     "new england": [-73.73, 40.95, -66.9, 47.46],

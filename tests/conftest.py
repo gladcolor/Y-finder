@@ -9,6 +9,7 @@ os.environ.setdefault("YFINDER_JANITOR", "0")  # tests call janitor.sweep() them
 os.environ.setdefault("YFINDER_PREVIEWS", "0")  # no background network calls; tests run previews.build directly
 os.environ.setdefault("YFINDER_BROWSER", "0")  # no headless browser in tests; they fake browser.find
 os.environ.setdefault("YFINDER_LINKCHECK", "0")  # recommend_data does not open web links in tests
+os.environ.setdefault("YFINDER_TABLE_SPANS", "0")  # nor asks open data portals for a table's years
 os.environ.setdefault("YFINDER_EXPLORE_MODEL", "0")  # exploration never calls the model in tests
 os.environ.setdefault("YFINDER_EXPLORE_NAMES", "0")  # nor the reverse geocoder
 MUTANT = os.environ.get("YF_MUTANT")
@@ -95,5 +96,15 @@ if MUTANT:
     elif MUTANT == "dataverse_no_join":
         from yfinder import previews
         previews._join_dataset_table = lambda *a, **k: None
+    elif MUTANT == "geocode_takes_first_answer":  # no boundary preference, no retry without "District"
+        from yfinder import sources
+        sources._boundary = lambda data: None
+        sources.ADMIN_WORDS = __import__("re").compile(r"(?!x)x")
+    elif MUTANT == "us_box_spans_globe":
+        from yfinder import sources
+        sources._is_united_states = lambda d: False
+    elif MUTANT == "tables_without_years":
+        from yfinder import sources
+        sources.socrata_span = lambda soda, field: None
     else:
         raise SystemExit(f"unknown mutant {MUTANT}")
