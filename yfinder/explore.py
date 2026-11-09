@@ -342,7 +342,7 @@ def _hist(v, label):
         lo, hi = float(v.min()), float(v.max()) or 1.0
     counts, edges = np.histogram(np.clip(v, lo, hi), bins=14, range=(lo, hi))
     return {"type": "hist", "bins": [[round(float(edges[i]), 4), round(float(edges[i + 1]), 4), int(c)] for i, c in enumerate(counts)],
-            "label": label[:60]}
+            "label": label[:60], "clipped": bool(v.max() > hi), "max": round(float(v.max()), 4)}
 
 
 # ---------------------------------------------------------------------------- what the session offers
@@ -629,7 +629,7 @@ def profile_area(v: dict, s) -> dict | None:
                     head or f"{short}{' in the study area' if scope_note else ''}: high values sit together"
         else:
             parts.append(f"No clear clustering: neighbouring {units} are no more alike than chance (Moran's I {m['I']:.2f}, pseudo p {m['p']:.2f}).")
-    head = head or f"{short}{' in the study area' if scope_note else ''} ranges from {fmt(q0)} to {fmt(q4)} across {len(vals):,} {units}"
+    head = head or f"{short}{' in the study area' if scope_note else ''}: from {fmt(q0)} to {fmt(q4)} across {len(vals):,} {units}"
     if bool(np.all(np.mod(vals, 1) == 0)) and q4 > 20 and COUNT_WORDS.search(label + " " + g.title):
         parts.append("These are counts, not rates, so larger places can have more simply because they are larger.")
     return {"kind": "profile", "headline": head, "detail": " ".join(parts), "chart": _hist(vals, short),

@@ -1159,7 +1159,7 @@
       const mx = Math.max(...items.map((it) => +it[1]), 1); const bw = (W - L - R) / items.length; const Y = sy(0, mx);
       const peak = items.reduce((a, b) => (+b[1] > +a[1] ? b : a), items[0]);
       const bars = items.map((it, i) => `<rect x="${(L + i * bw + 1).toFixed(1)}" y="${Y(+it[1]).toFixed(1)}" width="${Math.max(1, bw - 2).toFixed(1)}" height="${(H - B - Y(+it[1])).toFixed(1)}" class="${it === peak ? 'pk' : ''}"><title>${esc(String(it[0]))}: ${esc(f(it[1]))}</title></rect>`).join('');
-      const first = c.type === 'hist' ? f(items[0][0]) : String(items[0][0]); const last = c.type === 'hist' ? f(items[items.length - 1][2]) : String(items[items.length - 1][0]);
+      const first = c.type === 'hist' ? f(items[0][0]) : String(items[0][0]); const last = c.type === 'hist' ? f(items[items.length - 1][2]) + (c.clipped ? `+ (max ${f(c.max)})` : '') : String(items[items.length - 1][0]);
       return frame(`${axis}${bars}<text x="${L}" y="${H - B + 11}" class="tk">${esc(first)}</text><text x="${W - R}" y="${H - B + 11}" class="tk" text-anchor="end">${esc(last)}</text>
         <text x="${L - 4}" y="${T + 7}" class="tk" text-anchor="end">${esc(f(mx))}</text><text x="${L - 4}" y="${H - B}" class="tk" text-anchor="end">0</text>
         <text x="${(L + W - R) / 2}" y="${H - 3}" class="al" text-anchor="middle">${esc(c.type === 'hist' ? (c.label || '') : (c.label || ''))}${c.type === 'hist' ? ' · number of places' : ''}</text>`,
