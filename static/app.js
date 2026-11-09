@@ -429,7 +429,9 @@
         m.pill('map', `${e.fc ? thumbSVG(e.fc, e.color) : ''}<b>Map</b> ${m.layers} layer${m.layers > 1 ? 's' : ''}`, () => { fit(ev.layer.bbox); $('#layerPanel').hidden = false; });
       }); break;
       case 'zoom': fit(ev.bbox); break;
-      case 'recommendations': state.picks = ev.picks || []; state.methods = ev.methods || []; state.nextSteps = ev.next_steps || []; renderData(); step('data', 'done'); if (m.pill) {
+      case 'recommendations': state.picks = ev.picks || []; state.methods = ev.methods || []; state.nextSteps = ev.next_steps || []; renderData(); step('data', 'done');
+        if (state.graph) renderGraph(); // coverage shows once datasets are known (a replay may bring the graph first)
+        if (m.pill) {
         const good = state.picks.filter((p) => p.fit.overall === 'good').length;
         m.pill('data', `<b>Data</b> ${good} of ${state.picks.length} fit`, () => switchTab('data'));
       } break;
