@@ -137,6 +137,64 @@
     }
     return base;
   }
+  // ------------------------------------------------------------------ what a layer is: image tiles, areas, lines, points
+  const GEOM_TIP = { image: 'Image tiles (raster)', polygon: 'Areas (polygons)', line: 'Lines', point: 'Points', footprint: 'Scene footprints: outlines of the images found',
+    scope: 'Your study area', boundary: 'A boundary (outline only)', mixed: 'Points, lines and areas' };
+  const GEOM_NOUN = { polygon: ['area', 'areas'], line: ['line', 'lines'], point: ['point', 'points'], footprint: ['scene', 'scenes'], boundary: ['area', 'areas'], mixed: ['feature', 'features'] };
+  function geomKind(e) {
+    const d = e.d;
+    if (d.kind === 'raster') return 'image';
+    if (d.style === 'scope') return 'scope';
+    if (d.style === 'footprint') return 'footprint';
+    const seen = new Set(); const fs = (e.fc && e.fc.features) || [];
+    for (let i = 0; i < fs.length && i < 400; i++) {
+      const t = ((fs[i] || {}).geometry || {}).type || '';
+      if (/Point/.test(t)) seen.add('point'); else if (/Line/.test(t)) seen.add('line'); else if (/Polygon/.test(t)) seen.add('polygon');
+    }
+    const k = seen.size === 1 ? [...seen][0] : seen.size ? 'mixed' : 'polygon';
+    return d.style === 'boundary' && k === 'polygon' ? 'boundary' : k;
+  }
+  // a small picture of the layer: a landscape for image tiles, a filled shape for areas (with the colour ramp when the
+  // layer is graduated or categorized), a stroke for lines, dots for points, dashed outlines for footprints and the study box
+  function layerGlyph(e) {
+    const k = geomKind(e); const c = HEXC.test(e.color || '') ? e.color : '#2563eb';
+    const P = e.d.paint || {};
+    let ramp = P.mode === 'graduated' || P.mode === 'categorized' ? (P.stops || []).map((s) => (s || [])[1]).filter((x) => HEXC.test(x || '')) : [];
+    if (ramp.length > 4) ramp = [0, 1, 2, 3].map((i) => ramp[Math.round((i * (ramp.length - 1)) / 3)]);
+    const gid = 'lg-' + String(e.d.id).replace(/[^\w-]/g, '') + '-' + (state.glyphN = (state.glyphN || 0) + 1);
+    const grad = ramp.length > 1 ? `<defs><linearGradient id="${gid}" x1="0" x2="1">${ramp.map((x, i) => (P.mode === 'categorized'
+      ? `<stop offset="${i / ramp.length}" stop-color="${x}"/><stop offset="${(i + 1) / ramp.length}" stop-color="${x}"/>`
+      : `<stop offset="${i / (ramp.length - 1)}" stop-color="${x}"/>`)).join('')}</linearGradient></defs>` : '';
+    const fill = grad ? `url(#${gid})` : c; const edge = 'rgba(15,23,42,.32)';
+    const AREA = 'M3 4.6 9.6 1.8 17.2 3.9 18.2 11.4 11 14.4 2.6 12.4Z';
+    let body;
+    if (k === 'image') body = '<rect x="1" y="1" width="18" height="14" rx="2.4" fill="#eef3ea" stroke="#64748b" stroke-width="1.1"/><path d="M1.6 14.4 7.4 8.2l3.7 3.6 2.6-2.5 4.7 5.1Z" fill="#76a067"/><circle cx="14.6" cy="5" r="1.8" fill="#e0ad3e"/>';
+    else if (k === 'scope') body = `<rect x="2" y="2.5" width="16" height="11" rx="1" fill="${c}" fill-opacity=".1" stroke="${c}" stroke-width="1.4" stroke-dasharray="2.6 1.8"/>`;
+    else if (k === 'footprint') body = `<rect x="1.5" y="1.5" width="11" height="8.5" fill="none" stroke="${c}" stroke-width="1.3" stroke-dasharray="2.2 1.4"/><rect x="7.5" y="6" width="11" height="8.5" fill="none" stroke="${c}" stroke-width="1.3" stroke-dasharray="2.2 1.4"/>`;
+    else if (k === 'boundary') body = `<path d="${AREA}" fill="none" stroke="${c}" stroke-width="1.7" stroke-linejoin="round"/>`;
+    else if (k === 'line') body = `<path d="M1.6 12.6c3.2-.4 3.6-8.6 7.6-8.6s3.4 7.4 9.2 6.2" fill="none" stroke="${fill}" stroke-width="2.6" stroke-linecap="round"/>`;
+    else if (k === 'point') {
+      const cs = ramp.length > 1 ? [ramp[0], ramp[Math.floor(ramp.length / 2)], ramp[ramp.length - 1]] : [c, c, c];
+      body = [[4.6, 10.8], [10.2, 4.6], [15.6, 11.2]].map(([x, y], i) => `<circle cx="${x}" cy="${y}" r="3" fill="${cs[i]}" stroke="${edge}" stroke-width=".9"/>`).join('');
+    } else if (k === 'mixed') body = `<path d="${AREA}" fill="${fill}" fill-opacity=".4" stroke="${c}" stroke-width="1.2" stroke-linejoin="round"/><circle cx="14.4" cy="5.6" r="2.8" fill="${c}" stroke="#fff" stroke-width="1.1"/>`;
+    else body = `<path d="${AREA}" fill="${fill}" fill-opacity="${grad ? 1 : 0.45}" stroke="${grad ? edge : c}" stroke-width="${grad ? 0.9 : 1.4}" stroke-linejoin="round"/>`;
+    return `<svg class="gl" viewBox="0 0 20 16" role="img" aria-label="${esc(GEOM_TIP[k])}"><title>${esc(GEOM_TIP[k])}</title>${grad}${body}</svg>`;
+  }
+  // "naip footprints" (a collection id) reads "NAIP scene footprints"
+  const ACRO = new Set(['naip', 'hls', 'modis', 'esa', 'jrc', 'io', 'lulc', 'dem', 'dsm', 'dtm', 'hag', 'cop', 'glo', 'alos', 'nlcd', 'cdl', 'mtbs', 'gnatsgo',
+    'nasadem', 'usgs', 'noaa', 'goes', 'aster', 'gpm', 'era5', 'l2a', 'l1c', 'c2', 'l2', 'l1', 's30', 'l30', 'sar', 'grd', 'rtc', '3dep', 'v02', 'fia', 'gbif']);
+  function prettyColl(id) {
+    const out = [];
+    String(id).split('-').forEach((w) => {
+      if (/^\d+$/.test(w) && out.length) out[out.length - 1] += '-' + w;
+      else out.push(ACRO.has(w.toLowerCase()) ? w.toUpperCase() : w.charAt(0).toUpperCase() + w.slice(1));
+    });
+    return out.join(' ');
+  }
+  function layerName(d) {
+    const m = d.style === 'footprint' && /^([a-z0-9][a-z0-9-]*) footprints$/.exec(String(d.title || ''));
+    return m ? `${prettyColl(m[1])} scene footprints` : String(d.title || 'Layer');
+  }
   function swatchOf(P, fallback) {
     if (!P) return fallback;
     const st = (P.stops || []).filter((s) => HEXC.test((s || [])[1] || ''));
@@ -191,9 +249,11 @@
           ['F-', 'P-'].forEach((p) => { map.on('mouseenter', p + d.id, () => { map.getCanvas().style.cursor = 'pointer'; }); map.on('mouseleave', p + d.id, () => { map.getCanvas().style.cursor = ''; }); });
         } else {
           const fillOp = d.style === 'boundary' ? 0.02 : d.style === 'footprint' ? 0 : 0.33;  // footprints: outline only
+          const fp = d.style === 'footprint'; // scene outlines stay in the background: thin, dashed, half transparent
           map.addLayer({ id: 'F-' + d.id, type: 'fill', source: src, filter: IS_POLY, paint: { 'fill-color': color, 'fill-opacity': fillOp } }, before);
           map.addLayer({ id: 'S-' + d.id, type: 'line', source: src, filter: ['any', IS_POLY, IS_LINE],
-            paint: { 'line-color': color, 'line-width': ['case', IS_LINE, 2.2, d.style === 'boundary' ? 1.2 : 1.1], 'line-opacity': 0.9 } }, before);
+            paint: { 'line-color': color, 'line-width': ['case', IS_LINE, 2.2, d.style === 'boundary' ? 1.2 : fp ? 0.9 : 1.1], 'line-opacity': fp ? 0.6 : 0.9,
+              ...(fp ? { 'line-dasharray': [3, 2] } : {}) } }, before);
           map.addLayer({ id: 'P-' + d.id, type: 'circle', source: src, filter: IS_POINT,
             paint: { 'circle-radius': 4.5, 'circle-color': color, 'circle-stroke-color': '#fff', 'circle-stroke-width': 1.3 } });
           entry.ids.push('F-' + d.id, 'S-' + d.id, 'P-' + d.id);
@@ -225,7 +285,7 @@
     const { entry, f } = hits[i]; const props = Object.entries(f.properties || {}).filter(([k, v]) => !HIDE_FIELD.test(k) && v !== null && v !== '');
     const rows = props.slice(0, 16).map(([k, v]) => `<tr><td>${esc(k.replace(/_/g, ' '))}</td><td>${esc(fmtVal(v))}</td></tr>`).join('');
     const nav = hits.length > 1 ? `<span class="pp-nav"><button data-pp="-1" aria-label="Previous layer">&#8249;</button>${i + 1} of ${hits.length}<button data-pp="1" aria-label="Next layer">&#8250;</button></span>` : '';
-    return `<div class="pp-head"><span class="sw" style="background:${entry.color}"></span><b>${esc(entry.d.title)}</b>${nav}</div>
+    return `<div class="pp-head">${layerGlyph(entry)}<b>${esc(layerName(entry.d))}</b>${nav}</div>
       <table>${rows || '<tr><td>No attributes</td></tr>'}</table>${props.length > 16 ? `<div class="muted small">${props.length - 16} more fields</div>` : ''}`;
   }
   map.on('click', (e) => {
@@ -268,7 +328,7 @@
   function legendItem(e) {
     const d = e.d, P = d.paint;
     const sub = P && P.label && !String(d.title).toLowerCase().includes(String(P.label).toLowerCase()) ? P.label : ''; // no repeats
-    const head = `<div class="ml-t"><span>${esc(d.title)}</span>${sub ? `<small>${esc(sub)}</small>` : ''}</div>`;
+    const head = `<div class="ml-t"><span>${esc(layerName(d))}</span>${sub ? `<small>${esc(sub)}</small>` : ''}</div>`;
     if (P && P.mode === 'graduated' && Array.isArray(P.stops) && P.stops.length >= 2) {
       const st = P.stops.filter((s) => Array.isArray(s) && HEXC.test(s[1] || '') && Number.isFinite(s[0]));
       const rows = st.map((s, i) => {
@@ -283,12 +343,10 @@
     }
     if (d.kind === 'raster') {
       const img = d.legend && safeUrl(d.legend) ? `<img src="${esc(safeUrl(d.legend))}" alt="Legend for ${esc(d.title)}" loading="lazy" onerror="this.remove()">` : '';
-      return `<div class="ml-i"><div class="ml-r"><i class="ml-img"></i><span>${esc(d.title)}</span></div>${img}</div>`;
+      return `<div class="ml-i"><div class="ml-r">${layerGlyph(e)}<span>${esc(layerName(d))}</span></div>${img}</div>`;
     }
-    const geom = (e.fc && e.fc.features && e.fc.features[0] && e.fc.features[0].geometry || {}).type || '';
-    const shape = /Point/.test(geom) ? 'dot' : /Line/.test(geom) ? 'line' : '';
-    if (P && P.label) return `<div class="ml-i">${head}<div class="ml-r"><i class="${shape}" style="background:${e.color}"></i>one value</div></div>`;
-    return `<div class="ml-i"><div class="ml-r"><i class="${shape}" style="background:${e.color}"></i><span>${esc(d.title)}</span></div></div>`;
+    if (P && P.label) return `<div class="ml-i">${head}<div class="ml-r">${layerGlyph(e)}one value</div></div>`;
+    return `<div class="ml-i"><div class="ml-r">${layerGlyph(e)}<span>${esc(layerName(d))}</span></div></div>`;
   }
   function renderLegend() {
     const items = [...state.layers.values()].reverse().filter((e) => e.visible && !['scope', 'boundary', 'footprint'].includes(e.d.style)).slice(0, 8);
@@ -310,11 +368,15 @@
     if (!n) { list.innerHTML = '<div class="muted small">Layers that Y-finder adds appear here.</div>'; return; }
     list.innerHTML = [...state.layers.values()].reverse().map((e) => {
       const d = e.d;
-      const dl = d.kind === 'geojson' ? `<a href="${esc(d.url)}" download="${esc((d.title || 'layer').replace(/[^\w-]+/g, '_'))}.geojson" title="Download GeoJSON" aria-label="Download GeoJSON">${ICON.dl}</a>` : '';
+      // image layers have nothing to download: an empty slot keeps the buttons in columns
+      const dl = d.kind === 'geojson' ? `<a href="${esc(d.url)}" download="${esc((d.title || 'layer').replace(/[^\w-]+/g, '_'))}.geojson" title="Download GeoJSON" aria-label="Download GeoJSON">${ICON.dl}</a>` : '<span class="lgap" aria-hidden="true"></span>';
       const src = String(d.source || '').replace(/\s*\(.*?\)\s*$/, '');
-      const sub = [d.date && !String(d.title).includes(d.date) ? d.date : '', d.n ? `${Number(d.n).toLocaleString()} feature${d.n === 1 ? '' : 's'}` : '', src].filter(Boolean).join(' · ');
-      return `<div class="lrow${e.visible ? '' : ' off'}" data-id="${esc(d.id)}"><span class="sw" style="background:${e.color}"></span>
-        <div class="lmain" title="${esc(d.title)}${d.source ? '\n' + esc(d.source) : ''}"><div class="nm">${esc(d.title)}${d.session_only ? '<span class="tag" title="Downloaded to the server for this session; deleted when it ends">session</span>' : ''}</div>${sub ? `<div class="ls">${esc(sub)}</div>` : ''}</div>
+      const k = geomKind(e); const noun = GEOM_NOUN[k];
+      const what = k === 'image' ? 'Image tiles' : k === 'scope' ? '' : k === 'boundary' && d.n === 1 ? 'Boundary' : d.n && noun ? `${Number(d.n).toLocaleString()} ${noun[d.n === 1 ? 0 : 1]}` : '';
+      const sub = [d.date && !String(d.title).includes(d.date) ? d.date : '', what, src].filter(Boolean).join(' · ');
+      const name = layerName(d);
+      return `<div class="lrow${e.visible ? '' : ' off'}" data-id="${esc(d.id)}">${layerGlyph(e)}
+        <div class="lmain" title="${esc(name)}${d.source ? '\n' + esc(d.source) : ''}"><div class="nm">${esc(name)}${d.session_only ? '<span class="tag" title="Downloaded to the server for this session; deleted when it ends">session</span>' : ''}</div>${sub ? `<div class="ls">${esc(sub)}</div>` : ''}</div>
         <div class="lact"><button data-act="vis" title="${e.visible ? 'Hide' : 'Show'}" aria-label="${e.visible ? 'Hide' : 'Show'} layer">${e.visible ? ICON.eye : ICON.eyeOff}</button><button data-act="zoom" title="Zoom to layer" aria-label="Zoom to layer">${ICON.zoom}</button>${dl}<button data-act="rm" title="Remove" aria-label="Remove layer">${ICON.x}</button></div></div>`;
     }).join('');
     $$('.lrow', list).forEach((row) => {
@@ -556,8 +618,10 @@
       width: 1.5, opacity: 0.65, 'arrow-scale': 0.95,
       'transition-property': 'line-color, target-arrow-color, width, opacity', 'transition-duration': '140ms', 'transition-timing-function': 'ease-out' } },
     // data coverage (Research Architect's opacities: covered 1, partial 0.5, uncovered 0.18)
-    { selector: 'node.cov-partial', style: { 'background-opacity': 0.5, 'border-opacity': 0.6 } },
-    { selector: 'node.cov-uncovered', style: { 'background-opacity': 0.18, 'border-opacity': 0.45, color: '#475569' } },
+    // factors without data: a pale fill and a dashed outline (at 0.18 alone they were nearly invisible)
+    { selector: 'node.cov-partial', style: { 'background-opacity': 0.55, 'border-opacity': 0.7 } },
+    { selector: 'node.cov-uncovered', style: { 'background-opacity': 0.3, 'border-style': 'dashed', 'border-opacity': 0.9, color: '#475569' } },
+    { selector: 'node.cov-uncovered[core != 1][role != "sink"]', style: { 'border-color': '#94a3b8', 'border-width': 1.5 } },
     { selector: 'edge.cov-covered-edge', style: { opacity: 0.95 } },
     { selector: 'edge.cov-partial-edge', style: { opacity: 0.66 } },
     { selector: 'edge.cov-uncovered-edge', style: { opacity: 0.42 } },
@@ -705,10 +769,15 @@
     const lo = Math.min(d0, s0) - 0.5, hi = Math.max(d1, e1) + 0.5; const X = (v) => (((v - lo) / (hi - lo)) * 96 + 2).toFixed(2);
     const ongoing = p.t1 == null;
     const win = String(state.scope.time_start).slice(0, 4) + (String(state.scope.time_end).slice(0, 4) !== String(state.scope.time_start).slice(0, 4) ? '-' + String(state.scope.time_end).slice(0, 4) : '');
-    return `<div class="tb"><svg class="timebar" viewBox="0 0 100 16" preserveAspectRatio="none" aria-label="Data years versus your study window">
+    // each label sits where its years are: the study window above the bar, the data's first and last year below it
+    const wMid = (+X(s0) + +X(e1)) / 2; const wPos = wMid > 82 ? `right:${(100 - +X(e1)).toFixed(1)}%` : wMid < 18 ? `left:${X(s0)}%` : `left:${wMid.toFixed(1)}%;transform:translateX(-50%)`;
+    const dEnd = ongoing ? 'ongoing' : String(Math.floor(d1 - 0.01)); const close = +X(d1) - +X(d0) < 22;
+    const dLabels = close ? `<span style="left:${X(d0)}%">${Math.floor(d0)}${dEnd !== String(Math.floor(d0)) ? '–' + dEnd : ''}</span>`
+      : `<span style="left:${X(d0)}%">${Math.floor(d0)}</span><span style="right:${(100 - +X(d1)).toFixed(1)}%">${dEnd}</span>`;
+    return `<div class="tb"><div class="tb-w" style="${wPos}">Your study: ${esc(win)}</div><svg class="timebar" viewBox="0 0 100 16" preserveAspectRatio="none" aria-label="Data years versus your study window">
       <rect x="${X(d0)}" y="5" width="${Math.max(0.6, X(d1) - X(d0))}" height="6" rx="2" fill="#9db4d6"/>${ongoing ? `<rect x="${X(now)}" y="5" width="${Math.max(0, X(d1) - X(now))}" height="6" fill="#9db4d6" opacity=".35"/>` : ''}
-      <rect x="${X(s0)}" y="1.5" width="${Math.max(0.8, X(e1) - X(s0))}" height="13" rx="2" fill="none" stroke="#00356b" stroke-width="1.2" vector-effect="non-scaling-stroke"/></svg>
-      <div class="tb-l"><span>data ${Math.floor(d0)}</span><span class="tb-w">study ${esc(win)}</span><span>${ongoing ? 'ongoing' : Math.floor(d1 - 0.01)}</span></div></div>`;
+      <rect x="${X(s0)}" y="1.5" width="${Math.max(1.4, X(e1) - X(s0))}" height="13" rx="2" fill="#00356b" fill-opacity=".1" stroke="#00356b" stroke-width="1.2" vector-effect="non-scaling-stroke"/></svg>
+      <div class="tb-l">${dLabels}</div></div>`;
   }
   function showCoverage(p) {
     if (!state.mapReady || !p.bbox) { toast('Coverage for this source is not listed.'); return; }
@@ -1120,6 +1189,7 @@
   // The server reads the preview layers, guided by the question and graph, one step at a time; the user can pause or stop it.
   const xLive = (st) => st === 'running' || st === 'waiting' || st === 'paused';
   const xAuto = () => local.get('yf_explore_auto') !== '0';
+  const INS_EMPTY = 'When map previews of your data are ready, Y-finder explores them here, guided by your question and graph: where values are high, which factors vary together, and what to check next. You can pause or stop it at any time.';
   const xAnyReady = () => Object.values(state.previews || {}).some((it) => it.status === 'ready' && ((it.layers || []).some((l) => l.kind === 'geojson') || it.series));
   const xUrl = () => `api/session/${encodeURIComponent(state.sid)}/explore`;
   async function xPost(action) {
@@ -1182,6 +1252,10 @@
     $('.tabs [data-tab=insights]').classList.toggle('running', x.status === 'running' || x.status === 'waiting');
     const ready = xAnyReady();
     $('#insEmpty').hidden = !(x.status === 'idle' && !fs.length);
+    const onlyImages = !ready && Object.values(state.previews || {}).some((it) => it.status === 'ready');
+    $('#insEmpty').textContent = onlyImages
+      ? 'The previews in this conversation are images and map tiles. Y-finder shows them but does not measure them. Findings appear here when a preview has values: points, areas or a table.'
+      : INS_EMPTY;
     let ctl = '';
     if (live) ctl = (x.status === 'paused' ? '<button class="btn primary" data-xa="resume">Resume</button>' : '<button class="btn" data-xa="pause">Pause</button>') + '<button class="btn" data-xa="stop">Stop</button>';
     else if (x.status === 'done' || x.status === 'stopped' || x.status === 'stale') ctl = '<button class="btn" data-xa="start">Explore again</button>';
@@ -1403,11 +1477,14 @@
     const { url, skipped } = geolibreURL(); const f = $('#geolibre');
     if (f.dataset.src !== url) { f.src = url; f.dataset.src = url; }
     const local = /^(localhost|127\.0\.0\.1|\[::1\])$/.test(location.hostname);
-    $('#gisNote').textContent = local ? 'Running locally: GeoLibre cannot fetch layers from this computer. Download them from Layers and drop them in.'
-      : skipped ? `${skipped} imagery preview(s) stay in Map view.` : (state.layers.size ? 'Your layers are loaded.' : 'Ask Y-finder for data first, or explore GeoLibre.');
+    const note = local ? 'Running locally: GeoLibre cannot fetch layers from this computer. Download them from Layers and drop them in.'
+      : skipped ? `${skipped} image layer${skipped === 1 ? '' : 's'} stay${skipped === 1 ? 's' : ''} in Map view; GeoLibre opens the others.` : (state.layers.size ? 'Your layers are loaded in GeoLibre.' : 'Ask Y-finder for data first, or explore GeoLibre.');
+    $('#gisNote').textContent = note; $('#gisBar').title = note;
+    if (state.gisMode && note !== state.gisNoteShown) { state.gisNoteShown = note; toast(note); }
   }
   function setMode(gis) {
     state.gisMode = gis; $('#modeGIS').classList.toggle('on', gis); $('#modeMap').classList.toggle('on', !gis);
+    document.body.classList.toggle('gis', gis); if (!gis) state.gisNoteShown = null; // GeoLibre starts below the top bar
     $('#geolibre').hidden = !gis; $('#gisBar').hidden = !gis; $('.layers-box').hidden = gis; renderLegend();
     if (gis) $('#xPill').hidden = true; else setTimeout(renderInsights, 0); // the exploration pill belongs to Y-finder's map
     if (gis) loadGeoLibre();

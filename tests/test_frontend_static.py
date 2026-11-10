@@ -46,3 +46,20 @@ def test_no_control_characters_in_source():
             if re.search(r"[\x00-\x08\x0b\x0c\x0e-\x1f]", line):
                 bad.append(f"{p.name}:{i}")
     assert not bad, bad
+
+
+def test_stylesheet_comments_are_closed_and_braces_balance():
+    """An unclosed /* in app.css silently swallows every rule after it."""
+    css = (ROOT / "static" / "app.css").read_text(encoding="utf-8")
+    assert css.count("/*") == css.count("*/")
+    body = re.sub(r"/\*.*?\*/", "", css, flags=re.S)
+    assert body.count("{") == body.count("}")
+
+
+def test_layer_rows_say_what_each_layer_is():
+    """Layers panel, legend and popups draw a glyph per geometry (image, areas, lines, points, footprints, study box)."""
+    js = (ROOT / "static" / "app.js").read_text(encoding="utf-8")
+    for k in ("image", "polygon", "line", "point", "footprint", "scope", "boundary"):
+        assert f"k === '{k}'" in js or f"{k}:" in js
+    assert js.count("layerGlyph(e)") >= 3 and "layerGlyph(entry)" in js
+    assert 'class="lgap"' in js  # image layers keep an empty download slot so the buttons line up

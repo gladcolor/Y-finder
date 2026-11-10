@@ -102,10 +102,10 @@
           <span class="ra-li" title="A link Y-finder compared on the preview data; the label is the rank correlation (rho) or the inside/outside effect"><i class="ra-e"></i>Tested link</span>
           <span class="ra-li" title="Two factors joined by a path through other factors, compared directly"><i class="ra-e dash"></i>Through other factors</span>
         </div>
-        <div class="ra-lg" id="covLegend" hidden><div class="ra-lt">Data coverage · opacity</div>
+        <div class="ra-lg" id="covLegend" hidden><div class="ra-lt">Data coverage</div>
           <span class="ra-li" title="A dataset that fits your scope measures this factor"><i class="ra-n"></i>Covered <b data-c="covered"></b></span>
-          <span class="ra-li" title="Only partial data, or a proxy"><i class="ra-n" style="opacity:.5"></i>Partial <b data-c="partial"></b></span>
-          <span class="ra-li" title="No fitting data yet"><i class="ra-n" style="opacity:.18"></i>Uncovered <b data-c="uncovered"></b></span>
+          <span class="ra-li" title="Only partial data, or a proxy"><i class="ra-n" style="opacity:.6"></i>Partial <b data-c="partial"></b></span>
+          <span class="ra-li" title="No fitting data yet: a pale fill and a dashed outline"><i class="ra-n unc"></i>No data yet <b data-c="uncovered"></b></span>
         </div>
       </div>
       <div id="nodeInfo" class="node-info" hidden></div>
@@ -179,6 +179,12 @@
 </section>
 
 <div class="topright">
+  <div id="gisBar" class="gis-bar" hidden title="GeoLibre menus">
+    <div class="seg" role="group" aria-label="GeoLibre menus">
+      <button id="gisSimple">Simple menus</button><button id="gisFull" class="on">All menus</button>
+    </div>
+    <span id="gisNote" class="sr-only" aria-live="polite"></span>
+  </div>
   <label class="model-pick" title="Language model"><select id="model" aria-label="Model"></select></label>
   <div class="seg" role="group" aria-label="View">
     <button id="modeMap" class="on">Map</button>
@@ -187,13 +193,6 @@
   <button id="btnAbout" class="pill" title="About Y-finder">About</button>
 </div>
 
-<div id="gisBar" class="gis-bar" hidden>
-  <span>GeoLibre</span>
-  <div class="seg small" role="group" aria-label="GeoLibre menus">
-    <button id="gisSimple">Simple menus</button><button id="gisFull" class="on">All menus</button>
-  </div>
-  <span id="gisNote" class="muted"></span>
-</div>
 
 <div id="xPill" class="xpill" hidden role="status" aria-live="polite">
   <span class="xdot"></span>

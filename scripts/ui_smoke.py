@@ -74,10 +74,10 @@ def main():
         page.goto(base)
         page.wait_for_selector("#demos .demo-card")
         check(page.locator(".welcome-foot a[href='design']").count() == 1, "welcome links to the design notes")
-        card = page.locator(f"#demos .demo-card[data-id='{a.demo}']") if a.demo else page.locator("#demos .demo-card").first
-        if a.demo and not card.count():   # a demo that sits under "More demos"
+        card = page.locator(f"#demos .demo-card[data-id='{a.demo}']").first if a.demo else page.locator("#demos .demo-card").first
+        if not card.is_visible():   # a demo that sits under "More demos"
             page.locator("details.more-demos summary").first.click()
-            card = page.locator(f".demo-card[data-id='{a.demo}']").first
+            page.wait_for_timeout(300)
         card.click()
         page.wait_for_selector(".demo-end", timeout=180_000)
         n_bot = page.locator(".msg.bot").count()
@@ -122,6 +122,16 @@ def main():
                   and r[2]["comment"].startswith("smoke test") and bool(r[2]["question"]) and r[2]["turn"] >= r[0]["turn"],
                   "No and its comment share one id and name their own turn")
 
+        page.click("#btnLayers")
+        page.wait_for_timeout(400)
+        lrows = page.evaluate("""() => [...document.querySelectorAll('#layerList .lrow')].map(r => ({
+            glyph: (r.querySelector('svg.gl') || {}).getAttribute ? r.querySelector('svg.gl').getAttribute('aria-label') : null,
+            eye: Math.round(r.querySelector('[data-act=vis]').getBoundingClientRect().left),
+            name: r.querySelector('.nm').textContent.trim() }))""")
+        check(bool(lrows) and all(r["glyph"] for r in lrows), f"every layer shows what it is: {sorted({r['glyph'] for r in lrows})}")
+        check(len({r["eye"] for r in lrows}) == 1, "the layer buttons line up in columns")
+        check(not any(r["name"].endswith(" footprints") and r["name"].split(" ")[0].islower() for r in lrows), "footprint layers have readable names")
+        page.click("#btnLayers")
         page.wait_for_timeout(900)   # the attribution box folds a moment after the last source arrives
         boxes = page.evaluate("""() => { const a = document.querySelector('.maplibregl-ctrl-attrib'), s = document.querySelector('.maplibregl-ctrl-scale');
             return a && s ? [a.getBoundingClientRect().left, s.getBoundingClientRect().right] : null; }""")
