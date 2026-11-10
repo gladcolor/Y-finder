@@ -1139,6 +1139,7 @@
   const pvLayers = (it) => ((it.layers || []).length ? it.layers : (it.existing || []));
   function refreshPreviewLines() {
     $$('.pv[data-pv]').forEach((el) => { el.innerHTML = pvLine(el.dataset.pv); });
+    if (!$('#insEmpty').hidden) renderInsights(); // the empty state says why nothing is explored, which depends on the previews
     bindPreviewButtons();
   }
   function bindPreviewButtons() {
@@ -1464,6 +1465,7 @@
     for (const e of state.layers.values()) {
       if (!e.visible) continue;
       if (e.d.kind !== 'geojson') { skipped++; continue; }
+      if (e.d.style === 'footprint') continue; // scene outlines belong with the imagery, which stays in Map view
       // a readable file name, since GeoLibre names each layer after its file
       const nice = String(e.d.title || 'layer').replace(/[^A-Za-z0-9]+/g, '-').replace(/^-|-$/g, '').slice(0, 60) || 'layer';
       p.append('data', new URL(String(e.d.url).replace(/\.geojson$/, '') + '/' + nice + '.geojson', location.href).href);
