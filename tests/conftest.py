@@ -106,6 +106,15 @@ if MUTANT:
     elif MUTANT == "already_card_without_layer":  # "Already on the map" without naming or sending the layer
         from yfinder import previews
         previews._already = lambda layer: dict(previews.ALREADY, layers=[])
+    elif MUTANT == "acs_ignores_age":  # a "Child population" factor previews median income again
+        from yfinder import previews
+        previews._acs_measure = lambda factors, why="": "race" if previews.RACE_WORDS.search((factors + " " + why).lower()) else "income"
+    elif MUTANT == "feedback_keeps_everything":  # the whole request body and the raw address go into the file
+        from yfinder import app as app_module
+        app_module._feedback_row = lambda body, ip: dict(body, who=ip)
+    elif MUTANT == "rate_limit_trusts_any_header":  # CF-Connecting-IP believed from anyone
+        from yfinder import app as app_module
+        app_module._from_cloudflare = lambda addr: True
     elif MUTANT == "tables_without_years":
         from yfinder import sources
         sources.socrata_span = lambda soda, field: None

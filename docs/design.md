@@ -1,5 +1,7 @@
 # Y-finder design
 
+This is the first design, written on 2026-11-08. Counts were brought up to date on 2026-11-10. What was added later (previews, Y-finder's own browser, exploration of the previews, tables, the data guide) is in the decision log of `handoff.md` and in the design notes page (`static/design.html`, served at `/design`).
+
 ## Intent
 
 YCGS receives more and more questions from students, faculty and staff who want to use geospatial data but do not know where to start. Y-finder is a conversational data guide that answers the first consult question at scale: *which data, tools and methods fit my study?* It does not stop at a search box. It helps a user turn a vague question into a scoped study, then labels how well each data source fits that scope, and hands the user to a GIS (GeoLibre) or to a YCGS consultant for the next step.
@@ -20,7 +22,7 @@ Y-finder follows Huan Ning's tri-projection approach from Research Architect:
 Browser (static/index.html, app.js)          Flask app (yfinder/app.py), one process, gunicorn threads
   MapLibre map + Esri imagery toggle   <-->  /api/chat (server-sent events) -> agent.run_turn()
   Chat with tool chips + inline cards          OpenAI Responses API (GPT-6.1 Terra by default), strict function tools
-  Frame (Cytoscape graph, scope editor)        tool handlers -> catalog.py (BM25 over 1,123 cards)
+  Frame (Cytoscape graph, scope editor)        tool handlers -> catalog.py (BM25 over 3,126 cards)
   Data (fit matrix, cards, handbooks)                         -> sources.py (live: Planetary Computer STAC, Yale Dataverse,
   Catalog (direct search, themes)                                Yale GeoBlacklight, ArcGIS Online, Data.gov, Nominatim,
   Full GIS (GeoLibre iframe, data= URLs)                         Overpass, Census TIGERweb)
@@ -41,7 +43,7 @@ Browser (static/index.html, app.js)          Flask app (yfinder/app.py), one pro
 
 ### Data
 
-- `yfinder/data/curated.json`: 48 hand-checked dataset cards (Census, health, hazards, air quality, Connecticut layers, Yale-licensed sources such as Planet, Esri Business Analyst, PolicyMap, Social Explorer, SimplyAnalytics, L2, CoreLogic, EagleView, Dewey Data, Yale Dataverse, Yale GeoBlacklight), 13 tools and 19 methods with Yale access notes.
+- `yfinder/data/curated.json`: 116 hand-checked dataset cards (Census, health, hazards, air quality, Connecticut layers, Yale-licensed sources such as Planet, Esri Business Analyst, PolicyMap, Social Explorer, SimplyAnalytics, L2, CoreLogic, EagleView, Dewey Data, Yale Dataverse, Yale GeoBlacklight), 13 tools and 19 methods with Yale access notes.
 - `scripts/build_catalog.py` harvests Planetary Computer (139 collections) and the Earth Engine STAC catalog (904 active collections) into `yfinder/data/catalog.json` with extent, dates and resolution (899 cards carry a resolution).
 - Search: BM25 with field weights, a synonym table, sensor-name tokens (`sentinel2`, `landsat8`), a boost for curated cards, and scope-aware re-ranking.
 
@@ -55,18 +57,18 @@ Browser (static/index.html, app.js)          Flask app (yfinder/app.py), one pro
 - Scope editor: change dates, detail or unit, and every fit label is re-checked instantly without an AI call.
 - Full GIS: the same layers open in GeoLibre (`web.geolibre.app?data=...&layout=compact&panels=collapsed`), with an "All menus" switch.
 - Proposal upload (PDF, DOCX, TXT), GraphML export to Research Architect, consultation summary for a YCGS consultant, opt-in follow-up searches.
-- Demo cases: six realistic cases recorded from real runs, replayed with narration, then continued live.
+- Demo cases: 38 cases (32 from real Yale programs and YCGS projects) recorded from real runs, replayed with narration, then continued live.
 
 ## Testing
 
 | Layer | What | Where |
 |---|---|---|
 | Unit and API | fit rules, search quality, tool handlers, URL safety, uploads, GraphML escaping, watches, demo loading | `tests/` (pytest, no model calls) |
-| Mutation check ("test the tests") | breaks nine safeguards one at a time; the suite must fail for each | `scripts/mutation_check.py` |
+| Mutation check ("test the tests") | breaks 29 safeguards one at a time; the suite must fail for each | `scripts/mutation_check.py` |
 | Persona runs | ten fictional Yale users, three models, automatic checks | `scripts/run_personas.py`, `docs/persona_results.md` |
 | Check tests | every persona check must pass a good record and fail a bad one | `tests/test_persona_eval.py` |
-| Demo cases | six scripted cases with checks; recordings must replay cleanly | `scripts/record_demos.py`, `tests/test_demo_files.py`, `docs/demo_case_results.md` |
-| Browser | live UI on the deployed server via Chrome | manual, see handoff.md |
+| Demo cases | 38 scripted cases with checks; recordings must replay cleanly | `scripts/record_demos.py`, `tests/test_demo_files.py`, `docs/demo_case_results.md` |
+| Browser | the page in headless Chromium (welcome, a demo replay, votes, the data guide, a phone screen); the live UI in Chrome | `scripts/ui_smoke.py`; manual, see handoff.md |
 
 ## Safety, privacy and cost
 

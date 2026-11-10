@@ -8,6 +8,7 @@ from __future__ import annotations
 
 import hashlib
 import io
+import ipaddress
 import json
 import os
 import re
@@ -45,6 +46,22 @@ def _allow_feedback() -> str | None:
     return None
 
 
+FEEDBACK_MAX_BYTES = 20 * 1024 * 1024   # the file stops growing here; move it away to start a new one
+
+
+def _feedback_row(body: dict, ip: str) -> dict:
+    """What is kept from a vote: named fields only, each cut short. Never the conversation, never the address."""
+    try:
+        turn = int(body.get("turn") or 0)
+    except (TypeError, ValueError, OverflowError):
+        turn = 0
+    return {"t": round(time.time(), 1), "id": re.sub(r"[^A-Za-z0-9]", "", str(body.get("id") or ""))[:24] or None,
+            "vote": body.get("vote"), "comment": str(body.get("comment") or "")[:500],
+            "question": str(body.get("question") or "")[:300], "model": str(body.get("model") or "")[:40],
+            "demo": str(body.get("demo") or "")[:60] or None, "turn": turn, "sid": str(body.get("sid") or "")[:64],
+            "who": hashlib.sha256(ip.encode()).hexdigest()[:12]}
+
+
 def _allow_download() -> str | None:
     """At most 20 downloads per hour from one address, so nobody can use the server as a file mirror."""
     ip, now = _client_ip(), time.time()
@@ -58,9 +75,29 @@ def _allow_download() -> str | None:
     return None
 
 
+# Cloudflare's published ranges (cloudflare.com/ips, checked 2026-11-10). CF-Connecting-IP is believed only from them.
+CLOUDFLARE_NETS = [ipaddress.ip_network(n) for n in (
+    "173.245.48.0/20 103.21.244.0/22 103.22.200.0/22 103.31.4.0/22 141.101.64.0/18 108.162.192.0/18 190.93.240.0/20 "
+    "188.114.96.0/20 197.234.240.0/22 198.41.128.0/17 162.158.0.0/15 104.16.0.0/13 104.24.0.0/14 172.64.0.0/13 "
+    "131.0.72.0/22 2400:cb00::/32 2606:4700::/32 2803:f800::/32 2405:b500::/32 2405:8100::/32 2a06:98c0::/29 "
+    "2c0f:f248::/32").split()]
+
+
+def _from_cloudflare(addr: str) -> bool:
+    try:
+        ip = ipaddress.ip_address(addr)
+    except ValueError:
+        return False
+    return any(ip.version == n.version and ip in n for n in CLOUDFLARE_NETS)
+
+
 def _client_ip() -> str:
-    return (request.headers.get("CF-Connecting-IP") or request.headers.get("X-Real-IP")
-            or request.remote_addr or "?").split(",")[0].strip()
+    """The visitor's address for the rate limits. nginx sets X-Real-IP to the peer it accepted (and already swaps in
+    the visitor behind Cloudflare when its real-ip module is on). CF-Connecting-IP is a header anyone can send to the
+    server directly, so it counts only when the peer really is Cloudflare."""
+    peer = (request.headers.get("X-Real-IP") or request.remote_addr or "?").split(",")[0].strip()
+    cf = (request.headers.get("CF-Connecting-IP") or "").split(",")[0].strip()
+    return cf if cf and _from_cloudflare(peer) else peer
 
 
 def _allow_turn() -> str | None:
@@ -129,26 +166,24 @@ def create_app() -> Flask:
     @app.post("/api/feedback")
     def feedback():
         """A Yes or No under an answer, with an optional comment. Stored without the conversation (the question's first
-        300 characters only), to build the evaluation set from real use."""
-        body = request.get_json(silent=True) or {}
-        vote = body.get("vote")
-        if vote not in ("up", "down"):
+        300 characters only), to build the evaluation set from real use. A No followed by a comment arrives as two
+        rows with the same id; the later row replaces the earlier one when the file is read."""
+        _check_code()
+        body = request.get_json(silent=True)
+        if not isinstance(body, dict):
+            body = {}
+        if body.get("vote") not in ("up", "down"):
             return jsonify(error="vote must be up or down"), 400
         limit = _allow_feedback()
         if limit:
             return jsonify(error=limit), 429
-        try:
-            turn = int(body.get("turn") or 0)
-        except (TypeError, ValueError):
-            turn = 0
-        row = {"t": round(time.time(), 1), "vote": vote, "comment": str(body.get("comment") or "")[:500],
-               "question": str(body.get("question") or "")[:300], "model": str(body.get("model") or "")[:40],
-               "demo": str(body.get("demo") or "")[:60] or None, "turn": turn, "sid": str(body.get("sid") or "")[:64],
-               "who": hashlib.sha256(_client_ip().encode()).hexdigest()[:12]}
+        path = FEEDBACK_DIR / "feedback.jsonl"
         try:
             FEEDBACK_DIR.mkdir(parents=True, exist_ok=True)
-            with open(FEEDBACK_DIR / "feedback.jsonl", "a", encoding="utf-8") as fh:
-                fh.write(json.dumps(row, ensure_ascii=False) + "\n")
+            if path.exists() and path.stat().st_size >= FEEDBACK_MAX_BYTES:
+                return jsonify(error="The feedback file is full. Thank you all the same."), 429
+            with open(path, "a", encoding="utf-8") as fh:
+                fh.write(json.dumps(_feedback_row(body, _client_ip()), ensure_ascii=False) + "\n")
         except OSError:
             return jsonify(error="Could not store the feedback"), 500
         return jsonify(ok=True)

@@ -16,7 +16,7 @@ MUTANTS = ["resolution_always_good", "extent_ignored", "time_ignored", "overall_
            "explore_ignores_pause", "explore_hides_uneven_sample", "explore_no_stand_in_note",
            "acs_always_income", "socrata_first_rows", "dataverse_no_join",
            "geocode_takes_first_answer", "us_box_spans_globe", "tables_without_years",
-           "already_card_without_layer"]
+           "already_card_without_layer", "acs_ignores_age", "feedback_keeps_everything", "rate_limit_trusts_any_header"]
 
 
 def run(mutant=None):

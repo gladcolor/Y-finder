@@ -3,13 +3,16 @@
 # Usage (git-bash on the workstation, from the repo root):  bash deploy/deploy.sh
 # First run also needs:  bash deploy/deploy.sh --setup   (user, venv, systemd, nginx, key)
 set -euo pipefail
-HOST=${YFINDER_HOST:-root@173.212.218.20}
+# The server address is not in the repository: set YFINDER_HOST=user@host, or put that one line in deploy/host.txt
+# (git-ignored).
+HOST=${YFINDER_HOST:-$(cat "$(dirname "$0")/host.txt" 2>/dev/null || true)}
+[[ -n "$HOST" ]] || { echo "Set YFINDER_HOST=user@host, or write it to deploy/host.txt"; exit 1; }
 APP=/opt/yfinder
 ROOT="$(cd "$(dirname "$0")/.." && pwd)"
 
 echo "== sync code"
 tar -C "$ROOT" --exclude='.git' --exclude='runtime' --exclude='__pycache__' --exclude='*.pyc' --exclude='.pytest_cache' \
-    --exclude='OpenAI_key.txt' --exclude='*key*.txt' --exclude='eval_runs' --exclude='static/brand' -czf - . | \
+    --exclude='OpenAI_key.txt' --exclude='*key*.txt' --exclude='eval_runs' --exclude='static/brand' --exclude='host.txt' -czf - . | \
   ssh "$HOST" "mkdir -p $APP.new && tar -xzf - -C $APP.new && \
     if [ -d $APP ]; then rm -rf $APP.prev; cp -a $APP $APP.prev; fi; \
     mkdir -p $APP && cp -a $APP.new/. $APP/ && rm -rf $APP.new"

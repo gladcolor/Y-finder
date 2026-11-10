@@ -47,11 +47,12 @@ ESRI_ACS_POP = ("https://services.arcgis.com/P3ePLMYs2RVChkJx/arcgis/rest/servic
 # which ACS variable a pick stands for, read from its factors first and its reason second
 RACE_WORDS = re.compile(r"race|racial|ethnic|latin|hispan|black|african|asian|minorit|segregat|people of color")
 CHILD_WORDS = re.compile(r"\b(child|children|childhood|kids?|youth|minors|under[- ]?18|pediatric|paediatric|infants?|toddlers?|"
-                         r"school[- ]age|students?|pupils)\b")
+                         r"school[- ]age)\b")   # not "students": university students are adults
 OLDER_WORDS = re.compile(r"\b(older adults?|older people|elderly|seniors?|65\+|over 65|65 and over|aged 65|ag(e|ing|eing) "
                          r"(structure|population)|retire\w*)\b")
 INCOME_WORDS = re.compile(r"income|earning|wage|poverty|wealth|afford|socio-?economic|deprivation|disadvantage")
-POP_WORDS = re.compile(r"\b(population|residents|inhabitants|people|denominator|head ?count|per capita|density)\b")
+# "people" and "residents" alone say nothing about the measure ("unemployed people", "neighborhood residents")
+POP_WORDS = re.compile(r"\b(population|inhabitants|denominator|head ?count|per capita)\b")
 ACS_AGE = {  # measure -> (value field, map property, layer title, legend label, what the note says)
     "children": ("B01001_calc_pctLT18E", "under_18_pct", "ACS residents under 18 by {unit}", "Residents under 18 (%)",
                  "Share of residents under 18"),
@@ -320,6 +321,10 @@ RACE_GROUPS = [  # words in the pick's factors -> (ACS percent field, label)
 ]
 
 
+def _plural(unit: str) -> str:
+    return "counties" if unit == "county" else unit + "s"
+
+
 def _acs(s, pick, meta):
     """ACS by tract (county for big areas) from Esri's keyless Living Atlas services: race and Hispanic origin
     shares when the pick measures race or ethnicity, the share under 18 or 65 and over for age factors, total
@@ -358,7 +363,7 @@ def _acs(s, pick, meta):
         keys = ["GEOID", "name", "population", "under_18", "under_18_pct", "over_65", "over_65_pct"]
         rows = [keys] + [[f["properties"].get(k) for k in keys] for f in feats]
         return {"status": "ready", "kind": "service", "layers": [layer], "csv": _csv(s, pick, rows),
-                "note": f"{what} for {len(feats)} {unit}s (ACS table B01001, latest 5-year)"}
+                "note": f"{what} for {len(feats)} {_plural(unit)} (ACS table B01001, latest 5-year)"}
     if measure == "race":
         groups = [(f, lab) for rx, f, lab in RACE_GROUPS if re.search(rx, text)]
         fc = sources.arcgis_query(f"{ESRI_ACS_RACE}/{lid}", sb, max_features=3000, simplify_deg=simplify,
@@ -388,7 +393,7 @@ def _acs(s, pick, meta):
         keys = ["GEOID", "name", "population", "share_pct", "latino_pct", "black_pct", "asian_pct", "white_nh_pct"]
         rows = [keys] + [[f["properties"].get(k) for k in keys] for f in feats]
         return {"status": "ready", "kind": "service", "layers": [layer], "csv": _csv(s, pick, rows),
-                "note": f"Share of {who} residents for {len(feats)} {unit}s (ACS table B03002, latest 5-year)"}
+                "note": f"Share of {who} residents for {len(feats)} {_plural(unit)} (ACS table B03002, latest 5-year)"}
     fc = sources.arcgis_query(f"{ESRI_ACS_INCOME}/{lid}", sb, max_features=3000, simplify_deg=simplify)
     feats = []
     for f in fc.get("features", []):
@@ -404,7 +409,7 @@ def _acs(s, pick, meta):
         return {"status": "none", "note": note or "No areas found"}
     rows = [["GEOID", "name", "median_household_income", "moe"]] + [[f["properties"][k] for k in ("GEOID", "name", "median_household_income", "moe")] for f in feats]
     return {"status": "ready", "kind": "service", "layers": [layer], "csv": _csv(s, pick, rows),
-            "note": f"Median household income for {len(feats)} {unit}s (latest 5-year ACS)"}
+            "note": f"Median household income for {len(feats)} {_plural(unit)} (latest 5-year ACS)"}
 
 
 CT_BOX = [-73.75, 40.95, -71.75, 42.07]

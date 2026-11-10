@@ -133,3 +133,80 @@ def test_acs_shows_the_share_under_18_for_a_child_factor(s, monkeypatch):
     assert r3["layers"][0]["paint"]["label"] == "Total population (ACS 5-year)"
     vals = [f["properties"]["population"] for f in json.loads(session.layer_path(r3["layers"][0]["id"]).read_text())["features"]]
     assert vals == [4000, 3000, 40, 5000]  # counts keep the small tract
+
+
+# ---------------------------------------------------------------------------- review round (2026-11-10)
+def test_price_override_is_merged_and_never_breaks_a_turn():
+    base = config.LIST_PRICES
+    p = config.price_overrides('{"gpt-6.1-terra": {"input": 0.8}}', base)
+    assert p["gpt-6.1-terra"] == {"input": 0.8, "cached": 0.05, "output": 5.0}  # the other prices stay
+    assert base["gpt-6.1-terra"]["input"] == 1.0                                 # the list itself is untouched
+    assert config.price_overrides("[1]", base) == base and config.price_overrides("not json", base) == base
+    p = config.price_overrides('{"new-model": {"input": 3, "output": "x", "cached": -1, "extra": 9}, "gpt-6-luna": 5}', base)
+    assert p["new-model"] == {"input": 3.0, "cached": 0.0, "output": 0.0} and p["gpt-6-luna"] == base["gpt-6-luna"]
+
+
+def test_feedback_survives_odd_bodies_and_keeps_the_vote_id(client):
+    app_module._fb_rate.clear()
+    assert client.post("/api/feedback", json=[1, 2]).status_code == 400
+    r = client.post("/api/feedback", data='{"vote": "up", "turn": 1e999, "id": "ab-12<x>"}', content_type="application/json")
+    assert r.status_code == 200
+    row = json.loads((app_module.FEEDBACK_DIR / "feedback.jsonl").read_text(encoding="utf-8").splitlines()[-1])
+    assert row["turn"] == 0 and row["id"] == "ab12x"
+
+
+def test_feedback_needs_the_access_code_when_one_is_set(client, monkeypatch):
+    app_module._fb_rate.clear()
+    monkeypatch.setattr(app_module, "ACCESS_CODE", "open-sesame")
+    assert client.post("/api/feedback", json={"vote": "up"}).status_code == 401
+    assert client.post("/api/feedback", json={"vote": "up"}, headers={"X-Access-Code": "open-sesame"}).status_code == 200
+
+
+def test_feedback_file_stops_growing(client, monkeypatch):
+    app_module._fb_rate.clear()
+    assert client.post("/api/feedback", json={"vote": "up"}).status_code == 200
+    size = (app_module.FEEDBACK_DIR / "feedback.jsonl").stat().st_size
+    monkeypatch.setattr(app_module, "FEEDBACK_MAX_BYTES", size)
+    assert client.post("/api/feedback", json={"vote": "up"}).status_code == 429
+    assert (app_module.FEEDBACK_DIR / "feedback.jsonl").stat().st_size == size
+
+
+def test_rate_limit_address_cannot_be_spoofed_past_the_proxy():
+    app = create_app()
+    cf_edge, visitor, attacker = "172.64.1.1", "203.0.113.7", "198.51.100.9"
+    with app.test_request_context(headers={"X-Real-IP": cf_edge, "CF-Connecting-IP": visitor}):
+        assert app_module._client_ip() == visitor          # through Cloudflare: the visitor
+    with app.test_request_context(headers={"X-Real-IP": attacker, "CF-Connecting-IP": "1.2.3.4"}):
+        assert app_module._client_ip() == attacker         # straight to the server: the header is ignored
+    with app.test_request_context(headers={"X-Real-IP": visitor}):
+        assert app_module._client_ip() == visitor          # nginx's real-ip module already swapped the visitor in
+    with app.test_request_context(headers={"X-Real-IP": "2606:4700::1", "CF-Connecting-IP": "2001:db8::5"}):
+        assert app_module._client_ip() == "2001:db8::5"
+    with app.test_request_context(headers={"X-Real-IP": "garbage", "CF-Connecting-IP": "1.2.3.4"}):
+        assert app_module._client_ip() == "garbage"
+
+
+def test_acs_measure_ignores_words_that_say_nothing_about_the_measure():
+    f = previews._acs_measure
+    assert f("Neighborhood residents", "racial composition by tract") == "race"
+    assert f("Unemployed people", "") == "income"
+    assert f("University students", "") == "income"
+    assert f("School-age children", "") == "children"
+    assert f("Road density", "") == "income" and f("Population density", "") == "population"
+    assert previews._plural("county") == "counties" and previews._plural("tract") == "tracts"
+
+
+def test_failed_turns_get_no_feedback_row_and_votes_carry_an_id():
+    js = (config.STATIC_DIR / "app.js").read_text(encoding="utf-8")
+    assert "!m.failed) feedbackRow(m)" in js and "case 'error': m.failed = true;" in js
+    assert "m.fbInfo = { id: " in js
+
+
+def test_the_server_address_is_not_in_the_repository():
+    """The repository is public: deploy files and notes name no server address (deploy/host.txt is git-ignored)."""
+    import re
+    ip = re.compile(r"\b\d{1,3}\.\d{1,3}\.\d{1,3}\.\d{1,3}\b")
+    for name in ("deploy/deploy.sh", "handoff.md", "README.md", "deploy/nginx-yfinder.conf", "deploy/yfinder.service"):
+        found = [m for m in ip.findall((config.ROOT / name).read_text(encoding="utf-8")) if m not in ("127.0.0.1", "0.0.0.0")]
+        assert not found, (name, found)
+    assert "deploy/host.txt" in (config.ROOT / ".gitignore").read_text(encoding="utf-8")

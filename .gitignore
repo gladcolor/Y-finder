@@ -22,3 +22,6 @@ eval_runs/
 
 # Local-only branding for screen shares (never committed or deployed)
 static/brand/
+
+# The server address (deploy/deploy.sh reads it)
+deploy/host.txt

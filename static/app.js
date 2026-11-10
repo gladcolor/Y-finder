@@ -390,7 +390,7 @@
     if (state.restoring) await state.restoring;
     if (!state.graph) step('frame', 'active');
     userMsg(text); $('#q').value = ''; autosize();
-    const m = botMsg(); const turn = convTurn(text);
+    const m = botMsg(); const turn = convTurn(text); m.turn = state.conv.turns.length - 1;
     try {
       const r = await fetch('api/chat', { method: 'POST', headers: headers(), body: JSON.stringify({ sid: state.sid, message: text, model: state.model }) });
       if (!r.ok) {
@@ -457,7 +457,7 @@
         let s = $('.cites', m.tail); if (!s) s = m.seg('cites');
         s.innerHTML = `<details><summary>Sources (${m.cites.length})</summary>${m.cites.slice(0, 10).map((c) => safeUrl(c.url) ? `<a href="${esc(safeUrl(c.url))}" target="_blank" rel="noopener">${esc((c.title || c.url).slice(0, 70))}</a>` : '').join('')}</details>`;
       } break;
-      case 'error': m.seg('err').innerHTML = `<p style="color:var(--poor)">${esc(ev.message)}</p>`; break;
+      case 'error': m.failed = true; m.seg('err').innerHTML = `<p style="color:var(--poor)">${esc(ev.message)}</p>`; break;
       case 'done': {
         if (ev.response_id && state.conv) state.conv.rid = ev.response_id;
         if (m.act) {
@@ -467,14 +467,15 @@
           const cost = ev.cost_usd != null ? ev.cost_usd : turnCost(u, ev.model);
           const modelId = String(ev.model || '').replace(/^recorded\s*·\s*/, '');
           const c = $('.cnt', m.act);
-          c.textContent = ` · ${ev.elapsed}s${tok ? ` · ${tok >= 1000 ? Math.round(tok / 1000) + 'k' : tok} tokens` : ''}${cost != null ? ` · about ${fmtCost(cost)}` : ''}${String(ev.model || '').startsWith('recorded') ? ' · recorded' : ''}`;
+          c.textContent = ` · ${ev.elapsed}s${tok ? ` · ${tok >= 1000 ? Math.round(tok / 1000) + 'k' : tok} tokens` : ''}${cost != null && tok ? ` · ${cost < 0.01 ? '' : 'about '}${fmtCost(cost)}` : ''}${String(ev.model || '').startsWith('recorded') ? ' · recorded' : ''}`;
           c.title = tok ? `${(u.input || 0).toLocaleString()} input tokens${u.cached ? ` (${u.cached.toLocaleString()} from cache)` : ''} and ${(u.output || 0).toLocaleString()} output tokens over ${u.steps || '?'} model calls${cost != null ? `; about $${cost.toFixed(3)} at ${modelId} list prices` : ''}` : '';
         }
         if (m.choices && m.choices.options && m.choices.options.length) {
           const box = m.seg('choices');
           m.choices.options.forEach((o) => { const b = document.createElement('button'); b.textContent = o; b.onclick = () => { box.classList.add('used'); send(o); }; box.appendChild(b); });
         }
-        if (!m.fb && state.conv) feedbackRow(m);
+        m.model = String(ev.model || '').replace(/^recorded\s*·\s*/, '') || undefined; // the model that answered, for the feedback row
+        if (!m.fb && state.conv && !m.failed) feedbackRow(m); // a failed turn is not an answer to rate
       } break;
       default: break;
     }
@@ -785,14 +786,18 @@
   // Stored on the server without the conversation (the question's first 300 characters only), to build the
   // evaluation set from real use.
   function feedbackRow(m) {
+    // which turn this row sits under is fixed now: a restored conversation has a row under every answer
+    const c = state.conv || {}; const turns = c.turns || [];
+    const turn = m.turn != null ? m.turn : Math.max(0, turns.length - 1);
+    // one id per vote: a No and the comment that follows it are two rows with the same id
+    m.fbInfo = { id: Math.random().toString(36).slice(2, 12) + Date.now().toString(36), turn,
+      question: String((turns[turn] || {}).q || c.title || '').slice(0, 300), model: m.model || state.model, demo: c.demo || null };
     m.fb = m.seg('fb');
     m.fb.innerHTML = `<span>Was this useful?</span><button type="button" data-v="up">Yes</button><button type="button" data-v="down">No</button>`;
     $$('button', m.fb).forEach((b) => { b.onclick = () => sendFeedback(m, b.dataset.v); });
   }
   async function sendFeedback(m, vote, comment) {
-    const c = state.conv || {}; const turn = Math.max(0, (c.turns || []).length - 1);
-    const body = { vote, comment: comment || '', question: String(((c.turns || [])[turn] || {}).q || c.title || '').slice(0, 300),
-      model: state.model, demo: state.demo && state.demo.id ? state.demo.id : null, turn, sid: state.sid };
+    const body = { vote, comment: comment || '', ...m.fbInfo, sid: state.sid };
     try {
       const r = await fetch('api/feedback', { method: 'POST', headers: headers(), body: JSON.stringify(body) });
       if (!r.ok) throw new Error((await r.json().catch(() => ({}))).error || `Server error ${r.status}`);
@@ -1557,7 +1562,7 @@
     const quiet = { chip() {}, addText() {}, seg() { return document.createElement('div'); } };
     for (const t of c.turns) {
       if (t.q == null) { t.ev.forEach((ev) => handle(ev, quiet)); continue; }
-      userMsg(t.q); const m = botMsg();
+      userMsg(t.q); const m = botMsg(); m.turn = c.turns.indexOf(t);
       t.ev.forEach((ev) => handle(ev, m));
       if (!t.ev.some((e) => e.type === 'done')) { $('.st', m.act).className = 'st ok'; $('.lbl', m.act).textContent = 'Interrupted'; }
     }
@@ -1721,7 +1726,7 @@
           demoNote(`${demo.who.split(' (')[0]} attaches a proposal (${st.words} words). Y-finder reads it with the next message.`); await wait(2200 / sp());
         } else if (st.type === 'turn') {
           switchTab('chat'); userMsg(st.message); await wait(500 / sp());
-          const m = botMsg(); const t = convTurn(st.message);
+          const m = botMsg(); const t = convTurn(st.message); m.turn = state.conv.turns.length - 1;
           for (const ev of st.events) {
             if (state.demo.stop) break; await pace(ev); if (ev.type === 'done') ev.model = 'recorded · ' + (ev.model || '');
             const e2 = sub(ev); convRecord(t, e2); handle(e2, m);

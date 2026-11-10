@@ -33,15 +33,32 @@ USER_AGENT = "Y-finder/0.1 (YCGS geospatial data guide prototype; +https://githu
 
 # OpenAI list prices in US dollars per million tokens (standard tier, November 2026). They only give the estimated
 # cost shown under each answer. Override: YFINDER_PRICES='{"gpt-6.1-terra": {"input": 1, "cached": 0.05, "output": 5}}'
-PRICES = {
+LIST_PRICES = {
     "gpt-6.1-terra": {"input": 1.00, "cached": 0.05, "output": 5.00},
     "gpt-6.1-sol": {"input": 2.00, "cached": 0.10, "output": 10.00},
     "gpt-6-luna": {"input": 0.10, "cached": 0.01, "output": 0.50},
 }
-try:
-    PRICES.update(json.loads(os.environ.get("YFINDER_PRICES") or "{}"))
-except ValueError:
-    pass
+
+
+def price_overrides(raw: str | None, base: dict) -> dict:
+    """The list prices with YFINDER_PRICES applied. A partial entry keeps the other prices of that model; anything
+    that is not a number (or is negative) is ignored, so a bad value can never break a turn."""
+    out = {m: dict(p) for m, p in base.items()}
+    try:
+        over = json.loads(raw or "{}")
+    except ValueError:
+        return out
+    if not isinstance(over, dict):
+        return out
+    for m, p in over.items():
+        if isinstance(p, dict):
+            good = {k: float(v) for k, v in p.items()
+                    if k in ("input", "cached", "output") and isinstance(v, (int, float)) and not isinstance(v, bool) and v >= 0}
+            out[m] = {"input": 0.0, "cached": 0.0, "output": 0.0, **out.get(m, {}), **good}
+    return out
+
+
+PRICES = price_overrides(os.environ.get("YFINDER_PRICES"), LIST_PRICES)
 
 
 def turn_cost(usage: dict, model: str) -> float | None:

@@ -3,15 +3,15 @@
 Read this first if you are a coding agent (or a person) picking up the project. Keep it current: add to the
 decision log and commit log when you change something important.
 
-## Status (2026-11-09)
+## Status (2026-11-10)
 
 - **Live:** https://researcharchitect.ai/y (short link) opens https://app.researcharchitect.ai/y-finder/ (health: `/y-finder/healthz`).
   The short link is a `_redirects` file in the landing-page repo `gladcolor/researcharchitect` (Cloudflare Pages, deploys from `master`).
 - **Repo:** https://github.com/gladcolor/Y-finder (public since 2026-11-09). Local folder: `F:\OneDrive_Emory\OneDrive - Emory\Research_doc\Y-finder`.
 - **Purpose:** working prototype for Huan Ning's answer to the YCGS written question on an *interactive data guide*
-  (Lead, Geospatial AI & ML interview, Yale Job 138060WD). The answer text lives in
-  `E:\OneDrive_Huan\OneDrive\Job_hunting\2026\Yale\written_exam.md` (Huan edits it himself; do not overwrite it).
-- **Tests:** `python -m pytest -q` (286 pass, no model calls); `scripts/mutation_check.py` (all 25 injected faults caught);
+  (Lead, Geospatial AI and ML interview). The written answer is kept outside this repository; Huan edits it himself.
+- **Tests:** `python -m pytest -q` (294 pass, no model calls); `scripts/mutation_check.py` (all 29 injected faults caught);
+  `scripts/ui_smoke.py` (the page in headless Chromium: demo replay, votes, data guide, reload, phone screen);
   personas 190/195 checks across 3 models (Terra 9/10 personas fully, Sol 8/10, Luna 8/10; fixes after the run listed in
   `docs/persona_results.md`); demo cases 38 (32 Yale), every check passing (`docs/demo_case_results.md`).
 - **Reviewed:** Codex CLI (gpt-6.1-sol) reviewed the code; all 15 findings fixed with regression tests (time-fit bug for
@@ -56,7 +56,9 @@ decision log and commit log when you change something important.
 | 2026-11-09 | When data sources are available, explore them according to the research question and graph while the user inspects the data, and extract insights; provide buttons to pause or stop. | `yfinder/explore.py`: when previews are ready the browser starts an exploration run (`POST /api/session/<sid>/explore` with start, pause, resume, stop; at most 8 runs per session, 2 computing at once on the server). The plan follows the graph: the outcome's layers first, then links into the outcome where both ends have data (direct, then through one or two other factors), two layers of the outcome against each other, zones without values (inside versus outside), then other core factors. Statistics with numpy: distribution, highest and lowest places, Moran's I (6 nearest neighbours, 199 shuffles), point concentration on a grid, Spearman rank correlation after a map join (points per km2 in each area, finer areas averaged into coarser ones, shared ID columns, shared grid, matching years), rank-biserial effect for zones, the study area's rank in world or national layers. Plain wording that says what each number rests on: counts versus rates, a stand-in measure (income standing in for population shares), indirect links, and previews that are not an even sample over time (the LAPD preview is 69% 2023 because the portal returns its first 50,000 rows). The chat model is used twice and only on computed numbers: to pick the categories that match the question (it picked ILLEGAL STREET/SIDEWALK SALES from 449 LAPD charge types) and to write a 60-word reading with next checks and a caveat. Neighbourhood names come from Nominatim reverse geocoding (1 per second, cached a week). UI: Insights tab with a plan checklist, finding cards (chart, graph link, rho), Show on map (only the finding's layers, numbered markers, matching records as their own layer), Ask about this; a pill on the map shows progress with Pause/Resume and Stop; tested links are labelled in the Frame graph (dashed when the link runs through other factors); findings are saved with the conversation and given to the chat agent. Turn off with `YFINDER_EXPLORE=0`; tests set `YFINDER_EXPLORE_MODEL=0` and `YFINDER_EXPLORE_NAMES=0`. |
 | 2026-11-09 | Check whether the datasets retrieved for the demos are suitable. | Audit of all 18 demos (73 dataset links, every preview rebuilt live, exploration run on them): `docs/demo_data_audit.md`. Fixes to previews: ACS shows race and Hispanic-origin shares when the pick measures race or ethnicity (was always income; near-empty tracts under 200 people get no share); Socrata tables with a date column are sampled evenly over the study years and keep the portal's count of every row per year (the first 50,000 rows were 69-81% one year); the explorer fetches every matching record from the portal once the model picks the matching categories (4,228 LAPD street-vending arrests 2010-2019); Dataverse joins a dataset's table to its own map file by a shared ID (the silver registry now maps pesos per treasury); NOAA HMS cards draw the daily smoke polygons (the browser had found prescribed-fire perimeters), and the explorer classes each monitor-day by the smoke over it; CT ECO cards draw the service the question needs (1934 aerial mosaic, 1 m tree canopy or water 2021, historical shorelines; the browser had picked a 1.6 GB contour file); EPA AirData adds weekday and weekend hour-of-day profiles for hour or rush-hour questions; Malaria Atlas pages draw MAP's WMS; empty files (ad-tracker pixels) are never previews and the browser ignores ad and analytics hosts; ArcGIS paging goes up to 80 pages (a Living Atlas service answers 50 features at a time). Catalog: Zoning Atlas moved to pro-homesct.org; new cards CT mosquito trapping (CAES), USGS Water Data, NOAA Shoreline Data Explorer, MAP parasite rate; CT ECO card lists its services. New previews: OpenStreetMap features named by the factors (Overpass stalls on an `Accept: application/json` header, so it now gets only the User-Agent), USGS gages with annual mean flow (10 sites per statistics request), nClimGrid heat days for extreme-heat factors. Re-recorded habitat, waterfront, kenya and yale_streams with the new cards in the catalog. |
 | 2026-11-09 | Create 20 more cases and inspect the results. | Twenty more `group: "yale"` cases from real Yale programs (ISPS election maps, the circus GIS Accelerator project, Aksoy Lab, Humanitarian Research Lab, Map of Life, Grammatical Diversity Project, Peccia Lab wastewater, Ko's leptospirosis cohort, EGC migration study, Solarize CT, Natural Carbon Capture, YPS sensor network, Sustaining Family Forests, ELTI Agua Salud, Seto's urban forecasts, Dura-Europos archive, YSPH overdose mapping, Peabody herbarium, Brando's Xingu fire work, SOM sea-level home prices). Each was recorded, read in full, previewed and explored; problems were fixed in Y-finder and the cases re-recorded (`docs/demo_batch3_review.md`). Fixes: answers open with the data route; geocoder prefers boundaries and retries without "District"; the US is the contiguous 48 states and globe-wrapping boxes are refused; natural regions and single sites keep their own extent; portal tables get their years and region; image requests use a view box and keep the scope; tracking parameters dropped; curated Socrata pages read through SODA; code columns never values; download pages rank files by the card's topic; zipped CSVs read as CSVs; record tables map rows per town or medians; explorer names, yes/no columns and steady-trend wording; a backspace character in `HOUR_WORDS` fixed. 17 new curated cards. Eleven older demos re-recorded where better (atlas and downtown recovery kept). Welcome: "More demos" has theme chips and a search box; `theme` in `demo_cases.json`. |
-| 2026-11-09 | "Improve Y-finder to help me win the position." | Reviewed the live site as a committee member would (welcome, About, a live public-health question, Data, Insights, phone width). Added what the committee will ask for: a printable **data guide** (Data tab, built in the browser from the conversation's state, Markdown copy), the **estimated cost** under every answer (tokens and list prices; `turn_cost` in `config.py`, cached tokens counted), a **Yes or No** under every answer (`POST /api/feedback`, 30 per hour per address, stored without the conversation), and **design notes** at `/design` (problem, tri-projection, honesty rules, evidence table, cost, running it at YCGS, six-month plan, what not to build). Fixed what the live question showed: the "Child population" factor previewed median income; ACS previews now choose the variable from the factor (race shares, residents under 18, 65 and over, total population, else income) through `previews._acs_measure`, from Esri's keyless `ACS_Total_Population_Boundaries` service. |
+| 2026-11-09 | Review the live site as the interview committee would and improve it. | Reviewed the live site as a committee member would (welcome, About, a live public-health question, Data, Insights, phone width). Added what the committee will ask for: a printable **data guide** (Data tab, built in the browser from the conversation's state, Markdown copy), the **estimated cost** under every answer (tokens and list prices; `turn_cost` in `config.py`, cached tokens counted), a **Yes or No** under every answer (`POST /api/feedback`, 30 per hour per address, stored without the conversation), and **design notes** at `/design` (problem, tri-projection, honesty rules, evidence table, cost, running it at YCGS, six-month plan, what not to build). Fixed what the live question showed: the "Child population" factor previewed median income; ACS previews now choose the variable from the factor (race shares, residents under 18, 65 and over, total population, else income) through `previews._acs_measure`, from Esri's keyless `ACS_Total_Population_Boundaries` service. |
+| 2026-11-10 | Make the GitHub repository public, without publishing the keys. | The whole history was scanned first (no key or key file was ever committed; `*key*.txt` is ignored), then the repository was made public. Afterwards the server address was taken out of the tracked files (`deploy/host.txt`, git-ignored, or `YFINDER_HOST`); it is still in the history before 2026-11-10. |
+| 2026-11-10 | Review and make possible improvements. | An independent code review of the new code (10 findings; fixed: a vote names its own turn, demo and answering model; price overrides are merged and checked; cost label; "counties"; odd request bodies; one id per vote; no vote on a failed turn; feedback needs the access code when one is set and its file stops at 20 MB; ACS words narrowed). The rate limits no longer believe a `CF-Connecting-IP` header sent straight to the server. `scripts/ui_smoke.py` runs the page in a real browser without model calls. README rewritten for visitors, with two pictures and an evidence table; `docs/design.md` counts brought up to date. Three new mutants. |
 | 2026-11-08 | Create realistic, easy-to-understand use cases to show the functions; use these synthetic cases for automatic testing. | Six demo cases (`yfinder/data/demo_cases.json`) with checks, recorded by `scripts/record_demos.py`, replayed in the app with narration, then continued live. |
 
 ## Agent decisions (change them if Huan disagrees)
@@ -89,7 +91,11 @@ decision log and commit log when you change something important.
 - The cost under an answer is an estimate at list prices (`config.PRICES`, November 2026, from OpenAI's published rates as reported by price trackers; set `YFINDER_PRICES` when they change). The server sends `cost_usd` in the `done` event; the browser computes it for older recordings from their usage.
 - Feedback is a vote plus an optional one-line comment, the question's first 300 characters, the model, the demo id and a hashed address. Never the conversation. It is the seed of the evaluation set from real use (open item 3).
 - The data guide is built in the browser from `state` (graph, scope, picks, previews, methods, next steps, explore findings and synthesis, citations) and opened in a new tab; nothing is sent to the server. Keep it in step with the Data and Insights tabs when their fields change.
-- ACS previews choose the variable from the pick's factor labels first and its reason second, in the order race, children, older, income, population; a plain "population" factor maps the count (a denominator), everything else without a match maps income.
+- ACS previews choose the variable from the pick's factor labels first and its reason second, in the order race, children, older, income, population; a plain "population" factor maps the count (a denominator), everything else without a match maps income. "People", "residents" and "students" alone do not choose a measure.
+- The visitor's address for the rate limits is nginx's `X-Real-IP`. `CF-Connecting-IP` counts only when the peer is one of Cloudflare's published ranges (`CLOUDFLARE_NETS` in `app.py`, checked 2026-11-10): the server also answers requests that go around Cloudflare, and there anyone can send that header.
+- A vote carries a random id. A No and the comment that follows are two rows with the same id; the later row wins when the file is read. Failed turns get no Yes/No row.
+- Change `static/app.js` only with a browser run behind it: `python scripts/ui_smoke.py` (the workstation has no Node, so nothing else checks the script's syntax before a deploy).
+- The numbers on `static/design.html` and in the README's evidence table are typed in. Update both when the test or mutant counts change.
 - Demo cases are recorded and replayed so interviews do not depend on live latency; `/api/demo/<id>/load` restores the end state (including the OpenAI response id) so the conversation continues live.
 
 ## How to run, test, deploy
@@ -99,6 +105,7 @@ pip install -r requirements.txt
 python -m yfinder.app                       # http://127.0.0.1:8770 (key from OpenAI_key.txt or OPENAI_API_KEY)
 python -m pytest -q
 python scripts/mutation_check.py
+python scripts/ui_smoke.py                  # the page in headless Chromium, no model calls (--url tests a deployed copy, --shots docs retakes the README pictures)
 python scripts/run_personas.py              # ~10 min, ~30 live runs
 python scripts/record_demos.py [--only id]  # keeps the old recording if checks fail (use --force to overwrite)
 python scripts/record_demos.py --slim-only  # shrink inlined layers in existing recordings
@@ -111,7 +118,8 @@ python -m playwright install chromium-headless-shell   # local runs of yfinder/b
 
 ## Server (shared with Research Architect)
 
-- Host `173.212.218.20` (Contabo, Ubuntu 24.04), SSH key auth as root. Research Architect runs on 127.0.0.1:8050 and must not be disturbed.
+- Host: a Contabo VPS (Ubuntu 24.04), SSH with a key. Its address is not in this repository: `deploy/deploy.sh` reads
+  `YFINDER_HOST` or the git-ignored `deploy/host.txt`. Research Architect runs on the same server and must not be disturbed.
 - Y-finder: code `/opt/yfinder` (previous version kept in `/opt/yfinder.prev`), venv `/opt/yfinder/venv`, runtime data
   `/var/lib/yfinder` (layers, watches, downloads, geolibre cache), secrets `/etc/yfinder.env` (root, 0600), user `yfinder`.
 - Services: `yfinder.service` (gunicorn, 127.0.0.1:8060, 1 worker, 16 threads) and `yfinder-watch.timer` (daily 07:30).
@@ -119,7 +127,7 @@ python -m playwright install chromium-headless-shell   # local runs of yfinder/b
   The original vhost was backed up to `/root/causalai.nginx.bak-*`. Always run `nginx -t` before reloading.
 - Logs: `journalctl -u yfinder -n 100`. Rollback: `rm -rf /opt/yfinder && mv /opt/yfinder.prev /opt/yfinder && systemctl restart yfinder`.
 - Handbooks written on demand on the server stay in `/opt/yfinder/handbooks`; copy them back with
-  `scp -r root@173.212.218.20:/opt/yfinder/handbooks/* handbooks/` before committing.
+  `scp -r "$(cat deploy/host.txt)":/opt/yfinder/handbooks/* handbooks/` before committing.
 
 ## Gotchas
 
@@ -133,7 +141,7 @@ python -m playwright install chromium-headless-shell   # local runs of yfinder/b
 - Imagery previews: `map_stac_preview` adds same-week neighbor scenes until the study box is covered (NAIP quarter quads are small).
 
 - `localStorage` on `app.researcharchitect.ai` is shared with Research Architect (same origin); keep Y-finder keys prefixed `yf_` and the history under its 2.5 MB budget.
-- The Chrome connected to Claude Code on this workstation is on another computer, so it cannot open `127.0.0.1`. Test the UI on the deployed URL.
+- The Chrome connected to Claude Code on this workstation is on another computer, so it cannot open `127.0.0.1`. Test the UI on the deployed URL, or locally with `scripts/ui_smoke.py` (Playwright's own Chromium). That Chrome tool also cannot look inside `about:blank` or `blob:` tabs (the data guide).
 - Bash sandbox: SSH works; a local server started inside the sandbox is not visible outside it (use `dangerouslyDisableSandbox`).
 - Never commit `OpenAI_key.txt` (git-ignored, also excluded by `deploy.sh`). Scan before pushing: `git grep -n "sk-"`.
 - Public Overpass servers are slow at times; the app falls back to a mirror and caps the area at about 50 x 50 km.
@@ -143,7 +151,8 @@ python -m playwright install chromium-headless-shell   # local runs of yfinder/b
 
 ## Open items and next steps
 
-1. Huan: decide repo visibility, and whether to add a `y-finder.researcharchitect.ai` DNS record.
+1. Huan: choose a license for the public repository (LLM-Find is AGPL-3.0), and decide whether to add a
+   `y-finder.researcharchitect.ai` DNS record.
 2. Review the 22 draft handbooks (run each example, set `status: reviewed`).
 3. Build the evaluation set from real (de-identified) YCGS consult questions; report hit@5 and MRR (see literature review).
 4. Add embedding search and an OGC API Records / CKAN harvester for Yale and Connecticut portals.
@@ -172,3 +181,4 @@ See `git log --oneline`. Add a line here for any commit that changes behavior us
 - (2026-11-09) Twenty more Yale demo cases, inspected; fixes to the prompt, geocoder, scope, portal tables, download ranking, table joins and explorer; theme chips and search on the welcome screen (`docs/demo_batch3_review.md`).
 - (2026-11-09) Screen sizes: large screens scale the panel and map controls; layout fixes at 1920 px.
 - (2026-11-09) For the committee: the data guide, the estimated cost under each answer, Yes/No feedback, design notes at `/design`; ACS previews show the share under 18, 65 and over or total population when the factor asks for it.
+- (2026-11-10) Review round after going public: code-review fixes, rate limits that cannot be spoofed around the proxy, browser smoke test, README for visitors, server address out of the tracked files.
