@@ -75,6 +75,17 @@
   });
   map.addControl(new maplibregl.NavigationControl({ visualizePitch: false }), 'bottom-right');
   map.addControl(new maplibregl.ScaleControl({ unit: 'metric' }), 'bottom-left'); // beside the Layers button; the legend sits bottom right
+  // The attribution box grows with every source on the map. When it would reach the scale bar (a narrow map beside a
+  // large chat) it folds to its "i" button, MapLibre's compact mode; a click opens it again and it then stays as the user left it.
+  function fitAttribution() {
+    const a = document.querySelector('.maplibregl-ctrl-attrib'); const sc = document.querySelector('.maplibregl-ctrl-scale');
+    if (!a || !sc || a.dataset.user || !a.classList.contains('maplibregl-compact-show')) return;
+    if (!a.dataset.bound) { a.dataset.bound = '1'; a.addEventListener('click', () => { a.dataset.user = '1'; }); }
+    if (a.getBoundingClientRect().left < sc.getBoundingClientRect().right + 12) { a.classList.remove('maplibregl-compact-show'); a.removeAttribute('open'); }
+  }
+  // throttled, not debounced: tiles keep arriving, and a timer that restarts on every one would never fire
+  let attribTimer = 0; const attribSoon = () => { if (!attribTimer) attribTimer = setTimeout(() => { attribTimer = 0; fitAttribution(); }, 300); };
+  map.on('load', attribSoon); map.on('resize', attribSoon); map.on('sourcedata', attribSoon);
   map.on('load', () => {
     map.resize(); // the panel may have changed size while the style loaded
     const firstSymbol = (map.getStyle().layers.find((l) => l.type === 'symbol') || {}).id;

@@ -122,6 +122,11 @@ def main():
                   and r[2]["comment"].startswith("smoke test") and bool(r[2]["question"]) and r[2]["turn"] >= r[0]["turn"],
                   "No and its comment share one id and name their own turn")
 
+        page.wait_for_timeout(900)   # the attribution box folds a moment after the last source arrives
+        boxes = page.evaluate("""() => { const a = document.querySelector('.maplibregl-ctrl-attrib'), s = document.querySelector('.maplibregl-ctrl-scale');
+            return a && s ? [a.getBoundingClientRect().left, s.getBoundingClientRect().right] : null; }""")
+        check(boxes is None or boxes[0] >= boxes[1], f"the map's attribution does not cover the scale bar ({boxes})")
+
         if a.shots:
             out = Path(a.shots)
             out.mkdir(parents=True, exist_ok=True)
