@@ -878,8 +878,9 @@
 <div class="page">${md(text)}</div><pre id="src" hidden>${esc(text)}</pre>
 <script>document.getElementById('copy').onclick = function () { var t = document.getElementById('src').textContent; var b = this; navigator.clipboard.writeText(t).then(function () { b.textContent = 'Copied'; }, function () { b.textContent = 'Select the text and copy it'; }); };</script>
 </body></html>`;
-    const w = window.open('', '_blank'); if (!w) { toast('Allow pop-ups for this site to open the guide.'); return; }
-    w.document.open(); w.document.write(html); w.document.close();
+    // a Blob URL: the tab gets a real address, so the browser's Save, Print and Reload work on it
+    const url = URL.createObjectURL(new Blob([html], { type: 'text/html' }));
+    const w = window.open(url, '_blank'); if (!w) { toast('Allow pop-ups for this site to open the guide.'); return; }
   }
 
   // ------------------------------------------------------------------ hand-off to a YCGS consultant (human in the loop)
