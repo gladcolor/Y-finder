@@ -16,7 +16,7 @@ from openai import OpenAI
 
 from . import catalog as catalog_mod
 from . import downloads, explore, fit, geolibre, handbooks, sources, websearch
-from .config import DEFAULT_MODEL, LOG_TURNS, MAX_OUTPUT_TOKENS, MAX_STEPS, MODELS, RUNTIME_DIR, openai_key
+from .config import DEFAULT_MODEL, LOG_TURNS, MAX_OUTPUT_TOKENS, MAX_STEPS, MODELS, RUNTIME_DIR, openai_key, turn_cost
 from .geo import bbox_size_km, clamp_bbox, coverage_fraction, valid_bbox
 from .geo import parse_resolution_m as geo_parse_res
 from .session import Session, layer_path, save_layer
@@ -1052,7 +1052,7 @@ def run_turn(s: Session, text: str, model: str | None = None, web: bool = True):
         content = s.recap + "\n\n" + content
         s.recap = None
     inputs: list = [{"role": "user", "content": content}]
-    usage = {"input": 0, "output": 0, "steps": 0, "tools": 0}
+    usage = {"input": 0, "output": 0, "cached": 0, "steps": 0, "tools": 0}
     tool_log = []
     prev = s.prev_response_id
     instructions = SYSTEM.format(today=dt.date.today().isoformat())
@@ -1134,6 +1134,7 @@ def run_turn(s: Session, text: str, model: str | None = None, web: bool = True):
                 if u:
                     usage["input"] += u.input_tokens or 0
                     usage["output"] += u.output_tokens or 0
+                    usage["cached"] += getattr(getattr(u, "input_tokens_details", None), "cached_tokens", 0) or 0
             usage["steps"] += 1
             if not calls:
                 break
@@ -1170,14 +1171,15 @@ def run_turn(s: Session, text: str, model: str | None = None, web: bool = True):
             if cites:
                 yield {"type": "citations", "items": cites}
         # response_id lets the browser restore this conversation after the server session expires
-        yield {"type": "done", "usage": usage, "elapsed": round(time.time() - t_start, 1), "model": model, "response_id": prev}
+        yield {"type": "done", "usage": usage, "cost_usd": turn_cost(usage, model), "elapsed": round(time.time() - t_start, 1),
+               "model": model, "response_id": prev}
     except Exception as e:
         # The last response may be waiting for tool outputs we never sent; continuing from it would fail,
         # so drop the chain. The next turn starts fresh with the state note (scope, graph, picks).
         s.prev_response_id = None
         traceback.print_exc()
         yield {"type": "error", "message": f"Something went wrong: {str(e)[:300]}"}
-        yield {"type": "done", "usage": usage, "elapsed": round(time.time() - t_start, 1), "model": model}
+        yield {"type": "done", "usage": usage, "cost_usd": turn_cost(usage, model), "elapsed": round(time.time() - t_start, 1), "model": model}
     finally:
         s.last_tool_log = tool_log
         if LOG_TURNS:

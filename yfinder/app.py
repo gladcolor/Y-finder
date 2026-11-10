@@ -19,8 +19,8 @@ from xml.sax.saxutils import escape
 from flask import Flask, Response, abort, jsonify, request, send_file, send_from_directory, stream_with_context
 
 from . import agent, catalog, downloads, explore, fit, handbooks, janitor, previews, session, watch
-from .config import (ACCESS_CODE, DAILY_CAP, DEFAULT_MODEL, MODEL_IDS, MODELS, RATE_PER_HOUR, STATIC_DIR,
-                     UPLOAD_MAX_BYTES, openai_key)
+from .config import (ACCESS_CODE, DAILY_CAP, DEFAULT_MODEL, MODEL_IDS, MODELS, PRICES, RATE_PER_HOUR, RUNTIME_DIR,
+                     STATIC_DIR, UPLOAD_MAX_BYTES, openai_key)
 
 _rate: dict[str, deque] = defaultdict(deque)
 _day = {"date": time.strftime("%Y-%m-%d"), "n": 0}
@@ -28,6 +28,21 @@ _rate_lock = threading.Lock()
 
 
 _dl_rate: dict[str, deque] = defaultdict(deque)
+_fb_rate: dict[str, deque] = defaultdict(deque)
+FEEDBACK_DIR = RUNTIME_DIR / "feedback"   # one JSON line per Yes or No under an answer
+
+
+def _allow_feedback() -> str | None:
+    """At most 30 votes per hour from one address."""
+    ip, now = _client_ip(), time.time()
+    with _rate_lock:
+        q = _fb_rate[ip]
+        while q and now - q[0] > 3600:
+            q.popleft()
+        if len(q) >= 30:
+            return "Too much feedback from your address this hour; thank you, that is enough."
+        q.append(now)
+    return None
 
 
 def _allow_download() -> str | None:
@@ -111,6 +126,40 @@ def create_app() -> Flask:
         resp.headers["Cache-Control"] = "no-cache"
         return resp
 
+    @app.post("/api/feedback")
+    def feedback():
+        """A Yes or No under an answer, with an optional comment. Stored without the conversation (the question's first
+        300 characters only), to build the evaluation set from real use."""
+        body = request.get_json(silent=True) or {}
+        vote = body.get("vote")
+        if vote not in ("up", "down"):
+            return jsonify(error="vote must be up or down"), 400
+        limit = _allow_feedback()
+        if limit:
+            return jsonify(error=limit), 429
+        try:
+            turn = int(body.get("turn") or 0)
+        except (TypeError, ValueError):
+            turn = 0
+        row = {"t": round(time.time(), 1), "vote": vote, "comment": str(body.get("comment") or "")[:500],
+               "question": str(body.get("question") or "")[:300], "model": str(body.get("model") or "")[:40],
+               "demo": str(body.get("demo") or "")[:60] or None, "turn": turn, "sid": str(body.get("sid") or "")[:64],
+               "who": hashlib.sha256(_client_ip().encode()).hexdigest()[:12]}
+        try:
+            FEEDBACK_DIR.mkdir(parents=True, exist_ok=True)
+            with open(FEEDBACK_DIR / "feedback.jsonl", "a", encoding="utf-8") as fh:
+                fh.write(json.dumps(row, ensure_ascii=False) + "\n")
+        except OSError:
+            return jsonify(error="Could not store the feedback"), 500
+        return jsonify(ok=True)
+
+    @app.get("/design")
+    def design():
+        """Design notes: how Y-finder was built and tested, what it costs, and what YCGS would need to run it."""
+        resp = send_from_directory(STATIC_DIR, "design.html")
+        resp.headers["Cache-Control"] = "no-cache"
+        return resp
+
     @app.get("/healthz")
     def healthz():
         cat = catalog.load()
@@ -122,7 +171,7 @@ def create_app() -> Flask:
         return jsonify(models=MODELS, default_model=DEFAULT_MODEL, catalog=cat.meta,
                        access_code=bool(ACCESS_CODE), handbooks=handbooks.count(),
                        handbook_ondemand=handbooks.can_generate(), watch_email=watch.smtp_ready(),
-                       watch_consent=watch.CONSENT_TEXT)
+                       watch_consent=watch.CONSENT_TEXT, prices=PRICES)
 
     @app.post("/api/chat")
     def chat():

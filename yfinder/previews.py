@@ -42,6 +42,35 @@ ESRI_ACS_INCOME = ("https://P3ePLMYs2RVChkJx.svcs.arcgis.com/P3ePLMYs2RVChkJx/ar
                    "ACS_Median_Household_Income_View_Boundaries/FeatureServer")
 ESRI_ACS_RACE = ("https://services.arcgis.com/P3ePLMYs2RVChkJx/arcgis/rest/services/"
                  "ACS_Population_by_Race_and_Hispanic_Origin_Boundaries/FeatureServer")
+ESRI_ACS_POP = ("https://services.arcgis.com/P3ePLMYs2RVChkJx/arcgis/rest/services/"
+                "ACS_Total_Population_Boundaries/FeatureServer")   # table B01001: total, under 18, 65 and over
+# which ACS variable a pick stands for, read from its factors first and its reason second
+RACE_WORDS = re.compile(r"race|racial|ethnic|latin|hispan|black|african|asian|minorit|segregat|people of color")
+CHILD_WORDS = re.compile(r"\b(child|children|childhood|kids?|youth|minors|under[- ]?18|pediatric|paediatric|infants?|toddlers?|"
+                         r"school[- ]age|students?|pupils)\b")
+OLDER_WORDS = re.compile(r"\b(older adults?|older people|elderly|seniors?|65\+|over 65|65 and over|aged 65|ag(e|ing|eing) "
+                         r"(structure|population)|retire\w*)\b")
+INCOME_WORDS = re.compile(r"income|earning|wage|poverty|wealth|afford|socio-?economic|deprivation|disadvantage")
+POP_WORDS = re.compile(r"\b(population|residents|inhabitants|people|denominator|head ?count|per capita|density)\b")
+ACS_AGE = {  # measure -> (value field, map property, layer title, legend label, what the note says)
+    "children": ("B01001_calc_pctLT18E", "under_18_pct", "ACS residents under 18 by {unit}", "Residents under 18 (%)",
+                 "Share of residents under 18"),
+    "older": ("B01001_calc_pctGE65E", "over_65_pct", "ACS residents 65 and over by {unit}", "Residents 65 and over (%)",
+              "Share of residents 65 and over"),
+    "population": ("B01001_001E", "population", "ACS total population by {unit}", "Total population (ACS 5-year)", "Total population"),
+}
+
+
+def _acs_measure(factors: str, why: str = "") -> str:
+    """race, children, older, income or population: the first that the factors name, else the first the reason names,
+    else income (most ACS picks stand for socioeconomic conditions)."""
+    for text in (factors or "", why or ""):
+        t = text.lower()
+        for name, rx in (("race", RACE_WORDS), ("children", CHILD_WORDS), ("older", OLDER_WORDS), ("income", INCOME_WORDS),
+                         ("population", POP_WORDS)):
+            if rx.search(t):
+                return name
+    return "income"
 NCLIMGRID = "https://www.ncei.noaa.gov/data/nclimgrid-daily/access/averages"
 PLACES_TRACTS = "https://data.cdc.gov/resource/cwsq-ngmh.json"   # PLACES census tract data, 2025 release
 FILE_EXT = (".geojson", ".json", ".csv", ".zip", ".kml", ".kmz")
@@ -293,16 +322,44 @@ RACE_GROUPS = [  # words in the pick's factors -> (ACS percent field, label)
 
 def _acs(s, pick, meta):
     """ACS by tract (county for big areas) from Esri's keyless Living Atlas services: race and Hispanic origin
-    shares when the pick measures race or ethnicity, otherwise median household income."""
+    shares when the pick measures race or ethnicity, the share under 18 or 65 and over for age factors, total
+    population for a denominator, otherwise median household income."""
     sb = s.scope.get("bbox")
     if not sb:
         return {"status": "none", "note": "Set a study area to preview ACS values"}
     w, h = bbox_size_km(sb)
     lid, unit = (2, "tract") if w * h <= 40000 else (1, "county")
     nodes = {n["id"]: n.get("label", "") + " " + n.get("observable", "") for n in (s.graph or {}).get("nodes", [])}
-    text = " ".join([nodes.get(f, "") for f in pick.get("factors") or []] + [pick.get("why") or ""]).lower()
+    ftext = " ".join(nodes.get(f, "") for f in pick.get("factors") or []).lower()
+    text = (ftext + " " + (pick.get("why") or "")).lower()
+    measure = _acs_measure(ftext, pick.get("why") or "")
     simplify = max(0.00005, min(0.003, (sb[2] - sb[0]) / 4000))
-    if re.search(r"race|racial|ethnic|latin|hispan|black|african|asian|minorit|segregat|people of color", text):
+    if measure in ACS_AGE:
+        field, prop, title, label, what = ACS_AGE[measure]
+        fc = sources.arcgis_query(f"{ESRI_ACS_POP}/{lid}", sb, max_features=3000, simplify_deg=simplify,
+                                  out_fields="GEOID,NAME,B01001_001E,B01001_calc_numLT18E,B01001_calc_pctLT18E,"
+                                             "B01001_calc_numGE65E,B01001_calc_pctGE65E")
+        feats = []
+        for f in fc.get("features", []):
+            p = f.get("properties") or {}
+            pop = p.get("B01001_001E")
+            few = measure != "population" and (pop or 0) < 200  # parks and airports: no meaningful share
+            v = p.get(field)
+            pr = {"GEOID": p.get("GEOID"), "name": p.get("NAME"), "population": pop,
+                  "under_18": p.get("B01001_calc_numLT18E"), "under_18_pct": p.get("B01001_calc_pctLT18E"),
+                  "over_65": p.get("B01001_calc_numGE65E"), "over_65_pct": p.get("B01001_calc_pctGE65E")}
+            pr[prop] = round(v, 1) if isinstance(v, (int, float)) and v >= 0 and not few else None
+            feats.append({"type": "Feature", "geometry": f.get("geometry"), "properties": pr})
+        vals = [f["properties"][prop] for f in feats if f["properties"][prop] is not None]
+        layer, note = _vector_layer(s, pick, feats, title.format(unit=unit), "ACS 5-year, latest (Esri Living Atlas)",
+                                    _paint(prop, vals, "blues", label), "ACS preview")
+        if not layer:
+            return {"status": "none", "note": note or "No areas found"}
+        keys = ["GEOID", "name", "population", "under_18", "under_18_pct", "over_65", "over_65_pct"]
+        rows = [keys] + [[f["properties"].get(k) for k in keys] for f in feats]
+        return {"status": "ready", "kind": "service", "layers": [layer], "csv": _csv(s, pick, rows),
+                "note": f"{what} for {len(feats)} {unit}s (ACS table B01001, latest 5-year)"}
+    if measure == "race":
         groups = [(f, lab) for rx, f, lab in RACE_GROUPS if re.search(rx, text)]
         fc = sources.arcgis_query(f"{ESRI_ACS_RACE}/{lid}", sb, max_features=3000, simplify_deg=simplify,
                                   out_fields="GEOID,NAME,B03002_001E,B03002_calc_pctHispLatE,B03002_calc_pctBlackE,"

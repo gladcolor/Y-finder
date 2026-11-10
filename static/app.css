@@ -146,6 +146,12 @@ body.wide .demo-grid { grid-template-columns: repeat(3, minmax(0, 1fr)); } /* mi
 .matrix th:first-child, .matrix td:first-child { width: 44%; }
 .dcard .one.unknown { color: var(--ink-2); }
 .data-foot { display: flex; gap: 6px; flex-wrap: wrap; margin: 14px 0 4px; }
+/* the Yes or No under an answer */
+.fb { display: flex; align-items: center; gap: 6px; flex-wrap: wrap; margin-top: 10px; font-size: 12px; color: var(--muted); }
+.fb button { font-size: 12px; padding: 2px 10px; border-radius: 12px; border: 1px solid var(--line); background: #fff; color: var(--ink-2); }
+.fb button:hover { border-color: var(--navy-2); color: var(--navy); }
+.fb input { font: inherit; font-size: 12px; padding: 3px 8px; border: 1px solid var(--line); border-radius: 8px; min-width: 220px; }
+.welcome-foot { margin-top: 20px; }
 .demo-note { font-size: 12px; padding: 5px 9px; }
 .demo-card .who { font-size: 12px; color: var(--ink-2); line-height: 1.4; }
 .demo-card .shows { display: flex; flex-wrap: wrap; gap: 4px; margin-top: 6px; }

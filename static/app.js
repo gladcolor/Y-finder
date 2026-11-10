@@ -26,6 +26,13 @@
   };
 
   // ------------------------------------------------------------------ helpers
+  // estimated cost of a turn at the model's list prices (api/config gives US dollars per million tokens)
+  function turnCost(usage, model) {
+    const p = ((state.config || {}).prices || {})[String(model || '').replace(/^recorded\s*·\s*/, '')]; if (!p || !usage) return null;
+    const cached = usage.cached || 0; const fresh = Math.max(0, (usage.input || 0) - cached);
+    return (fresh * p.input + cached * p.cached + (usage.output || 0) * p.output) / 1e6;
+  }
+  const fmtCost = (c) => c == null ? '' : c < 0.01 ? 'under 1¢' : c < 1 ? `${Math.round(c * 100)}¢` : `$${c.toFixed(2)}`;
   function toast(msg, ms = 3200) {
     const t = $('#toast'); t.textContent = msg; t.hidden = false;
     clearTimeout(toast._t); toast._t = setTimeout(() => { t.hidden = true; }, ms);
@@ -455,8 +462,14 @@
         if (m.act) {
           const st = $('.st', m.act); st.className = 'st ok';
           $('.lbl', m.act).textContent = `${m.tools} step${m.tools === 1 ? '' : 's'}`;
-          $('.cnt', m.act).textContent = ` · ${ev.elapsed}s${String(ev.model || '').startsWith('recorded') ? ' · recorded' : ''}`;
+          const u = ev.usage || {}; const tok = (u.input || 0) + (u.output || 0);
+          const cost = ev.cost_usd != null ? ev.cost_usd : turnCost(u, ev.model);
+          const modelId = String(ev.model || '').replace(/^recorded\s*·\s*/, '');
+          const c = $('.cnt', m.act);
+          c.textContent = ` · ${ev.elapsed}s${tok ? ` · ${tok >= 1000 ? Math.round(tok / 1000) + 'k' : tok} tokens` : ''}${cost != null ? ` · about ${fmtCost(cost)}` : ''}${String(ev.model || '').startsWith('recorded') ? ' · recorded' : ''}`;
+          c.title = tok ? `${(u.input || 0).toLocaleString()} input tokens${u.cached ? ` (${u.cached.toLocaleString()} from cache)` : ''} and ${(u.output || 0).toLocaleString()} output tokens over ${u.steps || '?'} model calls${cost != null ? `; about $${cost.toFixed(3)} at ${modelId} list prices` : ''}` : '';
         }
+        if (!m.fb && state.conv) feedbackRow(m);
         if (m.choices && m.choices.options && m.choices.options.length) {
           const box = m.seg('choices');
           m.choices.options.forEach((o) => { const b = document.createElement('button'); b.textContent = o; b.onclick = () => { box.classList.add('used'); send(o); }; box.appendChild(b); });
@@ -759,12 +772,114 @@
     const ms = state.methods || [];
     $('#methods').innerHTML = (ms.length ? '<div class="group-h">Methods</div><ul class="mlist">' + ms.map((x) => `<li title="${esc(x.why)}"><b>${esc(x.name)}</b> <span class="muted">${esc(x.tools)}</span></li>`).join('') + '</ul>' : '') +
       ((state.nextSteps || []).length ? '<div class="group-h">Next steps</div><ol class="mlist small">' + state.nextSteps.slice(0, 3).map((s) => `<li>${esc(s)}</li>`).join('') + '</ol>' : '') +
-      (ps.length ? `<div class="data-foot"><button class="btn" id="btnWatch" title="Search again on a schedule and post updates to a private link">Keep looking for me</button>
+      (ps.length ? `<div class="data-foot"><button class="btn primary" id="btnGuide" title="One document with the scope, every dataset and its fit, methods, next steps and what the previews showed: print it, save it as a PDF or copy it as Markdown">Download guide</button><button class="btn" id="btnWatch" title="Search again on a schedule and post updates to a private link">Keep looking for me</button>
         <button class="btn" id="btnConsult" title="One-page summary for a YCGS consultant">Ask a YCGS consultant</button></div>` : '');
+    const bg = $('#btnGuide'); if (bg) bg.onclick = guideOpen;
     const bw = $('#btnWatch'); if (bw) bw.onclick = watchDialog;
     const bc = $('#btnConsult'); if (bc) bc.onclick = consultDialog;
   }
   $('#hidePoor').onchange = renderData;
+
+  // ------------------------------------------------------------------ feedback: a Yes or No under each answer
+  // Stored on the server without the conversation (the question's first 300 characters only), to build the
+  // evaluation set from real use.
+  function feedbackRow(m) {
+    m.fb = m.seg('fb');
+    m.fb.innerHTML = `<span>Was this useful?</span><button type="button" data-v="up">Yes</button><button type="button" data-v="down">No</button>`;
+    $$('button', m.fb).forEach((b) => { b.onclick = () => sendFeedback(m, b.dataset.v); });
+  }
+  async function sendFeedback(m, vote, comment) {
+    const c = state.conv || {}; const turn = Math.max(0, (c.turns || []).length - 1);
+    const body = { vote, comment: comment || '', question: String(((c.turns || [])[turn] || {}).q || c.title || '').slice(0, 300),
+      model: state.model, demo: state.demo && state.demo.id ? state.demo.id : null, turn, sid: state.sid };
+    try {
+      const r = await fetch('api/feedback', { method: 'POST', headers: headers(), body: JSON.stringify(body) });
+      if (!r.ok) throw new Error((await r.json().catch(() => ({}))).error || `Server error ${r.status}`);
+      if (vote === 'down' && comment == null) {
+        m.fb.innerHTML = `<span>Thanks. What was missing?</span><input type="text" maxlength="500" placeholder="One line is enough" aria-label="What was missing"><button type="button">Send</button>`;
+        const inp = $('input', m.fb); const go = $('button', m.fb);
+        go.onclick = () => { if (inp.value.trim()) sendFeedback(m, 'down', inp.value.trim()); else m.fb.innerHTML = '<span>Thanks.</span>'; };
+        inp.onkeydown = (e) => { if (e.key === 'Enter') go.click(); };
+        inp.focus();
+      } else m.fb.innerHTML = '<span>Thanks.</span>';
+    } catch (err) { m.fb.innerHTML = `<span>${esc(err.message || err)}</span>`; }
+  }
+
+  // ------------------------------------------------------------------ the data guide: one document to keep, print or send
+  function guideMarkdown() {
+    const g = state.graph || {}; const s = state.scope || {}; const ps = (state.picks || []).slice();
+    const lab = (p) => fitLabel[(p.fit || {}).overall] || (p.fit || {}).overall || '';
+    const order = { core: 0, supporting: 1, alternative: 2 }; ps.sort((a, b) => (order[a.role] ?? 1) - (order[b.role] ?? 1));
+    const x = state.explore || {}; const fs = x.findings || []; const sy = x.synthesis;
+    const cites = [];
+    ((state.conv || {}).turns || []).forEach((t) => (t.ev || []).forEach((e) => { if (e.type === 'citations') (e.items || []).forEach((k) => { if (safeUrl(k.url) && !cites.some((o) => o.url === k.url)) cites.push(k); }); }));
+    const core = (g.nodes || []).filter((n) => n.core);
+    const cov = { covered: 'data found', partial: 'partly covered', none: 'no data yet' };
+    const dim = (p, k) => p.fit && p.fit[k] && p.fit[k].label !== 'unknown' ? p.fit[k].reason : '';
+    const today = new Date().toLocaleDateString('en-US', { year: 'numeric', month: 'long', day: 'numeric' });
+    const L = [];
+    L.push(`# Data guide: ${g.question || (state.conv || {}).title || 'your question'}`, '');
+    L.push(`Prepared with Y-finder on ${today}. Y-finder is a prototype: confirm access routes with YCGS before relying on them.`, '');
+    L.push('## Scope', '');
+    L.push(`- Area: ${s.extent_name || 'not set'}`);
+    L.push(`- Years: ${s.time_start || '?'} to ${s.time_end || '?'}`);
+    L.push(`- Detail: ${s.spatial_resolution_m ? s.spatial_resolution_m + ' m' : 'reporting units'}; unit of analysis: ${s.unit_of_analysis || 'not set'}`);
+    if ((s.assumed || []).length) L.push(`- Defaults Y-finder chose, not yet confirmed: ${s.assumed.join(', ')}`);
+    L.push('');
+    if (core.length) { L.push('## Factors behind the question', ''); core.forEach((n) => L.push(`- ${n.label}${n.observable ? ` (measured by ${n.observable})` : ''}: ${cov[n.data_coverage] || 'no data yet'}`)); L.push(''); }
+    if (ps.length) {
+      L.push('## Data', '');
+      ps.forEach((p) => {
+        const reasons = ['extent', 'time', 'resolution'].map((k) => dim(p, k)).filter(Boolean);
+        const url = safeUrl(p.url);
+        L.push(`### ${p.title}${p.data_type === 'table' ? ' (table)' : ''}`);
+        L.push(`${[p.source, p.resolution, p.time].filter(Boolean).join(' · ')}${url ? `  \n<${url}>` : ''}`);
+        L.push(`- Fit: ${lab(p)}${p.verified === 'unverified' ? ' (not verified: no search returned this source)' : ''}${reasons.length ? '. ' + reasons.join('. ') : ''}`);
+        if (p.fit && p.fit.access && p.fit.access.reason) L.push(`- Access: ${p.fit.access.reason}`);
+        if (p.why) L.push(`- Why: ${p.why}`);
+        if (p.limitations) L.push(`- Limits: ${p.limitations}`);
+        if (p.yale_note) L.push(`- At Yale: ${p.yale_note}`);
+        const pv = (state.previews || {})[p.ref]; if (pv && pv.note) L.push(`- Preview: ${pv.note}`);
+        L.push('');
+      });
+    }
+    const ms = state.methods || [];
+    if (ms.length) { L.push('## Methods', ''); ms.forEach((m) => L.push(`- ${m.name}${m.tools ? ` (${m.tools})` : ''}${m.why ? `: ${m.why}` : ''}`)); L.push(''); }
+    if ((state.nextSteps || []).length) { L.push('## Next steps', ''); state.nextSteps.forEach((t, i) => L.push(`${i + 1}. ${t}`)); L.push(''); }
+    if (fs.length) {
+      L.push('## What the previews showed', '');
+      if (sy && sy.summary) L.push(sy.summary.replace(/\[(\d+(?:\s*,\s*\d+)*)\]/g, '(finding $1)'), '');
+      fs.forEach((f, i) => L.push(`${i + 1}. ${f.headline}${f.detail ? ` ${f.detail}` : ''}`));
+      if (sy && sy.caveat) L.push('', `Careful: ${sy.caveat}`);
+      L.push('', 'These findings come from the map previews, which are samples, not from the full datasets. A correlation across places is a lead to check, not a test of the link.', '');
+    }
+    if (cites.length) { L.push('## Sources read', ''); cites.slice(0, 15).forEach((k) => L.push(`- ${k.title || k.url}: <${safeUrl(k.url)}>`)); L.push(''); }
+    return L.join('\n');
+  }
+  function guideOpen() {
+    const text = guideMarkdown(); const q = (state.graph || {}).question || '';
+    const html = `<!doctype html><html lang="en"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width, initial-scale=1">
+<title>${esc(q ? 'Data guide: ' + q.slice(0, 60) : 'Data guide')}</title>
+<style>
+  body { margin: 0; background: #e9edf2; font-family: system-ui, -apple-system, "Segoe UI", Roboto, Arial, sans-serif; color: #1d2433; font-size: 14px; line-height: 1.5; }
+  .bar { max-width: 820px; margin: 16px auto 0; padding: 0 16px; display: flex; gap: 8px; justify-content: flex-end; }
+  .bar button { font: inherit; padding: 7px 14px; border-radius: 8px; border: 1px solid #c3cfdf; background: #fff; cursor: pointer; }
+  .bar button.primary { background: #00356b; color: #fff; border-color: #00356b; }
+  .page { max-width: 820px; margin: 12px auto 32px; background: #fff; padding: 36px 44px; border-radius: 12px; box-shadow: 0 2px 6px rgba(20,30,50,.12), 0 8px 24px rgba(20,30,50,.10); }
+  h1 { font-size: 22px; line-height: 1.25; color: #00356b; margin: 0 0 6px; }
+  h2 { font-size: 15px; color: #00356b; margin: 22px 0 6px; padding-bottom: 4px; border-bottom: 1px solid #e3e7ee; }
+  h3 { font-size: 14px; margin: 14px 0 2px; }
+  p, ul, ol { margin: 4px 0 8px; } li { margin: 2px 0; } a { color: #286dc0; word-break: break-all; }
+  @media (max-width: 600px) { .page { padding: 20px 16px; margin: 8px; } }
+  @media print { body { background: #fff; } .bar { display: none; } .page { box-shadow: none; margin: 0; padding: 0; max-width: none; border-radius: 0; } }
+</style></head><body>
+<div class="bar"><button type="button" id="copy">Copy as Markdown</button><button type="button" class="primary" onclick="print()">Print or save as PDF</button></div>
+<div class="page">${md(text)}</div><pre id="src" hidden>${esc(text)}</pre>
+<script>document.getElementById('copy').onclick = function () { var t = document.getElementById('src').textContent; var b = this; navigator.clipboard.writeText(t).then(function () { b.textContent = 'Copied'; }, function () { b.textContent = 'Select the text and copy it'; }); };</script>
+</body></html>`;
+    const w = window.open('', '_blank'); if (!w) { toast('Allow pop-ups for this site to open the guide.'); return; }
+    w.document.open(); w.document.write(html); w.document.close();
+  }
 
   // ------------------------------------------------------------------ hand-off to a YCGS consultant (human in the loop)
   function consultSummary() {
@@ -1637,7 +1752,7 @@
   loadDemos();
   $('#btnAbout').onclick = () => {
     $('#dlgTitle').textContent = 'About Y-finder';
-    $('#dlgBody').innerHTML = md(`**Y-finder** is a prototype geospatial data guide, built by Huan Ning as a proposal for the Yale Center for Geospatial Solutions (YCGS). It is not an official Yale or YCGS service.
+    $('#dlgBody').innerHTML = md(`**Y-finder** is a prototype geospatial data guide, built by Huan Ning as a proposal for the Yale Center for Geospatial Solutions (YCGS). It is not an official Yale or YCGS service. The [design notes](design) say how it was built and tested, what it costs, and what YCGS would need to run it.
 
 **How it works (tri-projection).** Y-finder turns a research question into an *influence graph* of factors, agrees a *scope* with you (area, time window, resolution, unit of analysis), then searches for *data* and labels how each source fits that scope. The fit labels come from catalog metadata and simple rules, not from the language model.
 
@@ -1650,6 +1765,10 @@
 **Map and GIS.** Layers you see can be downloaded as GeoJSON, or opened in [GeoLibre](https://web.geolibre.app/) with *Full GIS*. Influence graphs export to [Research Architect](https://app.researcharchitect.ai/).
 
 **Access handbooks.** Each data source can have a handbook in the style of an Agent Skill: access route, endpoint, a Python example and pitfalls. It extends the handbooks of [LLM-Find](https://github.com/gladcolor/llm-find).
+
+**What a consult costs.** Under each answer: the time, the tokens and an estimated cost at the model's list prices. A typical turn reads about 50,000 tokens and writes 2,000, which is about 6 cents on GPT-6.1 Terra before caching.
+
+**Your guide and your feedback.** *Download guide* on the Data tab makes one document with the scope, every dataset and its fit, methods, next steps and what the previews showed; print it, save it as a PDF or copy it as Markdown. The *Yes* or *No* under each answer is stored with the question's first 300 characters only, never the conversation, to build the evaluation set from real use.
 
 **Privacy.** Do not paste protected or confidential data. Questions are sent to an OpenAI model to generate answers, and web searches go to DeepSeek's search service. Your conversations are saved in this browser only; delete them from the conversation list. Data files you or Y-finder download are kept on the server only for your session (about 6 hours after your last action) and then deleted, along with their map layers.`);
     $('#dlg').showModal();

@@ -1,6 +1,7 @@
 """Runtime settings. Everything can be overridden with environment variables."""
 from __future__ import annotations
 
+import json
 import os
 import re
 from pathlib import Path
@@ -29,6 +30,28 @@ LOG_TURNS = os.environ.get("YFINDER_LOG_TURNS", "0") == "1"         # write turn
 PUBLIC_BASE = os.environ.get("YFINDER_PUBLIC_BASE", "")             # e.g. https://app.researcharchitect.ai/y-finder/
 UPLOAD_MAX_BYTES = 12 * 1024 * 1024
 USER_AGENT = "Y-finder/0.1 (YCGS geospatial data guide prototype; +https://github.com/gladcolor/Y-finder)"
+
+# OpenAI list prices in US dollars per million tokens (standard tier, November 2026). They only give the estimated
+# cost shown under each answer. Override: YFINDER_PRICES='{"gpt-6.1-terra": {"input": 1, "cached": 0.05, "output": 5}}'
+PRICES = {
+    "gpt-6.1-terra": {"input": 1.00, "cached": 0.05, "output": 5.00},
+    "gpt-6.1-sol": {"input": 2.00, "cached": 0.10, "output": 10.00},
+    "gpt-6-luna": {"input": 0.10, "cached": 0.01, "output": 0.50},
+}
+try:
+    PRICES.update(json.loads(os.environ.get("YFINDER_PRICES") or "{}"))
+except ValueError:
+    pass
+
+
+def turn_cost(usage: dict, model: str) -> float | None:
+    """Estimated cost of one turn in US dollars at list prices; None for a model without a price."""
+    p = PRICES.get(model)
+    if not p:
+        return None
+    cached = int(usage.get("cached") or 0)
+    fresh = max(0, int(usage.get("input") or 0) - cached)
+    return round((fresh * p["input"] + cached * p["cached"] + int(usage.get("output") or 0) * p["output"]) / 1e6, 4)
 
 _KEY_RE = re.compile(r"sk-[A-Za-z0-9_\-]{20,}")
 

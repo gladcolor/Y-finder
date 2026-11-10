@@ -1,0 +1,110 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Y-finder design notes</title>
+<meta name="description" content="How the Y-finder data guide was built and tested, what it costs, and what it would take to run it at YCGS.">
+<link rel="icon" href="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 32 32'%3E%3Crect width='32' height='32' rx='8' fill='%231f3a68'/%3E%3Cpath d='M9 8l7 9 7-9M16 17v8' stroke='white' stroke-width='3' fill='none' stroke-linecap='round' stroke-linejoin='round'/%3E%3C/svg%3E">
+<style>
+  :root { --navy: #00356b; --navy-2: #286dc0; --ink: #1d2433; --ink-2: #4a5468; --muted: #6b7486; --line: #e3e7ee; --soft: #f4f6fa; --canvas: #e9edf2; }
+  * { box-sizing: border-box; }
+  html, body { margin: 0; background: var(--canvas); color: var(--ink); font: 15px/1.55 system-ui, -apple-system, "Segoe UI", Roboto, "Helvetica Neue", Arial, sans-serif; }
+  a { color: var(--navy-2); }
+  .top { max-width: 820px; margin: 0 auto; padding: 14px 16px 0; display: flex; align-items: center; justify-content: space-between; gap: 12px; }
+  .top a.app { display: inline-flex; align-items: center; gap: 8px; text-decoration: none; color: var(--navy); font-weight: 600; }
+  .top .mark { width: 26px; height: 26px; border-radius: 7px; background: var(--navy); color: #fff; display: grid; place-items: center; font-weight: 700; font-size: 14px; }
+  .top .print { font: inherit; font-size: 13px; padding: 6px 12px; border-radius: 8px; border: 1px solid #c3cfdf; background: #fff; cursor: pointer; }
+  main { max-width: 820px; margin: 12px auto 40px; background: #fff; padding: 40px 48px 36px; border-radius: 12px; box-shadow: 0 2px 6px rgba(20,30,50,.12), 0 8px 24px rgba(20,30,50,.10); }
+  h1 { font-size: 26px; line-height: 1.2; color: var(--navy); margin: 0 0 6px; letter-spacing: -0.01em; }
+  .lede { color: var(--ink-2); margin: 0 0 4px; font-size: 16px; }
+  .by { color: var(--muted); font-size: 13px; margin: 0 0 22px; }
+  h2 { font-size: 17px; color: var(--navy); margin: 26px 0 8px; padding-bottom: 5px; border-bottom: 1px solid var(--line); }
+  p { margin: 0 0 10px; }
+  ol, ul { margin: 0 0 10px; padding-left: 22px; }
+  li { margin: 3px 0; }
+  li b { color: var(--ink); }
+  table { border-collapse: collapse; width: 100%; margin: 6px 0 12px; font-size: 14px; }
+  th, td { text-align: left; vertical-align: top; padding: 7px 10px; border-bottom: 1px solid var(--line); }
+  th { color: var(--ink-2); font-weight: 600; background: var(--soft); }
+  td:first-child { width: 42%; }
+  .note { background: var(--soft); border-radius: 8px; padding: 10px 14px; color: var(--ink-2); font-size: 14px; }
+  .foot { color: var(--muted); font-size: 13px; margin-top: 26px; padding-top: 10px; border-top: 1px solid var(--line); }
+  @media (max-width: 640px) { main { padding: 24px 18px; margin: 8px; } h1 { font-size: 22px; } td:first-child { width: auto; } }
+  @media print { html, body { background: #fff; } .top { display: none; } main { box-shadow: none; margin: 0; padding: 0; max-width: none; border-radius: 0; } a { color: inherit; text-decoration: none; } }
+</style>
+</head>
+<body>
+<div class="top">
+  <a class="app" href="./"><span class="mark">Y</span>Open Y-finder</a>
+  <button class="print" type="button" onclick="print()">Print or save as PDF</button>
+</div>
+<main>
+  <h1>Y-finder design notes</h1>
+  <p class="lede">How the data guide was built and tested, what it costs, and what it would take to run it at the Yale Center for Geospatial Solutions.</p>
+  <p class="by">Huan Ning, November 2026. Y-finder is an independent prototype for the YCGS interview, not a Yale service.</p>
+
+  <h2>The question it answers</h2>
+  <p>YCGS receives more requests than its consultants can take: a student or a faculty member wants geospatial data for a study and does not know where to start. The first consult usually settles three things: what the study is really about, where and when it takes place, and which of the many candidate datasets fit. Y-finder does that first consult at any hour and hands the person on with a one-page guide. It is not a catalog with a search box, and it is not a chatbot that recommends from memory.</p>
+
+  <h2>How it works</h2>
+  <p>Y-finder follows the tri-projection used in <a href="https://app.researcharchitect.ai/">Research Architect</a>: real world, influence graph, scope, data.</p>
+  <ol>
+    <li><b>Frame.</b> The agent turns the question into an influence graph: the outcome, the factors that drive, mediate or confound it, and a measurable observable for each. The user sees which factors are core and which have data.</li>
+    <li><b>Scope.</b> Place (geocoded, with the named boundary preferred over a point), years, the detail needed and the unit of analysis. Defaults the agent chose are marked and can be edited; every fit label is recomputed at once, without a model call.</li>
+    <li><b>Data.</b> Catalog search over 3,126 cards (116 curated by hand with Yale access routes; Planetary Computer, Earth Engine and its community catalog, GeoLibre's collections, World Bank indicators) and live searches of Yale and Harvard Dataverse, Yale Library GeoBlacklight, ArcGIS Online, Data.gov, US open data portals including Connecticut Open Data, Planetary Computer imagery and the web. Tables as well as maps, because many factors are measured by records and surveys.</li>
+    <li><b>Fit.</b> Rules, not the model, label each dataset for area, time, detail and access, with the reason in plain words. The overall label is the worst known one.</li>
+    <li><b>Preview and insights.</b> Online services are drawn on the map directly; otherwise a small slice (up to 100 MB) is downloaded for the session. While the user looks, Y-finder explores the previews along the graph (distributions, highest and lowest places, clustering, rank correlations after map joins) and reports findings with their caveats. Sources that need a person to download are tried by Y-finder's own browser, which reports what it found on the card.</li>
+    <li><b>Hand-off.</b> A printable data guide, the same layers in the GeoLibre web GIS, access handbooks in the Agent-Skill style, a consultation summary for YCGS staff, and opt-in follow-up searches.</li>
+  </ol>
+
+  <h2>What keeps it honest</h2>
+  <ul>
+    <li>Every recommended dataset must come from a search result in the same conversation. Anything else is marked "Not verified" and does not count as coverage of the graph.</li>
+    <li>Fit labels come from metadata and rules. The model never grades a dataset.</li>
+    <li>Web links are opened once; dead links are flagged and the model is told to replace them.</li>
+    <li>Previews show the variable the question asks for (race shares, residents under 18, tree canopy, the 1934 aerials), and say when a measure is a stand-in or a sample is uneven over time.</li>
+    <li>Exploration findings are computed by code. The model only picks the matching categories, checked against the real values, and writes a short reading of the computed numbers.</li>
+    <li>The answer opens with the data route, then the limits. A Yes or No under each answer records whether it helped.</li>
+  </ul>
+
+  <h2>How it was tested</h2>
+  <table>
+    <tr><th>What</th><th>Result</th></tr>
+    <tr><td>Unit and API tests, no model calls</td><td>277 pass</td></tr>
+    <tr><td>Injected faults (a mutation check of the safeguards)</td><td>25 of 25 caught by the tests</td></tr>
+    <tr><td>Demo cases from real Yale programs and YCGS projects</td><td>38 cases; each recording read in full, its previews and insights inspected; every check passes</td></tr>
+    <tr><td>Fictional YCGS users (personas) on three models</td><td>10 personas, 64 of 64 checks in the latest run</td></tr>
+    <tr><td>Independent code review (Codex CLI)</td><td>15 findings, all fixed with regression tests</td></tr>
+    <tr><td>Screens</td><td>1920 by 1080, 2560 by 1440, ultrawide and 4K, and phones</td></tr>
+  </table>
+
+  <h2>What it costs</h2>
+  <p>A consult turn reads about 50,000 tokens and writes about 2,000. At GPT-6.1 Terra list prices that is about 6 cents before caching; the estimate is shown under every answer. A full consult with previews and insights stays well under 50 cents, because the explorer calls the model only twice per run and only on computed numbers. Web search costs $0.75 per 1,000 queries. The app runs on one small virtual server without a GPU, next to Research Architect. Caps of 40 turns per address per hour and 600 per day protect the budget.</p>
+
+  <h2>Running it at YCGS</h2>
+  <p>YCGS would need a model key under Yale's agreement (the agent uses function tools only, so OpenAI, Azure OpenAI or another provider with the same interface will do), a server or container, the catalog harvest on a schedule, and staff time to curate the cards with Yale access routes. Yale CAS login can limit it to the Yale community. Questions go to the model vendor; nothing is stored beyond the six-hour session except the Yes or No feedback with the first 300 characters of the question. Licensed sources (Planet, Esri Business Analyst, PolicyMap, Dewey Data, L2, CoreLogic) are described with their access route and are never downloaded.</p>
+  <p>Where it fits: the YCGS request form (the consultation summary pastes into it), office hours (the data guide is the agenda), courses (the demo cases are worked examples), and GeoLibre (the same layers open there with one click).</p>
+
+  <h2>The first six months</h2>
+  <ol>
+    <li>An evaluation set from de-identified consult questions, reporting how often the right dataset is in the top five and how many guides a consultant would send as they are. The feedback under each answer feeds it.</li>
+    <li>Yale's own holdings in full: Yale Library GeoBlacklight and Yale Dataverse, the Connecticut GIS Office and Connecticut Open Data through OGC API Records and CKAN; embedding search beside the keyword search.</li>
+    <li>Handbooks reviewed by YCGS staff (22 drafts today), each with a run example.</li>
+    <li>A consult queue: "Ask a YCGS consultant" posts the summary to staff instead of copy and paste.</li>
+    <li>A monthly usage review: questions by school, datasets most recommended, gaps in the catalog.</li>
+  </ol>
+
+  <h2>What I would not build</h2>
+  <ul>
+    <li>A general chatbot about GIS. Y-finder answers one question: which data fits this study.</li>
+    <li>A new catalog. It reads the catalogs that exist and adds a thin layer of curation.</li>
+    <li>Analysis without a person. The previews and insights are leads; the study stays the researcher's.</li>
+    <li>Accounts and stored conversations. Nothing is kept beyond the session except the feedback.</li>
+  </ul>
+
+  <div class="note">Built with Flask, MapLibre, Cytoscape, the OpenAI Responses API, DeepSeek search, a headless Chromium (Playwright) and GeoLibre. Source: private repository <a href="https://github.com/gladcolor/Y-finder">gladcolor/Y-finder</a>; the handoff file there holds the full decision log.</div>
+  <p class="foot">Y-finder extends <a href="https://github.com/gladcolor/llm-find">LLM-Find</a> and the tri-projection of <a href="https://app.researcharchitect.ai/">Research Architect</a>. Demo cases name real Yale programs and public sources; the people in them are fictional.</p>
+</main>
+</body>
+</html>

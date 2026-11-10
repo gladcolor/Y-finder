@@ -17,6 +17,9 @@ Y-finder is an independent prototype by Huan Ning, prepared for the Yale Center 
 - **Map first:** study area, imagery previews, OpenStreetMap features, Census boundaries and dataset coverage on a Google-Maps-like map with a legend; open the same layers in GeoLibre for full GIS.
 - **Access handbooks:** Agent-Skill style `SKILL.md` per source (endpoint, Python example, pitfalls), exportable to LLM-Find's TOML handbooks.
 - **People in the loop:** quick replies, scope editing, consultation summary for YCGS staff, opt-in follow-up searches.
+- **The data guide:** *Download guide* on the Data tab makes one document (scope, factors and their coverage, every dataset with its fit, access and limits, methods, next steps, what the previews showed, sources read) to print, save as a PDF or copy as Markdown.
+- **Cost and feedback:** every answer shows its time, tokens and an estimated cost at the model's list prices (`config.PRICES`, override with `YFINDER_PRICES`); a Yes or No under each answer goes to `runtime/feedback/feedback.jsonl` with the question's first 300 characters only.
+- **Design notes:** `/design` (also linked from About and the welcome screen) says how Y-finder was built and tested, what it costs, and what YCGS would need to run it.
 - **Demo cases:** 32 cases grounded in real YCGS projects and Yale programs (Urban Resources Initiative, New Haven Digital Atlas, Map of Life, the Humanitarian Research Lab, the Grammatical Diversity Project, the Economic Growth Center, the Peabody herbarium, the Dura-Europos archive and more) and six general ones, recorded from real runs and continued live. The welcome screen shows six; the rest are grouped by theme with a search box.
 
 ## Run locally
