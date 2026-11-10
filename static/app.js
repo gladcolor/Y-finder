@@ -205,7 +205,9 @@
     if (!state.mapReady) { state.pending.push(d); return null; }
     if (state.layers.has(d.id)) return state.layers.get(d.id);
     // the same data drawn twice (same name, source and feature count) stays one entry
-    const twin = d.kind === 'geojson' && d.style !== 'scope' && [...state.layers.values()].find((e) => e.d.kind === 'geojson' && e.d.title === d.title && e.d.source === d.source && e.d.n === d.n);
+    const twin = d.kind === 'geojson' && d.style !== 'scope' ? [...state.layers.values()].find((e) => e.d.kind === 'geojson' && e.d.title === d.title && e.d.source === d.source && e.d.n === d.n)
+      // the same map service drawn by the answer and again by its card's preview
+      : d.kind === 'raster' && Array.isArray(d.tiles) ? [...state.layers.values()].find((e) => e.d.kind === 'raster' && Array.isArray(e.d.tiles) && e.d.tiles[0] === d.tiles[0]) : null;
     if (twin) return twin;
     if (d.style === 'scope') for (const [id, e] of state.layers) if (e.d.style === 'scope') removeLayer(id);
     let color = d.style === 'scope' ? '#2b4f8a' : d.style === 'boundary' ? '#1d2433' : d.style === 'footprint' ? '#d97706' : PALETTE[state.colorIdx++ % PALETTE.length];

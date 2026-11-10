@@ -36,3 +36,18 @@ def test_osm_tag_filter_rejects_injection(tag):
 def test_osm_refuses_huge_area():
     with pytest.raises(ValueError):
         sources.osm_features(["natural=water"], [-74, 40, -71, 43])
+
+
+def test_geocoder_asks_for_english_names(monkeypatch):
+    """Nominatim answers in the local language unless asked: the Pakistan boundary was titled in Urdu."""
+    from yfinder import sources
+    seen = []
+
+    def fake_get(url, params=None, **k):
+        seen.append(dict(params or {}))
+        return [{"display_name": "Pakistan", "boundingbox": ["23.6", "37.1", "60.8", "77.8"], "lat": "30", "lon": "70",
+                 "class": "boundary", "type": "administrative", "geojson": {"type": "Polygon", "coordinates": [[[60.8, 23.6], [77.8, 23.6], [77.8, 37.1], [60.8, 23.6]]]}}]
+    monkeypatch.setattr(sources, "_get", fake_get)
+    sources.geocode.cache_clear() if hasattr(sources.geocode, "cache_clear") else None
+    sources.geocode("Pakistan english-name-test")
+    assert seen and all(p.get("accept-language") == "en" for p in seen)

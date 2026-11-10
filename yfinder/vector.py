@@ -70,10 +70,10 @@ def slim(feats: list[dict], study_bbox=None, raw_bytes: int | None = None, keep=
         raw_bytes = len(json.dumps(feats, separators=(",", ":"))) if total <= SMALL_LAYER else SMALL_BYTES + 1
     if (total > SMALL_LAYER or raw_bytes > SMALL_BYTES) and study_bbox and valid_bbox(study_bbox):
         feats = [f for f in feats if (fb := geojson_bbox(f["geometry"])) and _intersects(fb, study_bbox)]
-        note = f"{len(feats)} of {total} features touch the study area"
+        note = f"{len(feats):,} of {total:,} features touch the study area"
     kept = len(feats)
     if not feats:
-        return None, (f"none of its {total} features touch the study area" if total else "no features"), total
+        return None, (f"none of its {total:,} features touch the study area" if total else "no features"), total
     if len(feats) > MAX_FEATURES:  # an even sample keeps the whole pattern visible
         feats = feats[:: -(-len(feats) // MAX_FEATURES)]
     # Precision drops only as far as it stays honest: about 10 m for points (rounding further would snap them onto a
@@ -88,5 +88,7 @@ def slim(feats: list[dict], study_bbox=None, raw_bytes: int | None = None, keep=
     else:  # still too heavy: an even sample that fits
         fc["features"] = fc["features"][:: -(-size // int(TARGET_BYTES * 0.95))]
     if len(fc["features"]) < kept:
-        note = "; ".join(filter(None, [note, f"a sample of {len(fc['features'])} of {kept} features"]))
+        # "12,885 of 12,963 features touch the study area; a sample of 6,443 is drawn, spread evenly"
+        n = len(fc["features"])
+        note = f"{note}; a sample of {n:,} is drawn, spread evenly" if note else f"a sample of {n:,} of {kept:,} features is drawn, spread evenly"
     return fc, note, total

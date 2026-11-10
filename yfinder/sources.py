@@ -90,7 +90,8 @@ def geocode(place: str) -> dict | None:
                 time.sleep(wait)
             _nom_last[0] = time.time()
             return _get("https://nominatim.openstreetmap.org/search", {
-                "q": q, "format": "jsonv2", "limit": 5, "polygon_geojson": 1, "polygon_threshold": 0.0015})
+                "q": q, "format": "jsonv2", "limit": 5, "polygon_geojson": 1, "polygon_threshold": 0.0015,
+                "accept-language": "en"})  # English names for the map and the answer ("Pakistan", not "پاکستان")
 
     def run():
         data = ask(place)
@@ -128,7 +129,7 @@ def reverse(lon: float, lat: float) -> str | None:
             _nom_last[0] = time.time()
             try:
                 d = _get("https://nominatim.openstreetmap.org/reverse",
-                         {"lat": f"{lat:.4f}", "lon": f"{lon:.4f}", "format": "jsonv2", "zoom": 14})
+                         {"lat": f"{lat:.4f}", "lon": f"{lon:.4f}", "format": "jsonv2", "zoom": 14, "accept-language": "en"})
             except (requests.RequestException, ValueError):
                 return None
         a = (d or {}).get("address") or {}
