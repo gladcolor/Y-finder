@@ -7,7 +7,7 @@ decision log and commit log when you change something important.
 
 - **Live:** https://researcharchitect.ai/y (short link) opens https://app.researcharchitect.ai/y-finder/ (health: `/y-finder/healthz`).
   The short link is a `_redirects` file in the landing-page repo `gladcolor/researcharchitect` (Cloudflare Pages, deploys from `master`).
-- **Repo:** https://github.com/gladcolor/Y-finder (private). Local folder: `F:\OneDrive_Emory\OneDrive - Emory\Research_doc\Y-finder`.
+- **Repo:** https://github.com/gladcolor/Y-finder (public since 2026-11-09). Local folder: `F:\OneDrive_Emory\OneDrive - Emory\Research_doc\Y-finder`.
 - **Purpose:** working prototype for Huan Ning's answer to the YCGS written question on an *interactive data guide*
   (Lead, Geospatial AI & ML interview, Yale Job 138060WD). The answer text lives in
   `E:\OneDrive_Huan\OneDrive\Job_hunting\2026\Yale\written_exam.md` (Huan edits it himself; do not overwrite it).
@@ -25,7 +25,7 @@ decision log and commit log when you change something important.
 |---|---|---|
 | 2026-11-08 | Build the data guide app from the written answer: AI agent "Y-finder", extends LLM-Find, tri-projection (real world -> influence graph -> scope -> data, as in Research Architect), web search + internal catalog (STAC, Earth Engine, ArcGIS Online, Data.gov, Dewey Data, Yale Dataverse), GeoLibre as the GIS, Google-Maps-like UI, chat with map visualization, data catalog. | Built as described. |
 | 2026-11-08 | Use GPT-6.1 Terra or Sol, also test GPT-6 Luna. Key in the project folder. | Model picker; default Terra. Key read from git-ignored `OpenAI_key.txt` locally, `/etc/yfinder.env` on the server. |
-| 2026-11-08 | Save in this folder, write handoff.md, create a GitHub repo and push. | Private repo `gladcolor/Y-finder` (make public with `gh repo edit gladcolor/Y-finder --visibility public --accept-visibility-change-consequences`). |
+| 2026-11-08 | Save in this folder, write handoff.md, create a GitHub repo and push. | Private repo `gladcolor/Y-finder` (public since 2026-11-09; the history was scanned for keys first: none were ever committed). |
 | 2026-11-08 | Deploy on the Research Architect server, a URL like researcharchitect.ai/y-finder if possible. | Deployed at `app.researcharchitect.ai/y-finder/`. The root domain `researcharchitect.ai` is a landing page hosted elsewhere (see Research Architect SERVER_MAINTENANCE.md: "Do not repoint"), so the path lives on the app subdomain. A `y-finder.researcharchitect.ai` subdomain would need a Cloudflare DNS record (Huan's dashboard); the origin certificate already covers `*.researcharchitect.ai`. |
 | 2026-11-08 | Make up users and use cases from YCGS, its projects and Yale research; test the tests; Codex CLI and browser tools allowed. | 10 fictional personas (`tests/personas.json`), check tests (`tests/test_persona_eval.py`), mutation check, Codex review (15 findings, all fixed), Chrome testing on the live URL. |
 | 2026-11-08 | Y-finder can search sources and write data access handbooks (like Anthropic Skills) when compute is available. | `handbooks/<id>/SKILL.md`, `scripts/write_handbooks.py`, on-demand writing in the UI, export to LLM-Find TOML. 22 drafts written. |

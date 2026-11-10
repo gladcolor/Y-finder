@@ -39,6 +39,7 @@ def test_config_lists_prices_for_every_model(client):
     c = client.get("/api/config").json
     for m in c["models"]:
         assert set(c["prices"][m["id"]]) == {"input", "cached", "output"}
+    assert b"window.YF_PRICES={" in client.get("/").data  # inlined, so restored conversations show their cost at once
 
 
 # ---------------------------------------------------------------------------- feedback

@@ -28,7 +28,8 @@
   // ------------------------------------------------------------------ helpers
   // estimated cost of a turn at the model's list prices (api/config gives US dollars per million tokens)
   function turnCost(usage, model) {
-    const p = ((state.config || {}).prices || {})[String(model || '').replace(/^recorded\s*·\s*/, '')]; if (!p || !usage) return null;
+    // the page inlines the prices (window.YF_PRICES), so turns restored before api/config answers still get a cost
+    const p = ((state.config || {}).prices || window.YF_PRICES || {})[String(model || '').replace(/^recorded\s*·\s*/, '')]; if (!p || !usage) return null;
     const cached = usage.cached || 0; const fresh = Math.max(0, (usage.input || 0) - cached);
     return (fresh * p.input + cached * p.cached + (usage.output || 0) * p.output) / 1e6;
   }
@@ -469,11 +470,11 @@
           c.textContent = ` · ${ev.elapsed}s${tok ? ` · ${tok >= 1000 ? Math.round(tok / 1000) + 'k' : tok} tokens` : ''}${cost != null ? ` · about ${fmtCost(cost)}` : ''}${String(ev.model || '').startsWith('recorded') ? ' · recorded' : ''}`;
           c.title = tok ? `${(u.input || 0).toLocaleString()} input tokens${u.cached ? ` (${u.cached.toLocaleString()} from cache)` : ''} and ${(u.output || 0).toLocaleString()} output tokens over ${u.steps || '?'} model calls${cost != null ? `; about $${cost.toFixed(3)} at ${modelId} list prices` : ''}` : '';
         }
-        if (!m.fb && state.conv) feedbackRow(m);
         if (m.choices && m.choices.options && m.choices.options.length) {
           const box = m.seg('choices');
           m.choices.options.forEach((o) => { const b = document.createElement('button'); b.textContent = o; b.onclick = () => { box.classList.add('used'); send(o); }; box.appendChild(b); });
         }
+        if (!m.fb && state.conv) feedbackRow(m);
       } break;
       default: break;
     }

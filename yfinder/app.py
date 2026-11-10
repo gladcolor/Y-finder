@@ -115,7 +115,7 @@ def create_app() -> Flask:
         html = (STATIC_DIR / "index.html").read_text(encoding="utf-8")
         html = html.replace('src="static/app.js"', f'src="static/app.js?v={v}"')
         html = html.replace('href="static/app.css"', f'href="static/app.css?v={v}"')
-        html = html.replace("</head>", f'<script>window.YF_VERSION="{v}";</script>\n</head>', 1)
+        html = html.replace("</head>", f'<script>window.YF_VERSION="{v}";window.YF_PRICES={json.dumps(PRICES)};</script>\n</head>', 1)
         resp = Response(html, mimetype="text/html")
         resp.headers["Cache-Control"] = "no-cache"
         return resp
