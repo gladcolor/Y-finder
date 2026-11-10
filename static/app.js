@@ -809,7 +809,6 @@
   // ------------------------------------------------------------------ the data guide: one document to keep, print or send
   function guideMarkdown() {
     const g = state.graph || {}; const s = state.scope || {}; const ps = (state.picks || []).slice();
-    const lab = (p) => fitLabel[(p.fit || {}).overall] || (p.fit || {}).overall || '';
     const order = { core: 0, supporting: 1, alternative: 2 }; ps.sort((a, b) => (order[a.role] ?? 1) - (order[b.role] ?? 1));
     const x = state.explore || {}; const fs = x.findings || []; const sy = x.synthesis;
     const cites = [];
@@ -835,7 +834,9 @@
         const url = safeUrl(p.url);
         L.push(`### ${p.title}${p.data_type === 'table' ? ' (table)' : ''}`);
         L.push(`${[p.source, p.resolution, p.time].filter(Boolean).join(' · ')}${url ? `  \n<${url}>` : ''}`);
-        L.push(`- Fit: ${lab(p)}${p.verified === 'unverified' ? ' (not verified: no search returned this source)' : ''}${reasons.length ? '. ' + reasons.join('. ') : ''}`);
+        const fitWord = { good: 'fits your scope', partial: 'partly fits your scope', poor: 'a poor fit for your scope' }[(p.fit || {}).overall] || 'not checked';
+        const lc = (t) => t.charAt(0).toLowerCase() + t.slice(1);
+        L.push(`- Fit: ${fitWord}${p.verified === 'unverified' ? '; not verified (no search returned this source)' : ''}${reasons.length ? ' (' + reasons.map(lc).join('; ') + ')' : ''}`);
         if (p.fit && p.fit.access && p.fit.access.reason) L.push(`- Access: ${p.fit.access.reason}`);
         if (p.why) L.push(`- Why: ${p.why}`);
         if (p.limitations) L.push(`- Limits: ${p.limitations}`);
