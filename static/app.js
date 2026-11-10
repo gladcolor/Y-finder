@@ -110,7 +110,18 @@
   }
   $('#baseSat').onclick = () => setBase(true);
   $('#baseStreets').onclick = () => setBase(false);
-  $('#btnLayers').onclick = () => { $('#layerPanel').hidden = !$('#layerPanel').hidden; };
+  // Phones: the panel needs the room the chat sheet takes (it ran up under the top bar), so opening it folds the sheet
+  // like a map app, and closing it unfolds the sheet again if Layers was what folded it.
+  function showLayers(open) {
+    const p = $('#layerPanel'); if (open === undefined) open = p.hidden; p.hidden = !open;
+    if (innerWidth > 720) return;
+    const body = document.body;
+    if (open && !body.classList.contains('collapsed')) { state.foldedForLayers = true; body.classList.add('collapsed'); }
+    else if (!open && state.foldedForLayers) { state.foldedForLayers = false; body.classList.remove('collapsed'); }
+    else return;
+    $('#btnCollapse').setAttribute('aria-expanded', String(!body.classList.contains('collapsed'))); requestAnimationFrame(mapResized);
+  }
+  $('#btnLayers').onclick = () => showLayers();
 
   function firstVectorId() {
     for (const e of state.layers.values()) if (e.d.kind !== 'raster' && e.ids.length) return e.ids[0];
@@ -514,7 +525,7 @@
         const pill = (e) => {
           if (ev.layer.style === 'scope' || !m.pill) return;
           m.layers++;
-          m.pill('map', `${e && e.fc ? thumbSVG(e.fc, e.color) : ''}<b>Map</b> ${m.layers} layer${m.layers > 1 ? 's' : ''}`, () => { fit(ev.layer.bbox); $('#layerPanel').hidden = false; });
+          m.pill('map', `${e && e.fc ? thumbSVG(e.fc, e.color) : ''}<b>Map</b> ${m.layers} layer${m.layers > 1 ? 's' : ''}`, () => { fit(ev.layer.bbox); showLayers(true); });
         };
         if (!state.mapReady) { addLayer(ev.layer); pill(null); } // queued until the map loads (a replay right after a reload)
         else addLayer(ev.layer).then((e) => { if (e) pill(e); });
@@ -1078,7 +1089,7 @@
       if (t) convSave();
       const notes = ((j.result && j.result.layers) || []).map((l) => l.note).filter(Boolean);
       toast(`Added ${j.summary}${notes.length ? ' · ' + notes[0] : ''}`);
-      $('#layerPanel').hidden = false;
+      showLayers(true);
     } catch (err) { toast(err.message); }
     finally { if (btn) { btn.disabled = false; btn.textContent = 'Map'; } }
   }

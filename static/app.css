@@ -493,16 +493,17 @@ body.wide.hist-open .hist { display: flex; }
   :root { --panel-w: 100vw; }
   #map, body.collapsed #map { left: 0; } /* phones: the chat is a bottom sheet over the map */
   .panel { top: auto; left: 0; right: 0; bottom: 0; width: auto; height: 62vh; border-radius: 14px 14px 0 0; }
-  body.collapsed .panel { height: auto; }
+  body.collapsed .panel { height: auto; top: auto; bottom: 0; } /* folded, the sheet stays at the bottom, clear of the top bar */
   .topright { top: 8px; right: 8px; left: 8px; flex-wrap: wrap; justify-content: flex-end; gap: 6px; }
   .model-pick span { display: none; }
   .layers-box { left: auto; right: 10px; bottom: calc(62vh + 12px); }
   .matrix { font-size: 11px; }
   .matrix th:first-child, .matrix td:first-child { width: 38%; }
   .map-legend { right: auto; left: 8px; bottom: auto; top: 56px; width: min(200px, 55vw); max-height: 30vh; }
-  body.collapsed .layers-box { left: auto; bottom: 150px; }
+  body.collapsed .layers-box { left: auto; bottom: 210px; }
   .layers-btn { width: 54px; height: 54px; }
   .layer-panel { left: auto; right: 0; width: min(340px, 92vw); }
+  body.collapsed .layer-panel { max-height: calc(100vh - 350px); } /* the sheet is folded while Layers is open */
   #geolibre { left: 0; width: 100vw; top: 0; height: 38vh; }
   .gis-bar { display: none !important; } /* phones keep GeoLibre's full menus */
   body.gis #geolibre { top: 52px; height: calc(38vh - 52px); }
