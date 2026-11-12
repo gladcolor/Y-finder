@@ -13,6 +13,7 @@
 }
 * { box-sizing: border-box; }
 html, body { margin: 0; height: 100%; font-family: var(--font); color: var(--ink); background: #e9edf2; font-size: 14px; }
+html, body { overscroll-behavior-y: none; } /* phones: a downward swipe never reloads the page (pull to refresh) */
 [hidden] { display: none !important; }
 button { font: inherit; color: inherit; cursor: pointer; }
 a { color: var(--navy-2); }
@@ -180,7 +181,7 @@ body.collapsed #btnCollapse svg { transform: rotate(180deg); }
 .ask { display: flex; flex-direction: column; gap: 2px; width: calc(100% - 24px); max-width: var(--col); margin: 6px auto 12px; padding: 8px 8px 6px 14px;
   border: 1px solid var(--line); border-radius: 22px; background: #fff; box-shadow: 0 2px 10px rgba(20,30,50,.08); flex: none; }
 .ask:focus-within { border-color: var(--navy-2); box-shadow: 0 0 0 3px rgba(43,79,138,.13), 0 2px 10px rgba(20,30,50,.08); }
-.ask textarea { border: 0; outline: 0; resize: none; font: inherit; font-size: 15px; padding: 4px 2px; min-height: 46px; max-height: 220px; line-height: 1.45; background: transparent; }
+.ask textarea { border: 0; outline: 0; resize: none; font: inherit; font-size: 15px; padding: 4px 2px; min-height: 52px; max-height: 220px; line-height: 1.45; background: transparent; }
 .ask-bar { display: flex; align-items: center; gap: 4px; margin-left: -8px; }
 .ask-bar .grow { flex: 1; }
 .send { border: 0; width: 34px; height: 34px; border-radius: 50%; background: var(--navy); color: #fff; display: grid; place-items: center; flex: none; }
@@ -367,6 +368,7 @@ body.wide .how { grid-template-columns: repeat(4, 1fr); }
 .seg.small { box-shadow: none; border: 1px solid var(--line); }
 .seg.small button { padding: 2px 9px; font-size: 12px; }
 .gis-bar { display: flex; align-items: center; } /* sits in the top bar in Full GIS mode */
+.gis-bar.tight { display: none; } /* steps aside when it would run into the chat panel (fitTopBar in app.js) */
 .gis-bar .seg button { font-size: 12.5px; }
 .sr-only { position: absolute; width: 1px; height: 1px; overflow: hidden; clip: rect(0 0 0 0); white-space: nowrap; }
 body.gis #geolibre { top: 58px; height: calc(100vh - 58px); } /* nothing of Y-finder covers GeoLibre's own toolbar */
@@ -490,26 +492,73 @@ body.wide.hist-open .hist { display: flex; }
 
 /* ---------- phones: panel becomes a bottom sheet ---------- */
 @media (max-width: 720px) {
-  :root { --panel-w: 100vw; }
+  :root { --panel-w: 100vw; --sheet-h: 62vh; } /* app.js replaces --sheet-h with the sheet's measured height */
+  body.wide { --panel-w: 100vw; } /* a window narrowed from the large chat */
+  body.wide .demo-grid { grid-template-columns: repeat(2, minmax(0, 1fr)); }
   #map, body.collapsed #map { left: 0; } /* phones: the chat is a bottom sheet over the map */
-  .panel { top: auto; left: 0; right: 0; bottom: 0; width: auto; height: 62vh; border-radius: 14px 14px 0 0; }
+  /* Three heights, like a map app: folded (header and ask box), half (the default) and full (below the top bar).
+     svh is the screen with the browser's toolbars showing, so the sheet always fits; vh is the fallback. */
+  .panel { top: auto; left: 0; right: 0; bottom: 0; width: auto; height: 62vh; height: 62svh; border-radius: 14px 14px 0 0; }
+  body.sheet-full:not(.collapsed) .panel { top: 56px; height: auto; }
   body.collapsed .panel { height: auto; top: auto; bottom: 0; } /* folded, the sheet stays at the bottom, clear of the top bar */
+  body.sheet-full:not(.collapsed) :is(.layers-box, .map-legend, .xpill) { display: none !important; } /* nothing floats over the full sheet */
+  #btnWide svg { transform: rotate(-45deg); } /* the arrows point up and down: a taller or shorter sheet */
+  /* the sheet's header is its handle: a swipe up makes it taller, a swipe down shorter (app.js) */
+  .interview-banner { position: relative; padding: 9px 14px 3px; text-align: center; }
+  .interview-banner::before { content: ""; position: absolute; top: 3px; left: 50%; width: 36px; height: 4px; margin-left: -18px; border-radius: 2px; background: rgba(255, 255, 255, .5); }
+  .brand { padding: 4px 6px 2px 8px; gap: 6px; }
+  .brand-text span { display: none; } /* the subtitle: the banner and the name say enough on a small screen */
+  .logo { width: 26px; height: 26px; border-radius: 7px; font-size: 13px; }
+  .brand-logo { height: 26px; }
+  /* the tabs stay on one line (the check marks wrapped below the names); on the narrowest screens they scroll sideways */
+  .tabs { overflow-x: auto; scrollbar-width: none; padding: 0 4px; }
+  .tabs::-webkit-scrollbar { display: none; }
+  .tabs button { flex: none; white-space: nowrap; padding: 9px 9px 8px; }
+  /* the ask box is one line, as in phone chat apps: attach, text, send */
+  .ask { flex-direction: row; align-items: flex-end; gap: 2px; padding: 4px; margin: 4px auto 8px; border-radius: 24px; }
+  .ask-bar { display: contents; }
+  .ask-bar .grow { display: none; }
+  #btnAttach { order: -1; }
+  .ask .icon-btn, .ask .send { width: 36px; height: 36px; flex: none; }
+  .ask textarea { flex: 1; min-width: 0; min-height: 36px; padding: 7px 4px; line-height: 1.4; }
   .topright { top: 8px; right: 8px; left: 8px; flex-wrap: wrap; justify-content: flex-end; gap: 6px; }
   .model-pick span { display: none; }
-  .layers-box { left: auto; right: 10px; bottom: calc(62vh + 12px); }
+  /* things over the map sit just above the sheet, whatever its height (app.js measures it into --sheet-h): the scale bar
+     at the left, the map credits at the right with the Layers button above them; pinching zooms, so no zoom buttons */
+  .maplibregl-ctrl-bottom-left, .maplibregl-ctrl-bottom-right { bottom: var(--sheet-h, 62vh); }
+  .maplibregl-ctrl-bottom-right .maplibregl-ctrl-group { display: none; }
+  body.sheet-full:not(.collapsed) :is(.maplibregl-ctrl-bottom-left, .maplibregl-ctrl-bottom-right) { display: none; }
+  .layers-box, body.collapsed .layers-box { left: auto; right: 10px; bottom: calc(var(--sheet-h, 62vh) + 40px); }
   .matrix { font-size: 11px; }
-  .matrix th:first-child, .matrix td:first-child { width: 38%; }
+  .matrix th { font-size: 11px; padding-left: 2px; padding-right: 2px; }
+  .matrix th:first-child, .matrix td:first-child { width: 34%; }
+  .matrix th:last-child, .matrix td:last-child { width: 58px; } /* the access badge ("Open", "Yale") fits */
   .map-legend { right: auto; left: 8px; bottom: auto; top: 56px; width: min(200px, 55vw); max-height: 30vh; }
-  body.collapsed .layers-box { left: auto; bottom: 210px; }
+  body:has(#layerPanel:not([hidden])) .map-legend { display: none; } /* the open Layers panel takes that corner */
   .layers-btn { width: 54px; height: 54px; }
   .layer-panel { left: auto; right: 0; width: min(340px, 92vw); }
-  body.collapsed .layer-panel { max-height: calc(100vh - 350px); } /* the sheet is folded while Layers is open */
-  #geolibre { left: 0; width: 100vw; top: 0; height: 38vh; }
+  /* the sheet is folded while Layers is open; the panel ends below the top bar */
+  body.collapsed .layer-panel { max-height: calc(100vh - var(--sheet-h, 120px) - 180px); max-height: calc(100svh - var(--sheet-h, 120px) - 180px); }
+  .lrow .lact button, .lrow .lact a { width: 32px; height: 32px; }
+  /* Full GIS: the sheet folds and GeoLibre fills the screen above it */
+  #geolibre { left: 0; width: 100vw; top: 0; height: calc(100vh - var(--sheet-h, 62vh)); height: calc(100svh - var(--sheet-h, 62svh)); }
   .gis-bar { display: none !important; } /* phones keep GeoLibre's full menus */
-  body.gis #geolibre { top: 52px; height: calc(38vh - 52px); }
-  #btnWide { display: none; }
+  body.gis #geolibre { top: 52px; height: calc(100vh - 52px - var(--sheet-h, 62vh)); height: calc(100svh - 52px - var(--sheet-h, 62svh)); }
   .panel-resizer { display: none; }
-  .ask textarea { min-height: 38px; }
+  /* finger-sized controls: about 32 px tall or more */
+  .rpill { padding: 6px 11px 6px 9px; }
+  .fb button { padding: 6px 14px; }
+  .act summary { padding: 6px 10px 6px 8px; }
+  .choices button { padding: 7px 12px; }
+  .seg button { padding: 7px 12px; }
+  .pill { padding: 8px 13px; }
+  .model-pick select { padding: 6px 4px; }
+  .chips button, .demo-chips button, .themes button, .demo-ctl .seg button { padding: 6px 12px; }
+  .btn { padding-top: 6px; padding-bottom: 6px; }
+}
+/* iOS zooms the page into any text box under 16 px when it is tapped, and does not zoom back out */
+@media (max-width: 720px), (pointer: coarse) {
+  input:not([type=checkbox]):not([type=radio]):not([type=range]):not([type=file]), select, textarea { font-size: 16px !important; }
 }
 
 /* ------------------------------------------------------------------ Insights: Y-finder explores the previews */
@@ -592,8 +641,7 @@ body.wide.hist-open .hist { display: flex; }
 .ra-e { display: inline-block; width: 18px; height: 0; border-top: 2.6px solid #286dc0; vertical-align: middle; }
 .ra-e.dash { border-top-style: dashed; }
 @media (max-width: 720px) {
-  .xpill { left: 8px; right: 74px; top: auto; bottom: calc(62vh + 14px); max-width: none; }
-  body.collapsed .xpill { bottom: 150px; }
+  .xpill, body.collapsed .xpill { left: 8px; right: 74px; top: auto; bottom: calc(var(--sheet-h, 62vh) + 40px); max-width: none; }
 }
 
 /* ---------- screens of every size ---------- */

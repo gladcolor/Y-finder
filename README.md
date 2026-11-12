@@ -46,7 +46,7 @@ Y-finder is an independent prototype by [Huan Ning](https://www.huanning.me/), p
 
 | What | Result | Where |
 |---|---|---|
-| Unit and API tests, no model calls | 297 pass | `tests/` |
+| Unit and API tests, no model calls | 298 pass | `tests/` |
 | Injected faults ("test the tests") | 29 of 29 caught | `scripts/mutation_check.py` |
 | Demo cases from real Yale programs | 38 cases, each recording read and its previews and findings inspected; every check passes | `docs/demo_case_results.md`, `docs/demo_batch3_review.md`, `docs/demo_data_audit.md` |
 | Fictional YCGS users (10 personas) | 190 of 195 checks across three models in the first run; 64 of 64 on the default model after the fixes | `docs/persona_results.md` |

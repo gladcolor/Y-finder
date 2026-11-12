@@ -60,7 +60,8 @@
   function padding() {
     const mobile = innerWidth <= 720; const collapsed = document.body.classList.contains('collapsed');
     // desktop: the map container already starts right of the panel (app.css), so only a margin is needed
-    return mobile ? { top: 70, left: 30, right: 30, bottom: collapsed ? 160 : innerHeight * 0.62 + 20 }
+    // phones: the sheet's real height; a full sheet counts as half, so the view is right when it shrinks
+    return mobile ? { top: 70, left: 30, right: 30, bottom: (collapsed ? $('#panel').getBoundingClientRect().height : innerHeight * 0.62) + 20 }
       : { top: 80, right: 50, bottom: 50, left: 50 };
   }
   function fit(bbox) {
@@ -110,16 +111,19 @@
   }
   $('#baseSat').onclick = () => setBase(true);
   $('#baseStreets').onclick = () => setBase(false);
-  // Phones: the panel needs the room the chat sheet takes (it ran up under the top bar), so opening it folds the sheet
-  // like a map app, and closing it unfolds the sheet again if Layers was what folded it.
-  function showLayers(open) {
-    const p = $('#layerPanel'); if (open === undefined) open = p.hidden; p.hidden = !open;
+  // Phones: a map tool that needs the room the chat sheet takes (Layers, Full GIS) folds the sheet like a map app,
+  // and closing the tool unfolds the sheet again if that tool was what folded it.
+  function foldFor(tool, on) {
     if (innerWidth > 720) return;
-    const body = document.body;
-    if (open && !body.classList.contains('collapsed')) { state.foldedForLayers = true; body.classList.add('collapsed'); }
-    else if (!open && state.foldedForLayers) { state.foldedForLayers = false; body.classList.remove('collapsed'); }
+    const body = document.body; const k = 'foldedFor' + tool;
+    if (on && !body.classList.contains('collapsed')) { state[k] = true; body.classList.add('collapsed'); }
+    else if (!on && state[k]) { state[k] = false; body.classList.remove('collapsed'); }
     else return;
     $('#btnCollapse').setAttribute('aria-expanded', String(!body.classList.contains('collapsed'))); requestAnimationFrame(mapResized);
+  }
+  function showLayers(open) {
+    const p = $('#layerPanel'); if (open === undefined) open = p.hidden; p.hidden = !open;
+    foldFor('Layers', open);
   }
   $('#btnLayers').onclick = () => showLayers();
 
@@ -370,8 +374,8 @@
     const open = $('#mapLegend').classList.toggle('closed') === false;
     $('#mlToggle').setAttribute('aria-expanded', String(open)); local.set('yf_legend', open ? '1' : '0');
   };
-  // phones start with the legend folded (the map is small there); a choice the user made is kept
-  if (local.get('yf_legend') === '0' || (local.get('yf_legend') == null && innerWidth <= 720)) { $('#mapLegend').classList.add('closed'); $('#mlToggle').setAttribute('aria-expanded', 'false'); }
+  // phones (upright or sideways) start with the legend folded (the map is small there); a choice the user made is kept
+  if (local.get('yf_legend') === '0' || (local.get('yf_legend') == null && (innerWidth <= 720 || innerHeight <= 500))) { $('#mapLegend').classList.add('closed'); $('#mlToggle').setAttribute('aria-expanded', 'false'); }
 
   function renderLayerList() {
     renderLegend();
@@ -576,7 +580,8 @@
   try { if (window.cytoscapeCola && window.cola) cytoscape.use(window.cytoscapeCola); } catch { /* already registered */ }
   // Layouts offered in the Frame tab, as in Research Architect (applyLayout in app_v2.js), plus left-to-right layers.
   const LAYOUT_NAMES = ['dagre-tb', 'dagre-lr', 'cola', 'cose', 'breadthfirst', 'concentric', 'circle', 'grid'];
-  state.layout = LAYOUT_NAMES.includes(local.get('yf_layout')) ? local.get('yf_layout') : 'dagre-tb';
+  // phones start with left-to-right layers: the factors stack down the tall, narrow canvas instead of shrinking to fit one row
+  state.layout = LAYOUT_NAMES.includes(local.get('yf_layout')) ? local.get('yf_layout') : innerWidth <= 720 ? 'dagre-lr' : 'dagre-tb';
   function layoutOpts(name, animate) {
     const anim = { animate, animationDuration: 300, fit: true, padding: 22 };
     const dagre = (dir) => ({ name: 'dagre', rankDir: dir, ranker: 'tight-tree', nodeSep: dir === 'LR' ? 18 : 28, rankSep: dir === 'LR' ? 90 : 64,
@@ -1089,6 +1094,7 @@
       if (t) convSave();
       const notes = ((j.result && j.result.layers) || []).map((l) => l.note).filter(Boolean);
       toast(`Added ${j.summary}${notes.length ? ' · ' + notes[0] : ''}`);
+      if (innerWidth <= 720 && sheetLevel() === 2) setSheet(1); // phones: show the map the layer went on
       showLayers(true);
     } catch (err) { toast(err.message); }
     finally { if (btn) { btn.disabled = false; btn.textContent = 'Map'; } }
@@ -1501,6 +1507,7 @@
     state.gisMode = gis; $('#modeGIS').classList.toggle('on', gis); $('#modeMap').classList.toggle('on', !gis);
     document.body.classList.toggle('gis', gis); if (!gis) state.gisNoteShown = null; // GeoLibre starts below the top bar
     $('#geolibre').hidden = !gis; $('#gisBar').hidden = !gis; $('.layers-box').hidden = gis; renderLegend();
+    foldFor('Gis', gis); fitTopBar(); // phones: GeoLibre gets the screen above the folded sheet
     if (gis) $('#xPill').hidden = true; else setTimeout(renderInsights, 0); // the exploration pill belongs to Y-finder's map
     if (gis) loadGeoLibre();
   }
@@ -1520,6 +1527,7 @@
   $$('.tabs button').forEach((b) => { b.onclick = () => switchTab(b.dataset.tab); });
   function autosize() { const q = $('#q'); q.style.height = 'auto'; q.style.height = Math.min(q.scrollHeight, 220) + 'px'; }
   $('#q').addEventListener('input', autosize);
+  if (innerWidth <= 720) $('#q').placeholder = 'Ask about data for your question'; // fits the one-line box on a phone
   $('#q').addEventListener('keydown', (e) => { if (e.key === 'Enter' && !e.shiftKey && !e.isComposing) { e.preventDefault(); send($('#q').value); } });
   $('#ask').onsubmit = (e) => { e.preventDefault(); send($('#q').value); };
   // The map container changes size with the panel; keep the same place in view.
@@ -1530,6 +1538,18 @@
     const c = map.getCenter(); map.resize(); map.setCenter(c);
   }
   $('#btnCollapse').onclick = () => { const c = document.body.classList.toggle('collapsed'); $('#btnCollapse').setAttribute('aria-expanded', String(!c)); requestAnimationFrame(mapResized); };
+  // On phones the sheet's measured height (--sheet-h) places the Layers button, the exploration pill and GeoLibre just
+  // above it. On any screen, GeoLibre's menu switch in the top bar steps aside when it would run into the chat panel
+  // (a phone held sideways, a narrow window, a wide chat).
+  function fitTopBar() {
+    const bar = $('#gisBar'); bar.classList.remove('tight');
+    if (bar.hidden || innerWidth <= 720) return;
+    const p = $('#panel').getBoundingClientRect(); const t = $('.topright').getBoundingClientRect();
+    if (t.left < p.right + 8 && t.top < p.bottom) bar.classList.add('tight');
+  }
+  function sheetSized() { document.documentElement.style.setProperty('--sheet-h', Math.round($('#panel').getBoundingClientRect().height) + 'px'); fitTopBar(); }
+  if (window.ResizeObserver) new ResizeObserver(sheetSized).observe($('#panel'));
+  addEventListener('resize', sheetSized); sheetSized();
   const isWide = () => document.body.classList.contains('wide');
   function setWide(w) {
     document.body.classList.toggle('wide', w); $('#btnWide').setAttribute('aria-pressed', String(w));
@@ -1540,7 +1560,30 @@
     requestAnimationFrame(mapResized);
     setTimeout(() => { if (state.cy) { state.cy.resize(); state.cy.fit(undefined, 18); } }, 60);
   }
-  $('#btnWide').onclick = () => setWide(!isWide());
+  // Phones: the sheet has three heights: folded (0), half (1, the default) and full (2, below the top bar). The arrows
+  // button switches between half and full; a swipe on the sheet's header (banner and name) moves one step, and a tap
+  // on a folded sheet's header opens it.
+  const sheetLevel = () => (document.body.classList.contains('collapsed') ? 0 : document.body.classList.contains('sheet-full') ? 2 : 1);
+  function setSheet(level) {
+    const body = document.body; level = Math.max(0, Math.min(2, level));
+    body.classList.toggle('collapsed', level === 0); if (level) body.classList.toggle('sheet-full', level === 2);
+    const full = sheetLevel() === 2;
+    $('#btnCollapse').setAttribute('aria-expanded', String(level > 0));
+    $('#btnWide').setAttribute('aria-pressed', String(full)); $('#btnWide').title = full ? 'Smaller chat (more map)' : 'Larger chat';
+    requestAnimationFrame(mapResized); setTimeout(() => { if (state.cy) { state.cy.resize(); state.cy.fit(undefined, 18); } }, 60);
+  }
+  $('#btnWide').onclick = () => (innerWidth <= 720 ? setSheet(sheetLevel() === 2 ? 1 : 2) : setWide(!isWide()));
+  {
+    let y0 = null;
+    $('#panel').addEventListener('touchstart', (e) => {
+      const t = e.target; y0 = innerWidth <= 720 && e.touches.length === 1 && t.closest('.interview-banner, header.brand') && !t.closest('button, a') ? e.touches[0].clientY : null;
+    }, { passive: true });
+    $('#panel').addEventListener('touchend', (e) => {
+      if (y0 == null) return; const dy = e.changedTouches[0].clientY - y0; y0 = null;
+      if (Math.abs(dy) >= 30) setSheet(sheetLevel() + (dy < 0 ? 1 : -1)); else if (sheetLevel() === 0) setSheet(1);
+    }, { passive: true });
+    $('#panel').addEventListener('touchcancel', () => { y0 = null; }, { passive: true });
+  }
 
   // ------------------------------------------------------------------ drag the border between the panel and the map
   // The width is kept per mode (normal and large chat), so the Larger chat button still switches between two sizes.

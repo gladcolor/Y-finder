@@ -160,6 +160,19 @@ def main():
         pp.wait_for_selector("#demos .demo-card")
         w = pp.evaluate("[document.documentElement.scrollWidth, innerWidth]")
         check(w[0] <= w[1] + 1, f"no sideways scrolling on a phone ({w[0]} px wide in a {w[1]} px screen)")
+        ph = pp.evaluate("""() => { const r = (s) => document.querySelector(s).getBoundingClientRect();
+          const tabs = [...document.querySelectorAll('.tabs button')].map((b) => b.getBoundingClientRect().height);
+          const small = [...document.querySelectorAll('input:not([type=checkbox]):not([type=file]), select, textarea')]
+            .filter((e) => parseFloat(getComputedStyle(e).fontSize) < 16).map((e) => e.id || e.tagName);
+          return { ask: r('#ask').height, tab: Math.max(...tabs), small, layersAbove: r('.layers-box').bottom <= r('#panel').top + 1 }; }""")
+        check(ph["ask"] < 60, f"the phone ask box is one line ({ph['ask']:.0f} px tall)")
+        check(ph["tab"] < 44, f"the phone tabs stay on one line ({ph['tab']:.0f} px tall)")
+        check(not ph["small"], f"no text box under 16 px on a phone, which iOS would zoom into ({ph['small']})")
+        check(ph["layersAbove"], "the Layers button sits above the chat sheet")
+        pp.click("#btnWide"); pp.wait_for_timeout(300)
+        full = pp.evaluate("[document.querySelector('#panel').getBoundingClientRect().top, document.querySelector('.topright').getBoundingClientRect().bottom]")
+        check(full[1] <= full[0] <= 80, f"the arrows button gives a full-height sheet below the top bar (top {full[0]:.0f}, bar ends {full[1]:.0f})")
+        pp.click("#btnWide"); pp.wait_for_timeout(200)
         b.close()
 
     check(not errors, "no script errors" + (": " + " | ".join(errors[:5]) if errors else ""))

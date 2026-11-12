@@ -63,3 +63,17 @@ def test_layer_rows_say_what_each_layer_is():
         assert f"k === '{k}'" in js or f"{k}:" in js
     assert js.count("layerGlyph(e)") >= 3 and "layerGlyph(entry)" in js
     assert 'class="lgap"' in js  # image layers keep an empty download slot so the buttons line up
+
+
+def test_phone_layout_rules():
+    """Phones: text boxes are at least 16 px (iOS zooms into smaller ones and stays zoomed), the sheet is sized with svh
+    (the screen with the browser's toolbars showing), things over the map follow the measured sheet height, the ask
+    box is one line, and the arrows button gives a taller sheet instead of being hidden."""
+    phone = CSS[CSS.index("/* ---------- phones: panel becomes a bottom sheet"):]
+    assert re.search(r"@media \(max-width: 720px\), \(pointer: coarse\) \{\s*input[^{]*, select, textarea \{ font-size: 16px", CSS)
+    assert "62svh" in phone and "bottom: calc(var(--sheet-h" in phone
+    assert "#btnWide { display: none" not in phone
+    assert "body.sheet-full:not(.collapsed) .panel" in phone
+    assert 'rows="1"' in HTML and "interactive-widget=resizes-content" in HTML
+    for name in ("function setSheet(", "function foldFor(", "function fitTopBar(", "'--sheet-h'", "foldFor('Gis', gis)"):
+        assert name in JS, name
